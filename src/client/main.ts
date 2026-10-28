@@ -1,13 +1,25 @@
 import { DT, ENEMY_COLORS, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, Tile, W } from '../shared/constants';
 import { getMission } from '../shared/levels';
+import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
 import type { ClientMsg, GameEvent, Input, Mode, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
 import { initAudio, isMusicOn, setMusicIntensity, sfx, startMusic, toggleMusic } from './audio';
+import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
 import { Renderer, type RBullet, type RMine, type RTank } from './render';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+
+// ring buffers for the feedback context
+const errorLog: { t: number; msg: string }[] = [];
+const logError = (msg: string) => { errorLog.push({ t: Math.round(performance.now()), msg: msg.slice(0, 400) }); if (errorLog.length > 20) errorLog.shift(); };
+addEventListener('error', (e) => logError(`${e.message} @ ${e.filename}:${e.lineno}`));
+addEventListener('unhandledrejection', (e) => logError(`rejection: ${String(e.reason)}`));
+const origError = console.error.bind(console);
+console.error = (...a: unknown[]) => { logError(a.map(String).join(' ')); origError(...a); };
+const eventLog: unknown[][] = [];
+let fps = 60;
 
 const canvas = $<HTMLCanvasElement>('#game');
 const renderer = new Renderer(canvas);
@@ -175,6 +187,11 @@ let currentMode: Mode = 'coop';
 let lives = 3;
 let scores: Record<string, number> = {};
 const INTERP = 3;
+let lastTanks: RTank[] = [];
+let lastBullets: RBullet[] = [];
+let lastMines: RMine[] = [];
+let currentMission = 0;
+let currentLevelName = '';
 
 function onMessage(msg: ServerMsg) {
   switch (msg.t) {
@@ -222,6 +239,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   latestK = renderTick = msg.tick;
   offset = { x: 0, y: 0 };
   lives = msg.lives;
+  currentMission = msg.mission;
+  currentLevelName = msg.name;
   renderer.setLevel(tiles, msg.tanks);
   show('game');
   setMusicIntensity(0);
@@ -394,6 +413,7 @@ function onlineFrame(dt: number) {
     tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], u), y: lerp(ta[2], tb[2], u), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2) });
   }
   renderer.syncTanks(tanks, myTankId, dt);
+  lastTanks = tanks;
   $('#hud-enemies').textContent = currentMode === 'coop' ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
 
   // bullets: interpolate everyone else's, extrapolate our own from the freshest state
@@ -411,12 +431,15 @@ function onlineFrame(dt: number) {
     bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], u), y: lerp(ba[2], bb[2], u), vx: bb[3], vy: bb[4], rocket: !!ba[5] });
   }
   renderer.syncBullets(bullets, dt);
+  lastBullets = bullets;
   const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3] }));
   renderer.syncMines(mines);
+  lastMines = mines;
   updateNameTags(tanks);
 }
 
 function handleEvent(e: GameEvent, audible: boolean) {
+  if (online) { eventLog.push([Math.round(renderTick), ...e]); if (eventLog.length > 60) eventLog.shift(); }
   switch (e[0]) {
     case 'shot':
       if (e[5] === myTankId && online) break;
@@ -542,13 +565,25 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-function startAttract() {
+interface AttractOpts { mission?: number; heroes?: boolean }
+let attractOpts: AttractOpts = {};
+
+function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
-  const lvl = getMission(2 + Math.floor(Math.random() * 14));
+  attractOpts = opts;
+  const lvl = getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
   const g = new Game(lvl.tiles);
-  const left = ['pink', 'violet', 'ash'] as const;
-  lvl.spawns.forEach(([x, y], i) => g.addTank(left[i % left.length], 1, x, y, 0));
-  lvl.enemies.forEach((e) => g.addTank(e.kind === 'white' ? 'ash' : e.kind, 2, e.x, e.y, 0));
+  if (opts.heroes) {
+    // player-coloured tanks driven by the AI: used by the gameplay videos
+    lvl.spawns.forEach(([x, y], i) => {
+      const t = g.addTank('player', 1, x, y, PLAYER_COLORS[i % PLAYER_COLORS.length]);
+      g.enableAI(t, { skill: 2, turretSpeed: 5, fireCd: 0.4 });
+    });
+  } else {
+    const left = ['pink', 'violet', 'ash'] as const;
+    lvl.spawns.forEach(([x, y], i) => g.addTank(left[i % left.length], 1, x, y, 0));
+  }
+  lvl.enemies.forEach((e) => g.addTank(e.kind === 'white' && !opts.heroes ? 'ash' : e.kind, 2, e.x, e.y, 0));
   g.frozen = false;
   attract = g;
   attractEnd = 0;
@@ -560,6 +595,7 @@ function stopAttract() {
 }
 
 let attractAcc = 0;
+let attractState: Record<string, unknown> = {};
 function attractFrame(dt: number) {
   const g = attract!;
   attractAcc += dt;
@@ -576,10 +612,12 @@ function attractFrame(dt: number) {
     return { id: t.id, x: lerp(p.x, t.x, u), y: lerp(p.y, t.y, u), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false };
   });
   renderer.syncTanks(tanks, -1, dt);
+  lastTanks = tanks;
   renderer.syncBullets(g.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket })), dt);
   renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 })));
   if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) attractEnd = g.tick + TICK_RATE * 2.5;
   if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
+  attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission };
 }
 
 // ------------------------------------------------------------------ main loop
@@ -588,6 +626,7 @@ let lastT = performance.now();
 let acc = 0;
 function frame(now: number) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
+  if (now > lastT) fps += (1000 / (now - lastT) - fps) * 0.05;
   lastT = now;
   if (online) {
     acc += dt;
@@ -671,6 +710,136 @@ function updateMusicBtn(on = isMusicOn()) {
 $('#btn-music').addEventListener('click', () => updateMusicBtn(toggleMusic()));
 updateMusicBtn();
 
+// ------------------------------------------------------------------ iteration stamp, journal
+
+function renderJournal() {
+  $('#journal-list').innerHTML = [...META.journal].reverse().map((j) => `
+    <article>
+      <header><span class="stamp small">N° ${j.iteration}</span><b>${escapeHtml(j.title)}</b><time>${j.date}</time></header>
+      <ul>${j.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
+    </article>`).join('');
+}
+$('#iteration-stamp').textContent = `Itération ${META.iteration}`;
+$('#iteration-stamp').title = META.title;
+$('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; sfx.click(); });
+$('#btn-journal-close').addEventListener('click', () => ($('#journal').hidden = true));
+
+// ------------------------------------------------------------------ feedback
+
+const TILE_NAMES = ['vide', 'mur', 'mur haut', 'liège', 'trou'];
+function tankLabel(id: number) {
+  const info = infos.get(id) ?? attract?.tanks.find((t) => t.id === id);
+  if (!info) return { id };
+  const kind = info.kind;
+  return { id, kind, label: kind === 'player' ? (info.name ?? 'joueur') : SPECS[kind].label, team: info.team, me: id === myTankId || undefined };
+}
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+setupFeedback({
+  capture: () => renderer.capture(),
+  toast,
+  onOpen: () => { controls.suspended = true; controls.release(); },
+  onClose: () => { controls.suspended = false; },
+  describeRegion(r: Region) {
+    const inside = (x: number, y: number, h = 0.3) => {
+      const p = renderer.arenaToScreen(x, y, h);
+      return p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+    };
+    const map = online ? tiles : attract?.tiles ?? [];
+    const cells: { x: number; y: number; type: string }[] = [];
+    for (let i = 0; i < map.length; i++) {
+      if (!map[i]) continue;
+      const x = i % W, y = Math.floor(i / W);
+      if (inside(x + 0.5, y + 0.5, 0.4)) cells.push({ x, y, type: TILE_NAMES[map[i]] ?? String(map[i]) });
+    }
+    const center = renderer.screenToArena((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
+    return {
+      arenaCenter: center && { x: r2(center.x), y: r2(center.y) },
+      tanks: lastTanks.filter((t) => inside(t.x, t.y)).map((t) => ({ ...tankLabel(t.id), x: r2(t.x), y: r2(t.y), alive: t.alive, invisible: t.invisible || undefined })),
+      bullets: lastBullets.filter((b) => inside(b.x, b.y, 0.45)).map((b) => ({ x: r2(b.x), y: r2(b.y), rocket: b.rocket || undefined })),
+      mines: lastMines.filter((m) => inside(m.x, m.y, 0.1)).map((m) => ({ x: r2(m.x), y: r2(m.y), blinking: m.blink })),
+      tiles: cells.slice(0, 40),
+    };
+  },
+  context() {
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const pads = [...(navigator.getGamepads?.() ?? [])].filter(Boolean).map((p) => p!.id);
+    const me = lastTanks.find((t) => t.id === myTankId);
+    return {
+      game: {
+        iteration: META.iteration,
+        iterationTitle: META.title,
+        screen,
+        online,
+        room: roomCode || undefined,
+        mode: online ? currentMode : 'démo',
+        phase: online ? phase : undefined,
+        mission: online ? currentMission : attractOpts.mission,
+        level: online ? currentLevelName : undefined,
+        lives: online && currentMode === 'coop' ? lives : undefined,
+        scores: online && currentMode === 'versus' ? scores : undefined,
+        players: lobbyPlayers.map((p) => ({ name: p.name, host: p.host, connected: p.connected, me: p.id === pid || undefined })),
+        me: me ? { x: r2(me.x), y: r2(me.y), alive: me.alive, pendingInputs: pending.length } : undefined,
+        tanks: lastTanks.map((t) => ({ ...tankLabel(t.id), x: r2(t.x), y: r2(t.y), alive: t.alive })),
+        bullets: lastBullets.length,
+        mines: lastMines.length,
+        tick: online ? latestK : undefined,
+        recentEvents: eventLog.slice(-40),
+      },
+      network: { pingMs: ping, snapshotsBuffered: snaps.length, socket: ws ? ['connexion', 'ouvert', 'fermeture', 'fermé'][ws.readyState] : 'aucun' },
+      perf: { fps: Math.round(fps) },
+      device: {
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        viewport: `${innerWidth}x${innerHeight}`,
+        screen: `${screen_.width}x${screen_.height}`,
+        dpr: devicePixelRatio,
+        touch: controls.touchMode,
+        gamepads: pads,
+        memoryGb: nav.deviceMemory,
+        cores: navigator.hardwareConcurrency,
+        gl: renderer.glInfo(),
+      },
+      errors: errorLog.slice(),
+      url: location.href,
+      time: new Date().toISOString(),
+    };
+  },
+});
+const screen_ = window.screen;
+
+// ------------------------------------------------------------------ debug + demo hooks (smoke tests and videos)
+
+const params = new URLSearchParams(location.search);
+(window as unknown as { __debug: unknown }).__debug = {
+  get state() {
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState };
+  },
+};
+if (params.has('demo')) {
+  document.body.classList.add('demo');
+  const demo = {
+    meta: META,
+    play(mission: number, heroes = true) {
+      attract = undefined;
+      startAttract({ mission, heroes });
+    },
+    caption(text: string, sub = '') {
+      const c = $('#demo-caption');
+      c.innerHTML = text ? `<b>${escapeHtml(text)}</b>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}` : '';
+      c.hidden = !text;
+    },
+    title() {
+      banner(`Itération ${META.iteration}`, 'TANKS!', META.title, 'intro');
+      setTimeout(hideBanner, 3000);
+    },
+    get state() { return attractState; },
+  };
+  (window as unknown as { __demo: unknown }).__demo = demo;
+  show('game');
+  $('#hud').hidden = true;
+  demo.play(Number(params.get('mission')) || 1);
+} else {
 // boot
 const m = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,8})/);
 startAttract();
@@ -678,3 +847,4 @@ if (m) {
   connect(m[1].toUpperCase());
   show('lobby');
 } else show('home');
+}

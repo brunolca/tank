@@ -1,0 +1,73 @@
+# À chaque push sur main : vérifie le jeu, joue une vraie partie en ligne, le filme, range la vidéo dans une release,
+# puis déploie sur Cloudflare Workers. Si une étape échoue, rien n'est déployé : la version en ligne reste la dernière qui marchait.
+name: Publier l'itération
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publier
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dépendances
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium ffmpeg
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Vérifications
+        run: node tools/check.mjs
+
+      - name: Test de fumée (partie en ligne à deux navigateurs)
+        run: node tools/smoke.mjs
+
+      - name: Tournage de la vidéo
+        run: node tools/record.mjs
+
+      - name: Déploiement sur Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Secret CLOUDFLARE_API_TOKEN manquant : voir ROUTINE.md"
+            exit 1
+          fi
+          npx wrangler deploy
+          # the export workflow reads feedback with this token: keep the Worker's copy in sync
+          if [ -n "$FEEDBACK_TOKEN" ]; then printf %s "$FEEDBACK_TOKEN" | npx wrangler secret put FEEDBACK_TOKEN; fi
+          sleep 5
+          LIVE=$(curl -s https://tanks.brunofashionblog.workers.dev/api/version)
+          echo "En ligne : $LIVE"
+
+      - name: Vidéo rangée dans une release GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(node tools/meta.mjs tag)
+          N=$(node tools/meta.mjs iteration)
+          node tools/meta.mjs notes > notes.md
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Itération $N : $(node tools/meta.mjs title)" --notes-file notes.md
+          fi
+          gh release upload "$TAG" "videos/$TAG.mp4" --clobber

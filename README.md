@@ -6,13 +6,16 @@ Remake moderne de *Tanks* (Wii Play) en 3D (Three.js), multijoueur en ligne sur 
 - **Versus** (2 à 4 joueurs) : chacun pour soi, premier à 5 manches.
 - Obus qui ricochent, mines, blocs de liège destructibles, trous.
 - Contrôles : clavier + souris, manette, tactile.
+- **Le jeu s'améliore tout seul** : toutes les 12 h, une routine Claude Code écrit une nouvelle itération en tenant compte des retours des joueurs (bouton « Ton avis » dans le jeu). Voir `CLAUDE.md`, `DESIGN.md` et `ROUTINE.md`. Chaque itération a sa vidéo dans les Releases.
 
 ## Dev
 
 ```sh
 npm install
 npm run dev        # build du client + wrangler dev sur http://localhost:8787
-npm run typecheck
+npm run check      # types, build, simulation de toutes les missions, carnet de bord
+npm run smoke      # partie en ligne à deux navigateurs + feedback + mode démo
+npm run record     # vidéo de gameplay de l'itération (videos/)
 npm run deploy     # build + wrangler deploy
 ```
 

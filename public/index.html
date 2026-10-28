@@ -40,6 +40,7 @@
   <!-- HOME -->
   <section id="home" class="screen">
     <div class="card hero">
+      <span id="iteration-stamp" class="stamp"></span>
       <h1 class="logo">TANKS<span>!</span></h1>
       <p class="tagline">Le classique de Wii Play, remis à neuf. Ricochets, mines et coop en ligne jusqu'à 4.</p>
       <div class="profile"></div>
@@ -48,6 +49,7 @@
         <input id="join-code" placeholder="CODE" maxlength="8" autocomplete="off" spellcheck="false" />
         <button id="btn-join" class="btn">Rejoindre</button>
       </div>
+      <button id="btn-journal" class="btn ghost">Carnet de bord : le jeu s’améliore tout seul</button>
       <details class="help">
         <summary>Commandes</summary>
         <ul>
@@ -104,6 +106,49 @@
     </div>
   </div>
 
+  <!-- JOURNAL -->
+  <section id="journal" class="screen" hidden>
+    <div class="card journal">
+      <div class="kicker">Carnet de bord</div>
+      <h2>Le jeu s’écrit tout seul</h2>
+      <p class="muted">Toutes les 12 heures, Claude reprend le code, invente une nouveauté et publie une nouvelle itération.</p>
+      <div id="journal-list"></div>
+      <button id="btn-journal-close" class="btn primary">Fermer</button>
+    </div>
+  </section>
+
+  <!-- FEEDBACK -->
+  <button id="btn-feedback" title="Donner ton avis (F)">💬 Ton avis</button>
+  <section id="feedback" class="screen" hidden>
+    <div class="card feedback">
+      <div class="kicker">Ton avis</div>
+      <h2>Aide le jeu à s’améliorer</h2>
+      <p class="muted">Chaque retour est lu par Claude avant la prochaine itération. La partie continue pendant que tu écris.</p>
+      <div id="fb-cats" class="segmented four">
+        <button data-cat="bug" class="on">Bug</button>
+        <button data-cat="idee">Idée</button>
+        <button data-cat="equilibrage">Équilibrage</button>
+        <button data-cat="autre">Autre</button>
+      </div>
+      <div class="fb-shot">
+        <canvas id="fb-canvas"></canvas>
+        <div class="fb-tools">
+          <span class="muted">Glisse sur l’image pour entourer ce qui compte.</span>
+          <button id="fb-clear" class="btn ghost small">Effacer les zones</button>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="fb-include" checked /> Joindre la capture d’écran</label>
+      <textarea id="fb-text" maxlength="4000" rows="4" placeholder="Que s’est-il passé ? Qu’est-ce qui te plairait ?"></textarea>
+      <label class="file"><input type="file" id="fb-file" accept="image/*,.txt,.json,.pdf" /><span>📎</span><span id="fb-file-name">Ajouter une pièce jointe</span></label>
+      <details class="help"><summary>Données envoyées avec ton retour</summary><pre id="fb-context"></pre></details>
+      <div class="fb-actions">
+        <button id="fb-cancel" class="btn ghost">Annuler</button>
+        <button id="fb-send" class="btn primary">Envoyer</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="demo-caption" hidden></div>
   <div id="toast"></div>
   <script type="module" src="/client.js"></script>
 </body>

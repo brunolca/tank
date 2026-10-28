@@ -4,11 +4,12 @@ import { W, H } from '../src/shared/constants';
 
 for (let i = 0; i < LEVELS.length; i++) {
   const bad = LEVELS[i].map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
-  if (LEVELS[i].map.length !== H || bad.length) console.log('BAD MAP', i + 1, LEVELS[i].map.length, bad);
+  if (LEVELS[i].map.length !== H || bad.length) { console.error('BAD MAP', i + 1, LEVELS[i].map.length, bad); process.exitCode = 1; }
 }
 let t0 = Date.now();
-for (let mission = 1; mission <= 22; mission++) {
+for (let mission = 1; mission <= LEVELS.length + 8; mission++) {
   const lvl = getMission(mission);
+  if (!lvl.spawns.length || !lvl.enemies.length) { console.error(`M${mission}: no spawn or no enemy`); process.exitCode = 1; }
   const g = new Game(lvl.tiles);
   const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
   for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);

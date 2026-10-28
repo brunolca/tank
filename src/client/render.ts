@@ -700,6 +700,23 @@ export class Renderer {
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** JPEG of the current frame (the drawing buffer is only valid right after a render). */
+  capture(): string {
+    this.renderer.render(this.scene, this.camera);
+    return this.canvas.toDataURL('image/jpeg', 0.9);
+  }
+
+  glInfo() {
+    const gl = this.renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return {
+      renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+      webgl2: this.renderer.capabilities.isWebGL2,
+      pixelRatio: this.renderer.getPixelRatio(),
+    };
+  }
+
   /** Ground point (arena coords) under a screen position, on the turret-height plane. */
   screenToArena(clientX: number, clientY: number): { x: number; y: number } | null {
     const r = this.canvas.getBoundingClientRect();

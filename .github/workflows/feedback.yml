@@ -1,0 +1,36 @@
+# Relève les retours des joueurs dans feedback/inbox/ juste avant chaque passage de la routine (6h07 et 18h07 UTC).
+name: Relever le feedback
+
+on:
+  schedule:
+    - cron: '45 5,17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feedback
+  cancel-in-progress: false
+
+jobs:
+  relever:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Récupération
+        env:
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
+        run: node tools/feedback-pull.mjs
+      - name: Commit
+        run: |
+          git add feedback
+          if git diff --cached --quiet; then echo "Rien de nouveau"; exit 0; fi
+          git config user.name "tanks-feedback[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Feedback : $(ls feedback/inbox | wc -l | tr -d ' ') retour(s) au total"
+          git push

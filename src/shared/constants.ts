@@ -43,20 +43,22 @@ export interface TankSpec {
   mines: number;
   skill: number; // 0 = scan only, 1 = direct, 2 = ricochet, 3 = ricochet + lead
   invisible?: boolean;
+  reaction: number; // seconds between spotting a shot and pulling the trigger
+  aimError: number; // max angular error (radians) when firing
   label: string;
 }
 
 export const SPECS: Record<TankKind, TankSpec> = {
-  player: { speed: 3.0, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.14, turretSpeed: 99, mines: 2, skill: 0, label: 'Joueur' },
-  brown: { speed: 0, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.4, turretSpeed: 1.1, mines: 0, skill: 0, label: 'Brun' },
-  ash: { speed: 1.3, maxBullets: 1, bounces: 1, rocket: false, fireCd: 1.8, turretSpeed: 2.2, mines: 0, skill: 1, label: 'Gris' },
-  marine: { speed: 1.3, maxBullets: 1, bounces: 0, rocket: true, fireCd: 1.6, turretSpeed: 2.8, mines: 0, skill: 1, label: 'Turquoise' },
-  yellow: { speed: 2.4, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.0, turretSpeed: 2.2, mines: 4, skill: 1, label: 'Jaune' },
-  pink: { speed: 1.6, maxBullets: 3, bounces: 1, rocket: false, fireCd: 0.55, turretSpeed: 2.8, mines: 0, skill: 2, label: 'Rose' },
-  green: { speed: 0, maxBullets: 2, bounces: 2, rocket: true, fireCd: 1.3, turretSpeed: 3.5, mines: 0, skill: 3, label: 'Vert' },
-  violet: { speed: 2.7, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.45, turretSpeed: 3.5, mines: 2, skill: 2, label: 'Violet' },
-  white: { speed: 1.9, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.6, turretSpeed: 3.2, mines: 2, skill: 2, invisible: true, label: 'Blanc' },
-  black: { speed: 3.5, maxBullets: 3, bounces: 0, rocket: true, fireCd: 0.65, turretSpeed: 5, mines: 2, skill: 3, label: 'Noir' },
+  player: { speed: 3.0, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.14, turretSpeed: 99, mines: 2, skill: 0, reaction: 0.2, aimError: 0.03, label: 'Joueur' },
+  brown: { speed: 0, maxBullets: 1, bounces: 1, rocket: false, fireCd: 3.2, turretSpeed: 0.8, mines: 0, skill: 0, reaction: 0.7, aimError: 0.1, label: 'Brun' },
+  ash: { speed: 1.2, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.4, turretSpeed: 1.6, mines: 0, skill: 1, reaction: 0.6, aimError: 0.09, label: 'Gris' },
+  marine: { speed: 1.2, maxBullets: 1, bounces: 0, rocket: true, fireCd: 2.8, turretSpeed: 1.8, mines: 0, skill: 1, reaction: 0.8, aimError: 0.08, label: 'Turquoise' },
+  yellow: { speed: 2.2, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.4, turretSpeed: 1.8, mines: 4, skill: 1, reaction: 0.6, aimError: 0.09, label: 'Jaune' },
+  pink: { speed: 1.5, maxBullets: 3, bounces: 1, rocket: false, fireCd: 0.9, turretSpeed: 2.2, mines: 0, skill: 2, reaction: 0.45, aimError: 0.07, label: 'Rose' },
+  green: { speed: 0, maxBullets: 2, bounces: 2, rocket: true, fireCd: 1.8, turretSpeed: 2.6, mines: 0, skill: 3, reaction: 0.5, aimError: 0.035, label: 'Vert' },
+  violet: { speed: 2.5, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.65, turretSpeed: 2.8, mines: 2, skill: 2, reaction: 0.35, aimError: 0.06, label: 'Violet' },
+  white: { speed: 1.8, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.8, turretSpeed: 2.6, mines: 2, skill: 2, invisible: true, reaction: 0.4, aimError: 0.06, label: 'Blanc' },
+  black: { speed: 3.3, maxBullets: 3, bounces: 0, rocket: true, fireCd: 0.9, turretSpeed: 3.8, mines: 2, skill: 3, reaction: 0.3, aimError: 0.04, label: 'Noir' },
 };
 
 export const ENEMY_COLORS: Record<TankKind, number> = {

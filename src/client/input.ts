@@ -19,6 +19,7 @@ export class Controls {
   private padMineHeld = false;
   private lastPadAim: number | null = null;
   usingPad = false;
+  suspended = false; // a modal (feedback) is open
   // touch
   private moveTouch: { id: number; ox: number; oy: number; x: number; y: number } | null = null;
   private aimTouch: { id: number; x: number; y: number } | null = null;
@@ -28,7 +29,8 @@ export class Controls {
 
   constructor(private target: HTMLElement, private toArena: (cx: number, cy: number) => { x: number; y: number } | null, mineBtn: HTMLElement) {
     addEventListener('keydown', (e) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || this.suspended) return;
       this.keys.add(e.code);
       if (e.code === 'Space' && !e.repeat) { this.mineLatch = true; e.preventDefault(); }
       if (e.code === 'Enter' && !e.repeat) this.fireLatch = true;
@@ -95,7 +97,15 @@ export class Controls {
     mineBtn.addEventListener('click', () => { this.mineLatch = true; });
   }
 
+  release() {
+    this.keys.clear();
+  }
+
   sample(): InputSample {
+    if (this.suspended) {
+      this.fireLatch = this.mineLatch = false;
+      return { mx: 0, my: 0, aimX: null, aimY: null, aimAng: null, fire: false, mine: false };
+    }
     let mx = 0, my = 0;
     const k = this.keys;
     if (k.has('KeyW') || k.has('ArrowUp')) my -= 1;

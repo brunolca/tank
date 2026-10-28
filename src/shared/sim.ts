@@ -62,6 +62,7 @@ interface AIState {
   lastY: number;
   mineCd: number;
   hesitate: number;
+  locked: boolean;
   prefDist: number;
 }
 
@@ -108,17 +109,24 @@ export class Game {
     const t: Tank = {
       id: this.nextId++, kind, team, pid, name, color, x, y,
       body: team === 0 ? 0 : Math.PI, turret: team === 0 ? 0 : Math.PI,
-      alive: true, fireCd: 1 + Math.random(), mineCd: 0, spec,
+      alive: true, fireCd: team === 0 ? 0 : 2 + Math.random() * 1.5, mineCd: 0, spec,
     };
-    if (kind !== 'player') {
+    if (kind !== 'player') this.enableAI(t);
+    this.tanks.push(t);
+    return t;
+  }
+
+  /** Give a tank a brain (enemies always; player-coloured tanks in the demo/attract mode). */
+  enableAI(t: Tank, spec?: Partial<TankSpec>) {
+    if (spec) t.spec = { ...t.spec, ...spec };
+    const { x, y, kind } = t;
+    {
       t.ai = {
         think: Math.random() * 0.3, aim: t.turret, aimValid: false, wanderAim: t.turret, wanderT: 0,
         path: [], pathT: 0, dodgeX: 0, dodgeY: 0, dodgeT: 0, stuckT: 0, lastX: x, lastY: y,
-        mineCd: 2 + Math.random() * 3, hesitate: 0, prefDist: PREF_DIST[kind] ?? 5,
+        mineCd: 2 + Math.random() * 3, hesitate: 0, locked: false, prefDist: PREF_DIST[kind] ?? 5,
       };
     }
-    this.tanks.push(t);
-    return t;
   }
 
   tankInfos(): TankInfo[] {
@@ -132,11 +140,11 @@ export class Game {
       if (!t.alive) continue;
       t.fireCd -= DT;
       t.mineCd -= DT;
-      if (t.pid) {
+      if (t.ai) {
+        this.updateAI(t);
+      } else if (t.pid) {
         const inp = inputs.get(t.pid);
         if (inp) this.applyInput(t, inp);
-      } else {
-        this.updateAI(t);
       }
     }
     this.separateTanks();
@@ -421,12 +429,22 @@ export class Game {
     // fire
     if (t.fireCd <= 0 && ai.hesitate <= 0 && this.ownBullets(t) < spec.maxBullets) {
       const aligned = spec.skill === 0 || Math.abs(angDiff(t.turret, ai.aim)) < 0.06;
-      if (aligned) {
-        const res = this.traceShot(t, t.turret, spec.bounces);
-        if (res.hit && res.hit.team !== t.team) {
+      const res = aligned ? this.traceShot(t, t.turret, spec.bounces) : undefined;
+      if (res?.hit && res.hit.team !== t.team) {
+        if (!ai.locked) {
+          // spotted a shot: take a human-ish moment before pulling the trigger
+          ai.locked = true;
+          ai.hesitate = spec.reaction * (0.6 + Math.random() * 0.8);
+        } else {
+          const aim = t.turret;
+          t.turret += (Math.random() * 2 - 1) * spec.aimError;
           this.tryFire(t);
-          ai.hesitate = 0.1 + Math.random() * 0.25;
+          t.turret = aim;
+          ai.locked = false;
+          ai.hesitate = 0.2 + Math.random() * 0.4;
         }
+      } else if (aligned) {
+        ai.locked = false;
       }
     }
 
@@ -473,7 +491,10 @@ export class Game {
       const rx = t.x - b.x, ry = t.y - b.y;
       const v2 = b.vx * b.vx + b.vy * b.vy;
       const tt = (rx * b.vx + ry * b.vy) / v2;
-      if (tt <= 0 || tt > 0.9) continue;
+      // simple tanks notice incoming shots late (and not every time)
+      const notice = t.spec.skill >= 2 ? 0.9 : 0.5;
+      if (tt <= 0 || tt > notice) continue;
+      if (t.spec.skill < 2 && (b.id + t.id) % 3 === 0) continue;
       const cx = rx - b.vx * tt, cy = ry - b.vy * tt;
       const d = Math.hypot(cx, cy);
       if (d > TANK_R + 0.55) continue;

@@ -359,3 +359,101 @@ body.touch[data-screen='game'] #mine-btn {
   .code { font-size: 32px; }
   #banner { padding: 18px 22px; }
 }
+
+/* iteration stamp + journal */
+.hero { position: relative; }
+.stamp {
+  position: absolute;
+  top: 18px;
+  right: -14px;
+  transform: rotate(9deg);
+  border: 3px solid #e2453c;
+  color: #ff6a5e;
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(40, 10, 10, 0.55);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.stamp.small { position: static; transform: rotate(-4deg); font-size: 11px; padding: 2px 7px; border-width: 2px; flex: none; }
+.journal { width: min(560px, 100%); max-height: calc(100dvh - 32px); }
+#journal-list { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; padding-right: 4px; }
+#journal-list article { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+#journal-list header { display: flex; align-items: center; gap: 10px; }
+#journal-list header time { margin-left: auto; color: var(--muted); font-size: 12px; }
+#journal-list ul { margin: 10px 0 0; padding-left: 18px; color: #ddd7cc; line-height: 1.5; font-size: 14px; }
+
+/* demo mode (videos) */
+body.demo #toast, body.demo #names, body.demo #mine-btn { display: none !important; }
+body.demo canvas#game { cursor: none; }
+#demo-caption {
+  position: fixed;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  z-index: 8;
+  text-align: center;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: calc(100vw - 32px);
+}
+#demo-caption b { font-size: 24px; font-weight: 900; }
+#demo-caption span { color: var(--muted); font-weight: 600; }
+
+/* feedback */
+#btn-feedback {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 20;
+  font: 700 14px Rubik, sans-serif;
+  color: var(--text);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+#btn-feedback:hover { background: rgba(255, 255, 255, 0.12); }
+body.demo #btn-feedback { display: none; }
+body.touch[data-screen='game'] #btn-feedback { bottom: auto; top: 64px; }
+#feedback { z-index: 30; background: rgba(10, 10, 14, 0.45); }
+.feedback { width: min(720px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; }
+.feedback > * { flex-shrink: 0; }
+#fb-text { min-height: 96px; }
+.segmented.four { grid-template-columns: repeat(4, 1fr); }
+.fb-shot { display: flex; flex-direction: column; gap: 6px; }
+#fb-canvas { max-width: 100%; max-height: 40vh; width: auto; height: auto; align-self: center; border-radius: 12px; border: 1px solid var(--line); cursor: crosshair; touch-action: none; background: #111; }
+.fb-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fb-tools .muted { font-size: 13px; }
+.btn.small { padding: 6px 10px; font-size: 13px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  resize: vertical;
+  outline: none;
+  font-size: 16px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 180, 61, 0.2); }
+.file { display: flex; gap: 8px; align-items: center; cursor: pointer; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-weight: 600; }
+.file input { display: none; }
+#fb-context { max-height: 220px; overflow: auto; font-size: 11px; background: rgba(0, 0, 0, 0.3); padding: 10px; border-radius: 10px; -webkit-user-select: text; user-select: text; }
+.fb-actions { display: flex; justify-content: flex-end; gap: 8px; }
