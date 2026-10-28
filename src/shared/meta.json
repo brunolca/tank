@@ -1,7 +1,7 @@
 {
-  "iteration": 1,
+  "iteration": 2,
   "date": "2026-10-28",
-  "title": "Premier contact",
+  "title": "Caisses surprises",
   "journal": [
     {
       "iteration": 1,
@@ -13,6 +13,19 @@
         "Neuf familles de tanks ennemis, du brun immobile au noir foudroyant. Ils prennent un temps de réaction avant de tirer et ne visent pas toujours juste.",
         "Un mode versus chacun pour soi : le premier à 5 manches gagne.",
         "Le bouton « Ton avis » (ou la touche F) envoie un retour avec une capture d’écran : entoure ce qui compte, ajoute une pièce jointe. Chaque retour est lu avant l’itération suivante."
+      ]
+    },
+    {
+      "iteration": 2,
+      "date": "2026-10-28",
+      "title": "Caisses surprises",
+      "notes": [
+        "Des caisses bonus tombent sur la table pendant les missions et les manches de versus. Roule dessus pour les ramasser avant qu’elles ne disparaissent !",
+        "Bouclier : une bulle bleue encaisse un coup à ta place, obus ou mine.",
+        "Super-ricochet : pendant 12 secondes, tes obus rebondissent une fois de plus.",
+        "Turbo : 10 secondes de vitesse en plus, avec des étincelles vertes derrière les chenilles.",
+        "Tir en éventail : pendant 10 secondes, chaque tir lance trois obus d’un coup.",
+        "Tes bonus actifs s’affichent en haut de l’écran, et un petit message s’envole au-dessus du tank qui en ramasse un."
       ]
     }
   ]

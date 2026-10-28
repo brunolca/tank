@@ -112,6 +112,24 @@ export const sfx = {
       tone(t + dt, 0.22, f * 2, f * 2, 0.05, 'square');
     }
   },
+  crate() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.25, 900, 300, 0.06, 'sine');
+    noise(t + 0.4, 0.18, 700, 0.8, 0.35, 'lowpass', 150);
+  },
+  bonus() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [659, 880, 1109, 1319].forEach((f, i) => tone(t + i * 0.055, 0.16, f, f, 0.12, 'triangle'));
+    tone(t + 0.22, 0.25, 2637, 2637, 0.03, 'sine');
+  },
+  shieldBreak() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.35, 5000, 1.5, 0.35, 'highpass');
+    tone(t, 0.3, 1400, 350, 0.12, 'square');
+  },
   click() {
     if (!ctx) return;
     tone(ctx.currentTime, 0.04, 1200, 1000, 0.08, 'triangle');

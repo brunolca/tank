@@ -30,12 +30,14 @@ export interface Input {
   m: 0 | 1; // mine
 }
 
-// tank: [id, x, y, body, turret, flags]  flags: 1 alive, 2 invisible
+// tank: [id, x, y, body, turret, flags]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan)
 export type NetTank = [number, number, number, number, number, number];
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
 // mine: [id, x, y, blinking]
 export type NetMine = [number, number, number, number];
+// bonus crate: [id, x, y, kind (index in BONUS_KINDS), blinking]
+export type NetBonus = [number, number, number, number, number];
 
 export type GameEvent =
   | ['shot', number, number, number, number, number] // x y ang rocket shooterId
@@ -44,7 +46,10 @@ export type GameEvent =
   | ['boom', number, number, number] // x y tankId
   | ['mineSet', number, number]
   | ['mboom', number, number]
-  | ['block', number, number];
+  | ['block', number, number]
+  | ['bonus', number, number, number, number] // x y kind tankId (picked up)
+  | ['shield', number, number, number] // x y tankId (a shield absorbed a hit)
+  | ['crate', number, number, number]; // x y kind (a crate drops in)
 
 export interface Results {
   mode: Mode;
@@ -67,7 +72,7 @@ export type ServerMsg =
       tick: number;
     }
   | { t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number> }
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[] }
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[] }
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

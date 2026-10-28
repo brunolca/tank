@@ -245,6 +245,8 @@ export class Room extends DurableObject<Env> {
       const t = game.addTank(e.kind, 99, e.x, e.y, 0);
       this.enemyIndexByTank.set(t.id, idx);
     });
+    game.bonusOn = true;
+    if (this.mode === 'versus') { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
     game.onKill = (victim, killer) => this.onKill(victim, killer);
     this.game = game;
     this.setPhase('intro', 3);
@@ -348,10 +350,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P });
     }
 
     this.phaseTimer -= DT;

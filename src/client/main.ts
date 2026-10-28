@@ -1,13 +1,13 @@
-import { DT, ENEMY_COLORS, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, Tile, W } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, type BonusKind } from '../shared/constants';
 import { getMission } from '../shared/levels';
 import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
-import type { ClientMsg, GameEvent, Input, Mode, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
+import type { ClientMsg, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
 import { initAudio, isMusicOn, setMusicIntensity, sfx, startMusic, toggleMusic } from './audio';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
-import { Renderer, type RBullet, type RMine, type RTank } from './render';
+import { Renderer, type RBonus, type RBullet, type RMine, type RTank } from './render';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -167,7 +167,7 @@ setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 
 // ------------------------------------------------------------------ online game state
 
-interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; at: number }
+interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; at: number }
 
 let online = false;
 let tiles: number[] = [];
@@ -304,7 +304,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
 }
 
 function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
-  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, at: performance.now() };
+  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], at: performance.now() };
   snaps.push(s);
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
@@ -327,9 +327,10 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
 }
 
 function predictStep(x: number, y: number, body: number, mx: number, my: number, s?: Snap): [number, number, number] {
-  [x, y, body] = driveStep(tiles, x, y, body, mx, my, SPECS.player.speed, DT);
-  // treat other tanks as static obstacles
   const snap = s ?? snaps[snaps.length - 1];
+  const turbo = (snap?.T.get(myTankId)?.[5] ?? 0) & BONUS_INFO.turbo.flag;
+  [x, y, body] = driveStep(tiles, x, y, body, mx, my, SPECS.player.speed * (turbo ? TURBO_MULT : 1), DT);
+  // treat other tanks as static obstacles
   if (snap) {
     for (const t of snap.T.values()) {
       if (t[0] === myTankId || !(t[5] & 1)) continue;
@@ -407,10 +408,10 @@ function onlineFrame(dt: number) {
     if (infos.get(ta[0])?.team === 99 && alive) enemiesAlive++;
     if (ta[0] === myTankId) {
       const latest = snaps[snaps.length - 1].T.get(myTankId)!;
-      tanks.push({ id: ta[0], x: pred.x + offset.x, y: pred.y + offset.y, body: pred.body, turret: latest[5] & 1 ? aimAng : latest[4], alive, invisible: false });
+      tanks.push({ id: ta[0], x: pred.x + offset.x, y: pred.y + offset.y, body: pred.body, turret: latest[5] & 1 ? aimAng : latest[4], alive, invisible: false, fx: latest[5] });
       continue;
     }
-    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], u), y: lerp(ta[2], tb[2], u), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2) });
+    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], u), y: lerp(ta[2], tb[2], u), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5] });
   }
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
@@ -435,7 +436,10 @@ function onlineFrame(dt: number) {
   const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3] }));
   renderer.syncMines(mines);
   lastMines = mines;
+  renderer.syncBonuses(a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4] })));
   updateNameTags(tanks);
+  const myFlags = latest.T.get(myTankId)?.[5] ?? 0;
+  renderBuffs(myFlags & 1 ? myFlags : 0);
 }
 
 function handleEvent(e: GameEvent, audible: boolean) {
@@ -470,7 +474,50 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.removeBlock(e[1], e[2]);
       if (audible) sfx.block();
       break;
+    case 'crate':
+      if (audible) sfx.crate();
+      break;
+    case 'bonus': {
+      const kind = BONUS_KINDS[e[3]];
+      if (!kind) break;
+      const info = BONUS_INFO[kind];
+      renderer.bonusBurst(e[1], e[2], info.color);
+      floater(e[1], e[2], `${info.label} !`, info.color);
+      if (audible) sfx.bonus();
+      break;
+    }
+    case 'shield':
+      renderer.bonusBurst(e[1], e[2], BONUS_INFO.shield.color, true);
+      floater(e[1], e[2], 'Bouclier brisé !', BONUS_INFO.shield.color);
+      if (audible) sfx.shieldBreak();
+      break;
   }
+}
+
+// ------------------------------------------------------------------ bonus: floating labels and HUD chips
+
+const floatLayer = $('#floaters');
+function floater(x: number, y: number, text: string, color: number) {
+  const p = renderer.arenaToScreen(x, y, 1.1);
+  const el = document.createElement('div');
+  el.className = 'floater';
+  el.textContent = text;
+  el.style.setProperty('--c', hex(color));
+  el.style.left = `${p.x}px`;
+  el.style.top = `${p.y}px`;
+  floatLayer.appendChild(el);
+  setTimeout(() => el.remove(), 1400);
+}
+
+let buffKey = -1;
+function renderBuffs(flags: number) {
+  const mask = flags & ~3;
+  if (mask === buffKey) return;
+  buffKey = mask;
+  $('#hud-buffs').innerHTML = (Object.keys(BONUS_INFO) as BonusKind[])
+    .filter((k) => mask & BONUS_INFO[k].flag)
+    .map((k) => `<span class="buff" style="--c:${hex(BONUS_INFO[k].color)}">${BONUS_INFO[k].label}</span>`)
+    .join('');
 }
 
 // ------------------------------------------------------------------ name tags
@@ -535,8 +582,8 @@ function renderLobby() {
   start.disabled = lobbyMode === 'versus' && n < 2;
   start.textContent = lobbyMode === 'versus' && n < 2 ? 'Il faut 2 joueurs' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   $('#mode-desc').textContent = lobbyMode === 'coop'
-    ? 'Campagne coopérative : 16 missions faites main puis missions générées à l’infini. Vies partagées, +1 vie toutes les 5 missions.'
-    : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches.';
+    ? 'Campagne coopérative : 16 missions faites main puis missions générées à l’infini. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
+    : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
   renderHud();
 }
 
@@ -565,7 +612,7 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -573,6 +620,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
   attractOpts = opts;
   const lvl = getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
   const g = new Game(lvl.tiles);
+  g.bonusOn = true;
+  if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
   if (opts.heroes) {
     // player-coloured tanks driven by the AI: used by the gameplay videos
     lvl.spawns.forEach(([x, y], i) => {
@@ -609,12 +658,13 @@ function attractFrame(dt: number) {
   const u = attractAcc / DT;
   const tanks: RTank[] = g.tanks.map((t) => {
     const p = attractPrev.get(t.id) ?? t;
-    return { id: t.id, x: lerp(p.x, t.x, u), y: lerp(p.y, t.y, u), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false };
+    return { id: t.id, x: lerp(p.x, t.x, u), y: lerp(p.y, t.y, u), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t) };
   });
   renderer.syncTanks(tanks, -1, dt);
   lastTanks = tanks;
   renderer.syncBullets(g.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket })), dt);
   renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 })));
+  renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
   if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) attractEnd = g.tick + TICK_RATE * 2.5;
   if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
   attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission };
@@ -820,9 +870,18 @@ if (params.has('demo')) {
   document.body.classList.add('demo');
   const demo = {
     meta: META,
-    play(mission: number, heroes = true) {
+    play(mission: number, heroes = true, rich = false) {
       attract = undefined;
-      startAttract({ mission, heroes });
+      startAttract({ mission, heroes, rich });
+    },
+    /** Drop a bonus crate (random kind if omitted) somewhere free in the demo arena. */
+    crate(kind?: BonusKind) {
+      return !!attract?.spawnBonus(kind && BONUS_KINDS.includes(kind) ? kind : undefined);
+    },
+    /** Hand a bonus straight to every hero tank (to show it on camera). */
+    buff(kind: BonusKind) {
+      if (!attract || !BONUS_KINDS.includes(kind)) return;
+      for (const t of attract.tanks) if (t.alive && t.kind === 'player') attract.giveBonus(t, kind);
     },
     caption(text: string, sub = '') {
       const c = $('#demo-caption');

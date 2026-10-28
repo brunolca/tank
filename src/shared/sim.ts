@@ -1,9 +1,9 @@
 import {
-  BULLET_R, BULLET_SPEED, DT, H, MINE_BLAST, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED,
-  SPECS, SUBSTEPS, TANK_R, TankKind, TankSpec, Tile, W, isSolidTank,
+  BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BULLET_R, BULLET_SPEED, BonusKind, DT, FAN_SPREAD, H, MINE_BLAST, MINE_FUSE, MINE_R,
+  MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT, TankKind, TankSpec, Tile, W, isSolidTank,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt } from './physics';
-import type { GameEvent, Input, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
+import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 
 export interface Tank {
   id: number;
@@ -21,6 +21,25 @@ export interface Tank {
   mineCd: number;
   spec: TankSpec;
   ai?: AIState;
+  buffs: Buffs;
+}
+
+/** Active bonuses: shield is a single-use flag, the others are seconds left. */
+export interface Buffs {
+  shield: boolean;
+  bounce: number;
+  turbo: number;
+  fan: number;
+  invuln: number; // grace period right after a shield breaks
+}
+
+export interface Bonus {
+  id: number;
+  kind: BonusKind;
+  x: number;
+  y: number;
+  t: number;
+  dead: boolean;
 }
 
 export interface Bullet {
@@ -95,6 +114,12 @@ export class Game {
   bullets: Bullet[] = [];
   mines: Mine[] = [];
   events: GameEvent[] = [];
+  bonuses: Bonus[] = [];
+  /** Bonus crates: off by default, the room (and the demo) switch them on. */
+  bonusOn = false;
+  bonusNext = 8;
+  bonusEvery: [number, number] = [13, 19];
+  bonusCap = 2;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -110,6 +135,7 @@ export class Game {
       id: this.nextId++, kind, team, pid, name, color, x, y,
       body: team === 0 ? 0 : Math.PI, turret: team === 0 ? 0 : Math.PI,
       alive: true, fireCd: team === 0 ? 0 : 2 + Math.random() * 1.5, mineCd: 0, spec,
+      buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
     };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
@@ -140,6 +166,11 @@ export class Game {
       if (!t.alive) continue;
       t.fireCd -= DT;
       t.mineCd -= DT;
+      const bf = t.buffs;
+      if (bf.bounce > 0) bf.bounce -= DT;
+      if (bf.turbo > 0) bf.turbo -= DT;
+      if (bf.fan > 0) bf.fan -= DT;
+      if (bf.invuln > 0) bf.invuln -= DT;
       if (t.ai) {
         this.updateAI(t);
       } else if (t.pid) {
@@ -151,6 +182,62 @@ export class Game {
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
     this.stepMines(DT);
+    if (this.bonusOn) this.stepBonuses(DT);
+  }
+
+  // -------------------------------------------------------------- bonus crates
+
+  stepBonuses(dt: number) {
+    this.bonusNext -= dt;
+    if (this.bonusNext <= 0) {
+      const [a, b] = this.bonusEvery;
+      this.bonusNext = a + Math.random() * (b - a);
+      if (this.bonuses.length < this.bonusCap) this.spawnBonus();
+    }
+    for (const c of this.bonuses) {
+      c.t += dt;
+      if (c.t >= BONUS_LIFE) { c.dead = true; continue; }
+      if (c.t < 0.5) continue; // still dropping in
+      for (const t of this.tanks) {
+        if (!t.alive || t.kind !== 'player') continue;
+        const rr = TANK_R + BONUS_R;
+        if ((t.x - c.x) ** 2 + (t.y - c.y) ** 2 < rr * rr) {
+          c.dead = true;
+          this.giveBonus(t, c.kind);
+          this.events.push(['bonus', r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), t.id]);
+          break;
+        }
+      }
+    }
+    this.bonuses = this.bonuses.filter((c) => !c.dead);
+  }
+
+  /** Drop a crate on a free tile, away from every tank, mine and crate. */
+  spawnBonus(kind?: BonusKind): Bonus | undefined {
+    for (let tries = 0; tries < 60; tries++) {
+      const cx = 1 + Math.floor(Math.random() * (W - 2)), cy = 1 + Math.floor(Math.random() * (H - 2));
+      if (this.tiles[cy * W + cx] !== Tile.Empty) continue;
+      const x = cx + 0.5, y = cy + 0.5;
+      const near = (ox: number, oy: number, d: number) => (ox - x) ** 2 + (oy - y) ** 2 < d * d;
+      if (this.tanks.some((t) => t.alive && near(t.x, t.y, 2.5))) continue;
+      if (this.mines.some((m) => near(m.x, m.y, MINE_BLAST + 0.3))) continue;
+      if (this.bonuses.some((o) => near(o.x, o.y, 3))) continue;
+      const k = kind ?? BONUS_KINDS[Math.floor(Math.random() * BONUS_KINDS.length)];
+      const c: Bonus = { id: this.nextId++, kind: k, x, y, t: 0, dead: false };
+      this.bonuses.push(c);
+      this.events.push(['crate', x, y, BONUS_KINDS.indexOf(k)]);
+      return c;
+    }
+    return undefined;
+  }
+
+  giveBonus(t: Tank, kind: BonusKind) {
+    if (kind === 'shield') t.buffs.shield = true;
+    else t.buffs[kind] = BONUS_INFO[kind].duration;
+  }
+
+  speedOf(t: Tank) {
+    return t.spec.speed * (t.buffs.turbo > 0 ? TURBO_MULT : 1);
   }
 
   applyInput(t: Tank, inp: Input) {
@@ -164,7 +251,7 @@ export class Game {
   }
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
-    [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, t.spec.speed, dt);
+    [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt);
   }
 
   ownBullets(t: Tank) {
@@ -190,7 +277,17 @@ export class Game {
       this.events.push(['pop', r2(x), r2(y)]);
       return true;
     }
-    this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces: t.spec.bounces, rocket: t.spec.rocket, dead: false });
+    const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0);
+    this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false });
+    if (t.buffs.fan > 0) {
+      // two extra shells on each side of the main one (they may push past the ammo cap)
+      for (const da of [-FAN_SPREAD, FAN_SPREAD]) {
+        const a = t.turret + da, ex = Math.cos(a), ey = Math.sin(a);
+        const fx = t.x + ex * tip, fy = t.y + ey * tip;
+        if (bulletBlocked(this.tiles, fx, fy, BULLET_R)) continue;
+        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false });
+      }
+    }
     return true;
   }
 
@@ -330,7 +427,13 @@ export class Game {
   }
 
   killTank(t: Tank, killer: Tank | undefined) {
-    if (!t.alive) return;
+    if (!t.alive || t.buffs.invuln > 0) return;
+    if (t.buffs.shield) {
+      t.buffs.shield = false;
+      t.buffs.invuln = 0.5;
+      this.events.push(['shield', r2(t.x), r2(t.y), t.id]);
+      return;
+    }
     t.alive = false;
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
     this.onKill?.(t, killer);
@@ -345,7 +448,15 @@ export class Game {
   }
 
   netTanks(): NetTank[] {
-    return this.tanks.map((t) => [t.id, r2(t.x), r2(t.y), r2(t.body), r2(t.turret), (t.alive ? 1 : 0) | (t.spec.invisible && !this.frozen ? 2 : 0)]);
+    return this.tanks.map((t) => [t.id, r2(t.x), r2(t.y), r2(t.body), r2(t.turret), (t.alive ? 1 : 0) | (t.spec.invisible && !this.frozen ? 2 : 0) | this.buffFlags(t)]);
+  }
+  buffFlags(t: Tank) {
+    const b = t.buffs;
+    return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
+      | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0);
+  }
+  netBonuses(): NetBonus[] {
+    return this.bonuses.map((c) => [c.id, c.x, c.y, BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
   }
   netBullets(): NetBullet[] {
     return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), b.rocket ? 1 : 0, b.owner]);
@@ -570,14 +681,24 @@ export class Game {
     }
     if (reach.length < 2) { ai.path = []; return; }
     let best = -1, bestScore = -Infinity;
-    for (let k = 0; k < 14; k++) {
-      const c = reach[1 + Math.floor(Math.random() * (reach.length - 1))];
-      const cx = (c % W) + 0.5, cy = Math.floor(c / W) + 0.5;
-      const df = Math.hypot(foe.x - cx, foe.y - cy);
-      let score = -Math.abs(df - ai.prefDist) + Math.random() * 2.5 + Math.min(dist[c], 6) * 0.15;
-      for (const m of this.mines) score += Math.min(4, Math.hypot(m.x - cx, m.y - cy)) * 0.8;
-      for (const o of this.tanks) if (o.alive && o !== t && o.team === t.team && Math.hypot(o.x - cx, o.y - cy) < 1.5) score -= 2;
-      if (score > bestScore) { bestScore = score; best = c; }
+    // AI-driven player tanks (demo) love bonus crates
+    if (t.kind === 'player' && this.bonuses.length && Math.random() < 0.8) {
+      for (const c of this.bonuses) {
+        const cell = Math.floor(c.y) * W + Math.floor(c.x);
+        if (prev[cell] === -2 || dist[cell] > 9) continue;
+        if (best < 0 || dist[cell] < dist[best]) best = cell;
+      }
+    }
+    if (best < 0) {
+      for (let k = 0; k < 14; k++) {
+        const c = reach[1 + Math.floor(Math.random() * (reach.length - 1))];
+        const cx = (c % W) + 0.5, cy = Math.floor(c / W) + 0.5;
+        const df = Math.hypot(foe.x - cx, foe.y - cy);
+        let score = -Math.abs(df - ai.prefDist) + Math.random() * 2.5 + Math.min(dist[c], 6) * 0.15;
+        for (const m of this.mines) score += Math.min(4, Math.hypot(m.x - cx, m.y - cy)) * 0.8;
+        for (const o of this.tanks) if (o.alive && o !== t && o.team === t.team && Math.hypot(o.x - cx, o.y - cy) < 1.5) score -= 2;
+        if (score > bestScore) { bestScore = score; best = c; }
+      }
     }
     const path: number[] = [];
     for (let c = best; c !== -1 && c !== start; c = prev[c]) path.push(c);

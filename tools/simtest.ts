@@ -14,6 +14,9 @@ for (let mission = 1; mission <= LEVELS.length + 8; mission++) {
   const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
   for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
   g.frozen = false;
+  g.bonusOn = true;
+  g.bonusNext = 1;
+  g.bonusEvery = [3, 5];
   let kills = 0, shots = 0, ticks = 0;
   g.onKill = () => kills++;
   const inputs = new Map();
@@ -29,3 +32,37 @@ for (let mission = 1; mission <= LEVELS.length + 8; mission++) {
   console.log(`M${mission} ${lvl.name.padEnd(22)} enemies=${lvl.enemies.length} survived=${(ticks / 30).toFixed(1)}s shots=${shots} kills=${kills} cpu/tick=${((Date.now() - start) / ticks).toFixed(3)}ms`);
 }
 console.log('total', Date.now() - t0, 'ms');
+
+// bonus crates: pickup, shield absorbs one hit, fan shot fires three shells
+{
+  const fail = (m: string) => { console.error('BONUS:', m); process.exitCode = 1; };
+  const lvl = getMission(1);
+  const g = new Game(lvl.tiles);
+  g.bonusOn = true;
+  g.bonusNext = 999;
+  const [sx, sy] = lvl.spawns[0];
+  const p = g.addTank('player', 0, sx, sy, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  const c = g.spawnBonus('shield');
+  if (!c) fail('aucune caisse posée');
+  else {
+    c.x = p.x; c.y = p.y; c.t = 1;
+    g.step(new Map());
+    if (!p.buffs.shield) fail('la caisse bouclier n’a pas été ramassée');
+    if (!g.events.some((e) => e[0] === 'bonus')) fail('pas d’événement bonus');
+    g.killTank(p, undefined);
+    if (!p.alive || p.buffs.shield) fail('le bouclier n’a pas absorbé le coup');
+    g.killTank(p, undefined);
+    if (!p.alive) fail('pas de répit juste après le bouclier');
+    for (let i = 0; i < 20; i++) g.step(new Map());
+    g.giveBonus(p, 'fan');
+    p.fireCd = 0; p.turret = 0;
+    const before = g.bullets.length;
+    g.tryFire(p);
+    if (g.bullets.length - before < 2) fail(`éventail : ${g.bullets.length - before} obus au lieu de 3`);
+    g.killTank(p, undefined);
+    if (p.alive) fail('le tank devrait être détruit sans bouclier');
+    if (!fails()) console.log('bonus OK');
+  }
+  function fails() { return process.exitCode === 1; }
+}

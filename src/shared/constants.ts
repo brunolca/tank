@@ -82,3 +82,18 @@ export function isSolidTank(t: number) {
 export function isSolidBullet(t: number) {
   return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork;
 }
+
+// ------------------------------------------------------------------ bonus crates
+// The index in BONUS_KINDS is what travels on the wire: append new kinds, never reorder.
+export const BONUS_KINDS = ['shield', 'bounce', 'turbo', 'fan'] as const;
+export type BonusKind = (typeof BONUS_KINDS)[number];
+export const BONUS_R = 0.32;
+export const BONUS_LIFE = 16; // seconds a crate waits on the floor
+export const BONUS_INFO: Record<BonusKind, { label: string; color: number; duration: number; flag: number }> = {
+  shield: { label: 'Bouclier', color: 0x4fd1ff, duration: 0, flag: 4 }, // lasts until it absorbs a hit
+  bounce: { label: 'Super-ricochet', color: 0xffb43d, duration: 12, flag: 16 },
+  turbo: { label: 'Turbo', color: 0x6be36b, duration: 10, flag: 8 },
+  fan: { label: 'Tir en éventail', color: 0xff6fb0, duration: 10, flag: 32 },
+};
+export const TURBO_MULT = 1.45;
+export const FAN_SPREAD = 0.2;

@@ -7,14 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 1, seconds: 8, caption: 'Premier contact', sub: 'Les obus ricochent une fois' },
-  { mission: 3, seconds: 12, caption: 'Bouchons', sub: 'Blocs de liège et mines' },
-  { mission: 5, seconds: 12, caption: 'Champ de mines', sub: 'Les tanks jaunes sèment des mines' },
-  { mission: 8, seconds: 12, caption: 'Snipers', sub: 'Les tanks verts tirent en double ricochet' },
-  { mission: 14, seconds: 10, caption: 'Éclair noir', sub: 'Le plus rapide de tous' },
-  { mission: 16, seconds: 12, caption: 'Ultime', sub: 'Tout le monde en même temps' },
-];
-// ------------------------------------------------------------------
+  { mission: 4, seconds: 12, rich: true, crates: ['shield', 'turbo', 'fan'], caption: 'Caisses bonus', sub: 'Elles tombent sur la table : fonce les ramasser !' },
+  { mission: 6, seconds: 11, buffs: ['shield'], crates: ['shield'], caption: 'Bouclier', sub: 'Une bulle qui encaisse un coup à ta place' },
+  { mission: 9, seconds: 10, buffs: ['fan'], crates: ['fan'], caption: 'Tir en éventail', sub: 'Trois obus d’un coup' },
+  { mission: 12, seconds: 10, buffs: ['turbo', 'bounce'], crates: ['turbo'], caption: 'Turbo et super-ricochet', sub: 'Plus vite, et des obus qui rebondissent deux fois' },
+  { mission: 16, seconds: 12, rich: true, crates: ['bounce', 'fan'], buffs: ['shield'], caption: 'Ultime', sub: 'Tous les ennemis, tous les bonus' },
+];// ------------------------------------------------------------------
 
 const meta = readMeta();
 const tag = `iteration-${meta.iteration}`;
@@ -52,7 +50,13 @@ try {
   await page.evaluate(() => window.__demo.title());
   await sleep(3200);
   for (const shot of MONTAGE) {
-    await page.evaluate(([m, c, s]) => { window.__demo.play(m); window.__demo.caption(c, s); }, [shot.mission, shot.caption, shot.sub]);
+    await page.evaluate((shot) => {
+      const d = window.__demo;
+      d.play(shot.mission, true, !!shot.rich);
+      d.caption(shot.caption, shot.sub);
+      for (const k of shot.crates ?? []) d.crate?.(k);
+      for (const k of shot.buffs ?? []) d.buff?.(k);
+    }, shot);
     await sleep(shot.seconds * 1000);
   }
   await page.evaluate(() => window.__demo.caption(''));

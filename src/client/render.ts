@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { ENEMY_COLORS, H, MINE_BLAST, Tile, W } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, H, MINE_BLAST, Tile, W, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
-export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean }
+export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
+export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean }
 export interface RMine { id: number; x: number; y: number; blink: boolean }
 
@@ -153,7 +154,47 @@ interface TankView {
   wasAlive: boolean;
   recoil: number;
   materials: THREE.MeshStandardMaterial[];
+  bubble?: THREE.Mesh;
 }
+
+// ------------------------------------------------------------------ bonus crates
+
+/** Wooden crate face with the bonus emblem, drawn once per kind. */
+function crateTexture(kind: BonusKind) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#c9965a';
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(90,55,20,0.55)';
+  g.lineWidth = 3;
+  for (let y = 0; y < 128; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
+  g.fillStyle = '#7a4a1e';
+  g.fillRect(0, 0, 128, 12); g.fillRect(0, 116, 128, 12); g.fillRect(0, 0, 12, 128); g.fillRect(116, 0, 12, 128);
+  const col = '#' + BONUS_INFO[kind].color.toString(16).padStart(6, '0');
+  g.fillStyle = col;
+  g.beginPath(); g.arc(64, 64, 44, 0, Math.PI * 2); g.fill();
+  g.lineWidth = 5; g.strokeStyle = '#fff8e8'; g.stroke();
+  g.fillStyle = '#fff8e8'; g.strokeStyle = '#fff8e8';
+  g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 8;
+  g.beginPath();
+  if (kind === 'shield') {
+    g.moveTo(64, 40); g.lineTo(84, 48); g.lineTo(82, 68); g.quadraticCurveTo(78, 82, 64, 90); g.quadraticCurveTo(50, 82, 46, 68); g.lineTo(44, 48); g.closePath(); g.fill();
+  } else if (kind === 'bounce') {
+    g.moveTo(42, 46); g.lineTo(58, 80); g.lineTo(72, 50); g.lineTo(86, 82); g.stroke();
+  } else if (kind === 'turbo') {
+    for (const ox of [-10, 10]) { g.moveTo(52 + ox, 44); g.lineTo(70 + ox, 64); g.lineTo(52 + ox, 84); }
+    g.stroke();
+  } else {
+    for (const a of [-0.55, 0, 0.55]) { g.moveTo(64, 86); g.lineTo(64 + Math.sin(a) * 40, 86 - Math.cos(a) * 40); }
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+interface CrateView { root: THREE.Group; box: THREE.Mesh; halo: THREE.Mesh; beam: THREE.Mesh; born: number; x: number; y: number; kind: BonusKind }
 
 const geo = {
   body: new RoundedBoxGeometry(0.8, 0.24, 0.6, 3, 0.07),
@@ -168,6 +209,10 @@ const geo = {
   mineTop: new THREE.SphereGeometry(0.15, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
   mineLed: new THREE.SphereGeometry(0.045, 10, 8),
   shock: new THREE.RingGeometry(0.85, 1, 48),
+  crate: new RoundedBoxGeometry(0.58, 0.58, 0.58, 2, 0.06),
+  beam: new THREE.CylinderGeometry(0.3, 0.36, 1.8, 24, 1, true),
+  halo: new THREE.CircleGeometry(0.5, 36),
+  bubble: new THREE.SphereGeometry(0.62, 28, 16),
 };
 
 const treadMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.9 });
@@ -234,6 +279,9 @@ export class Renderer {
   private tanks = new Map<number, TankView>();
   private bullets = new Map<number, THREE.Mesh>();
   private mines = new Map<number, THREE.Group>();
+  private crates = new Map<number, CrateView>();
+  private crateMats = new Map<BonusKind, THREE.MeshStandardMaterial>();
+  private bubbleMat = new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x2a9fd0, emissiveIntensity: 0.6, transparent: true, opacity: 0.4, roughness: 0.15, depthWrite: false });
   private glow: ParticleSystem;
   private smoke: ParticleSystem;
   private debris: ParticleSystem;
@@ -359,6 +407,8 @@ export class Renderer {
     this.bullets.clear();
     for (const m of this.mines.values()) this.scene.remove(m);
     this.mines.clear();
+    for (const c of this.crates.values()) this.removeCrate(c);
+    this.crates.clear();
     this.glow.clear(); this.smoke.clear(); this.debris.clear();
 
     this.paintFloor(tiles);
@@ -481,6 +531,7 @@ export class Renderer {
       if (v.ring) {
         (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(this.time * 4) * 0.25;
       }
+      this.tankBuffs(v, t, visible, dt);
       // tread marks
       if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
       const d = Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY);
@@ -500,6 +551,92 @@ export class Renderer {
         }
       }
     }
+  }
+
+  private tankBuffs(v: TankView, t: RTank, visible: boolean, dt: number) {
+    const fx = t.fx ?? 0;
+    const shield = !!(fx & BONUS_INFO.shield.flag);
+    if (shield && !v.bubble) {
+      v.bubble = new THREE.Mesh(geo.bubble, this.bubbleMat);
+      v.bubble.position.y = 0.3;
+      v.bubble.renderOrder = 2;
+      v.root.add(v.bubble);
+    }
+    if (v.bubble) {
+      v.bubble.visible = shield;
+      const k = 1 + Math.sin(this.time * 5 + t.id) * 0.04;
+      v.bubble.scale.set(k, k * 0.8, k);
+    }
+    if (!visible) return;
+    if (fx & BONUS_INFO.turbo.flag && Math.random() < 40 * dt) {
+      const bx = t.x - Math.cos(t.body) * 0.42, by = t.y - Math.sin(t.body) * 0.42;
+      this.glow.emit({ x: bx + (Math.random() - 0.5) * 0.3, y: 0.15, z: by + (Math.random() - 0.5) * 0.3, vy: 0.4, life: 0.3, s0: 0.09, s1: 0.01, c0: 0xb8ff9a, c1: BONUS_INFO.turbo.color });
+    }
+    for (const kind of ['bounce', 'fan'] as const) {
+      if (!(fx & BONUS_INFO[kind].flag) || Math.random() > 18 * dt) continue;
+      const a = this.time * 3 + (kind === 'fan' ? Math.PI : 0);
+      this.glow.emit({ x: t.x + Math.cos(a) * 0.5, y: 0.55, z: t.y + Math.sin(a) * 0.5, vy: 0.5, life: 0.45, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO[kind].color });
+    }
+  }
+
+  syncBonuses(list: RBonus[]) {
+    const seen = new Set<number>();
+    for (const b of list) {
+      const kind = BONUS_KINDS[b.kind];
+      if (!kind) continue; // unknown kind from a newer server: just don't draw it
+      seen.add(b.id);
+      let c = this.crates.get(b.id);
+      if (!c) {
+        let mat = this.crateMats.get(kind);
+        if (!mat) { mat = new THREE.MeshStandardMaterial({ map: crateTexture(kind), roughness: 0.7 }); this.crateMats.set(kind, mat); }
+        const root = new THREE.Group();
+        const box = new THREE.Mesh(geo.crate, mat);
+        box.castShadow = true;
+        const halo = new THREE.Mesh(geo.halo, new THREE.MeshBasicMaterial({ color: BONUS_INFO[kind].color, transparent: true, opacity: 0.7, depthWrite: false }));
+        halo.rotation.x = -Math.PI / 2;
+        halo.position.y = 0.02;
+        const beam = new THREE.Mesh(geo.beam, new THREE.MeshBasicMaterial({ color: BONUS_INFO[kind].color, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+        beam.position.y = 0.9;
+        root.add(box, halo, beam);
+        root.position.set(b.x, 0, b.y);
+        this.scene.add(root);
+        c = { root, box, halo, beam, born: this.time, x: b.x, y: b.y, kind };
+        this.crates.set(b.id, c);
+      }
+      const age = this.time - c.born;
+      const fall = Math.max(0, 1 - age / 0.45);
+      c.box.position.y = 0.36 + Math.sin(this.time * 2.6 + b.id) * 0.05 + fall * fall * 4;
+      c.box.rotation.y = this.time * 1.4 + b.id;
+      c.box.rotation.x = fall * 1.5;
+      const pulse = 0.5 + Math.sin(this.time * 4 + b.id) * 0.2;
+      (c.halo.material as THREE.MeshBasicMaterial).opacity = b.blink ? (Math.sin(this.time * 18) > 0 ? 0.7 : 0.1) : pulse;
+      (c.beam.material as THREE.MeshBasicMaterial).opacity = (b.blink ? 0.08 : 0.16) * (1 - fall);
+      c.box.visible = !b.blink || Math.sin(this.time * 18) > -0.6;
+      if (Math.random() < 0.06) this.glow.emit({ x: b.x + (Math.random() - 0.5) * 0.5, y: 0.2, z: b.y + (Math.random() - 0.5) * 0.5, vy: 0.8, life: 0.6, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO[kind].color });
+    }
+    for (const [id, c] of this.crates) {
+      if (!seen.has(id)) { this.removeCrate(c); this.crates.delete(id); }
+    }
+  }
+
+  private removeCrate(c: CrateView) {
+    this.scene.remove(c.root);
+    (c.halo.material as THREE.Material).dispose();
+    (c.beam.material as THREE.Material).dispose();
+  }
+
+  /** Burst of colour when a crate is picked up (or a shield breaks). */
+  bonusBurst(x: number, y: number, color: number, big = false) {
+    for (let i = 0; i < (big ? 36 : 26); i++) {
+      const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 2.5;
+      this.glow.emit({ x, y: 0.45, z: y, vx: Math.cos(a) * s, vy: 1 + Math.random() * 2.5, vz: Math.sin(a) * s, life: 0.4 + Math.random() * 0.3, s0: 0.1, s1: 0.01, c0: 0xffffff, c1: color, drag: 3, grav: 3 });
+    }
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.06, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.4, size: big ? 1.4 : 0.9 });
+    if (big) this.shake = Math.max(this.shake, 0.12);
   }
 
   syncBullets(list: RBullet[], dt: number) {
