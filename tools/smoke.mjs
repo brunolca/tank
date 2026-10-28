@@ -16,7 +16,9 @@ try {
     const p = await ctx.newPage();
     p.on('pageerror', (e) => fail(`${name} : ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') fail(`${name} console : ${m.text()}`); });
-    await p.goto(url);
+    p.setDefaultTimeout(60000);
+    await p.goto(url, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => window.__debug, null, { timeout: 60000 });
     return p;
   };
   const state = (p) => p.evaluate(() => window.__debug.state);
@@ -24,7 +26,7 @@ try {
   const a = await page('A', server.url + '/');
   await sleep(1500);
   await a.click('#btn-create');
-  await a.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 10000 });
+  await a.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
   const b = await page('B', a.url());
   await sleep(1500);
   const lobbyCount = await a.locator('#lobby-players li:not(.empty)').count();
@@ -59,8 +61,11 @@ try {
   if (!ctxText.includes('"regions"') || !ctxText.includes('"contents"')) fail('le contexte du feedback ne décrit pas la zone entourée');
   const [resp] = await Promise.all([a.waitForResponse((r) => r.url().endsWith('/api/feedback')), a.click('#fb-send')]);
   if (resp.status() !== 200) fail(`envoi du feedback : HTTP ${resp.status()} ${await resp.text()}`);
-  await sleep(300);
-  if (!(await a.locator('#feedback').isHidden())) fail('la fenêtre de feedback ne se ferme pas après envoi');
+  try { await a.waitForSelector('#feedback', { state: 'hidden', timeout: 15000 }); }
+  catch { fail('la fenêtre de feedback ne se ferme pas après envoi'); }
+  // free the (software-rendered, on CI) GPU before the demo page
+  await a.context().close();
+  await b.context().close();
 
   const d = await page('démo', server.url + '/?demo=1&mission=3');
   await sleep(1500);
