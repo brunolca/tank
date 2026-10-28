@@ -1,0 +1,566 @@
+import {
+  BULLET_R, BULLET_SPEED, DT, H, MINE_BLAST, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED,
+  SPECS, SUBSTEPS, TANK_R, TankKind, TankSpec, Tile, W, isSolidTank,
+} from './constants';
+import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt } from './physics';
+import type { GameEvent, Input, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
+
+export interface Tank {
+  id: number;
+  kind: TankKind;
+  team: number;
+  pid?: string;
+  name?: string;
+  color: number;
+  x: number;
+  y: number;
+  body: number;
+  turret: number;
+  alive: boolean;
+  fireCd: number;
+  mineCd: number;
+  spec: TankSpec;
+  ai?: AIState;
+}
+
+export interface Bullet {
+  id: number;
+  owner: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  bounces: number;
+  rocket: boolean;
+  dead: boolean;
+}
+
+export interface Mine {
+  id: number;
+  owner: number;
+  team: number;
+  x: number;
+  y: number;
+  t: number;
+  fuse: number;
+  dead: boolean;
+}
+
+interface AIState {
+  think: number;
+  aim: number;
+  aimValid: boolean;
+  wanderAim: number;
+  wanderT: number;
+  path: number[];
+  pathT: number;
+  dodgeX: number;
+  dodgeY: number;
+  dodgeT: number;
+  stuckT: number;
+  lastX: number;
+  lastY: number;
+  mineCd: number;
+  hesitate: number;
+  prefDist: number;
+}
+
+const PREF_DIST: Partial<Record<TankKind, number>> = {
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5,
+};
+
+export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Shared by the server simulation and client-side prediction. */
+export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: number, mx: number, my: number, speed: number, dt: number): [number, number, number] {
+  const len = Math.hypot(mx, my);
+  if (len < 0.05) return [x, y, body];
+  if (len > 1) { mx /= len; my /= len; }
+  const target = Math.atan2(my, mx);
+  // tanks can drive forwards or backwards: rotate toward the closest of the two
+  const alt = target + Math.PI;
+  const goal = Math.abs(angDiff(body, target)) <= Math.abs(angDiff(body, alt)) ? target : alt;
+  body = rotateToward(body, goal, 11 * dt);
+  const sp = speed * dt;
+  [x, y] = moveCircle(tiles, x, y, mx * sp, my * sp, TANK_R);
+  return [x, y, body];
+}
+
+export class Game {
+  tiles: number[];
+  tanks: Tank[] = [];
+  bullets: Bullet[] = [];
+  mines: Mine[] = [];
+  events: GameEvent[] = [];
+  tick = 0;
+  frozen = true;
+  private nextId = 1;
+  onKill?: KillCb;
+
+  constructor(tiles: number[]) {
+    this.tiles = tiles.slice();
+  }
+
+  addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
+    const spec = SPECS[kind];
+    const t: Tank = {
+      id: this.nextId++, kind, team, pid, name, color, x, y,
+      body: team === 0 ? 0 : Math.PI, turret: team === 0 ? 0 : Math.PI,
+      alive: true, fireCd: 1 + Math.random(), mineCd: 0, spec,
+    };
+    if (kind !== 'player') {
+      t.ai = {
+        think: Math.random() * 0.3, aim: t.turret, aimValid: false, wanderAim: t.turret, wanderT: 0,
+        path: [], pathT: 0, dodgeX: 0, dodgeY: 0, dodgeT: 0, stuckT: 0, lastX: x, lastY: y,
+        mineCd: 2 + Math.random() * 3, hesitate: 0, prefDist: PREF_DIST[kind] ?? 5,
+      };
+    }
+    this.tanks.push(t);
+    return t;
+  }
+
+  tankInfos(): TankInfo[] {
+    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color }));
+  }
+
+  step(inputs: Map<string, Input>) {
+    this.tick++;
+    if (this.frozen) return;
+    for (const t of this.tanks) {
+      if (!t.alive) continue;
+      t.fireCd -= DT;
+      t.mineCd -= DT;
+      if (t.pid) {
+        const inp = inputs.get(t.pid);
+        if (inp) this.applyInput(t, inp);
+      } else {
+        this.updateAI(t);
+      }
+    }
+    this.separateTanks();
+    const sdt = DT / SUBSTEPS;
+    for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
+    this.stepMines(DT);
+  }
+
+  applyInput(t: Tank, inp: Input) {
+    let mx = inp.mx, my = inp.my;
+    const len = Math.hypot(mx, my);
+    if (len > 1) { mx /= len; my /= len; }
+    this.driveTank(t, mx, my, DT);
+    if (Number.isFinite(inp.a)) t.turret = inp.a;
+    if (inp.f) this.tryFire(t);
+    if (inp.m) this.tryMine(t);
+  }
+
+  driveTank(t: Tank, mx: number, my: number, dt: number) {
+    [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, t.spec.speed, dt);
+  }
+
+  ownBullets(t: Tank) {
+    let n = 0;
+    for (const b of this.bullets) if (b.owner === t.id && !b.dead) n++;
+    return n;
+  }
+  ownMines(t: Tank) {
+    let n = 0;
+    for (const m of this.mines) if (m.owner === t.id && !m.dead) n++;
+    return n;
+  }
+
+  tryFire(t: Tank): boolean {
+    if (t.fireCd > 0 || this.ownBullets(t) >= t.spec.maxBullets) return false;
+    t.fireCd = t.spec.fireCd;
+    const dx = Math.cos(t.turret), dy = Math.sin(t.turret);
+    const tip = TANK_R + 0.22;
+    const x = t.x + dx * tip, y = t.y + dy * tip;
+    const sp = t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED;
+    this.events.push(['shot', r2(x), r2(y), r2(t.turret), t.spec.rocket ? 1 : 0, t.id]);
+    if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, t.x + dx * TANK_R * 0.6, t.y + dy * TANK_R * 0.6, BULLET_R)) {
+      this.events.push(['pop', r2(x), r2(y)]);
+      return true;
+    }
+    this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces: t.spec.bounces, rocket: t.spec.rocket, dead: false });
+    return true;
+  }
+
+  tryMine(t: Tank): boolean {
+    if (t.mineCd > 0 || this.ownMines(t) >= t.spec.mines) return false;
+    for (const m of this.mines) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) < MINE_R * 3) return false;
+    t.mineCd = 0.6;
+    this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: t.x, y: t.y, t: 0, fuse: -1, dead: false });
+    this.events.push(['mineSet', r2(t.x), r2(t.y)]);
+    return true;
+  }
+
+  separateTanks() {
+    const alive = this.tanks.filter((t) => t.alive);
+    for (let i = 0; i < alive.length; i++) {
+      for (let j = i + 1; j < alive.length; j++) {
+        const a = alive[i], b = alive[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy);
+        const min = TANK_R * 2;
+        if (d >= min) continue;
+        if (d < 1e-6) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
+        const push = (min - d) / 2;
+        const aStatic = a.spec.speed === 0, bStatic = b.spec.speed === 0;
+        const ka = aStatic ? 0 : bStatic ? 2 : 1, kb = bStatic ? 0 : aStatic ? 2 : 1;
+        a.x -= dx * push * ka; a.y -= dy * push * ka;
+        b.x += dx * push * kb; b.y += dy * push * kb;
+        [a.x, a.y] = resolveCircle(this.tiles, a.x, a.y, TANK_R);
+        [b.x, b.y] = resolveCircle(this.tiles, b.x, b.y, TANK_R);
+      }
+    }
+  }
+
+  stepBullets(dt: number) {
+    for (const b of this.bullets) {
+      if (b.dead) continue;
+      let bounced = false;
+      const nx = b.x + b.vx * dt;
+      if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) { b.vx = -b.vx; bounced = true; } else b.x = nx;
+      const ny = b.y + b.vy * dt;
+      if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) { b.vy = -b.vy; bounced = true; } else b.y = ny;
+      if (bounced) {
+        b.bounces--;
+        if (b.bounces < 0) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+        this.events.push(['bounce', r2(b.x), r2(b.y)]);
+      }
+      if (b.x < -1 || b.y < -1 || b.x > W + 1 || b.y > H + 1) b.dead = true;
+    }
+    // bullet vs tank
+    for (const b of this.bullets) {
+      if (b.dead) continue;
+      for (const t of this.tanks) {
+        if (!t.alive) continue;
+        const rr = TANK_R + BULLET_R;
+        if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
+          b.dead = true;
+          this.killTank(t, this.tankById(b.owner));
+          break;
+        }
+      }
+    }
+    // bullet vs bullet
+    for (let i = 0; i < this.bullets.length; i++) {
+      const a = this.bullets[i];
+      if (a.dead) continue;
+      for (let j = i + 1; j < this.bullets.length; j++) {
+        const b = this.bullets[j];
+        if (b.dead) continue;
+        const rr = BULLET_R * 2 + 0.06;
+        if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 < rr * rr) {
+          a.dead = b.dead = true;
+          this.events.push(['pop', r2((a.x + b.x) / 2), r2((a.y + b.y) / 2)]);
+          break;
+        }
+      }
+    }
+    // bullet vs mine
+    for (const b of this.bullets) {
+      if (b.dead) continue;
+      for (const m of this.mines) {
+        if (m.dead) continue;
+        if (Math.hypot(m.x - b.x, m.y - b.y) < MINE_R + BULLET_R) {
+          b.dead = true;
+          this.explodeMine(m);
+          break;
+        }
+      }
+    }
+    this.bullets = this.bullets.filter((b) => !b.dead);
+  }
+
+  stepMines(dt: number) {
+    for (const m of this.mines) {
+      if (m.dead) continue;
+      m.t += dt;
+      if (m.fuse < 0 && m.t > 0.4) {
+        for (const t of this.tanks) {
+          if (!t.alive || t.team === m.team || t.id === m.owner) continue;
+          if (Math.hypot(t.x - m.x, t.y - m.y) < MINE_TRIGGER_R) { m.fuse = 0.55; break; }
+        }
+      }
+      if (m.fuse >= 0) {
+        m.fuse -= dt;
+        if (m.fuse <= 0) this.explodeMine(m);
+      } else if (m.t >= MINE_FUSE) this.explodeMine(m);
+    }
+    this.mines = this.mines.filter((m) => !m.dead);
+  }
+
+  explodeMine(m: Mine) {
+    if (m.dead) return;
+    m.dead = true;
+    this.events.push(['mboom', r2(m.x), r2(m.y)]);
+    const owner = this.tankById(m.owner);
+    for (const t of this.tanks) {
+      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < MINE_BLAST + TANK_R * 0.4) this.killTank(t, owner);
+    }
+    for (const b of this.bullets) {
+      if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < MINE_BLAST) b.dead = true;
+    }
+    for (const o of this.mines) {
+      if (!o.dead && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < MINE_BLAST + 0.3) {
+        if (o.fuse < 0 || o.fuse > 0.12) o.fuse = 0.12;
+      }
+    }
+    const minX = Math.floor(m.x - MINE_BLAST - 1), maxX = Math.floor(m.x + MINE_BLAST + 1);
+    const minY = Math.floor(m.y - MINE_BLAST - 1), maxY = Math.floor(m.y + MINE_BLAST + 1);
+    for (let cy = minY; cy <= maxY; cy++) {
+      for (let cx = minX; cx <= maxX; cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < MINE_BLAST + 0.35) {
+          this.tiles[cy * W + cx] = Tile.Empty;
+          this.events.push(['block', cx, cy]);
+        }
+      }
+    }
+  }
+
+  killTank(t: Tank, killer: Tank | undefined) {
+    if (!t.alive) return;
+    t.alive = false;
+    this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
+    this.onKill?.(t, killer);
+  }
+
+  tankById(id: number) {
+    return this.tanks.find((t) => t.id === id);
+  }
+
+  aliveCount(team: number) {
+    return this.tanks.filter((t) => t.alive && t.team === team).length;
+  }
+
+  netTanks(): NetTank[] {
+    return this.tanks.map((t) => [t.id, r2(t.x), r2(t.y), r2(t.body), r2(t.turret), (t.alive ? 1 : 0) | (t.spec.invisible && !this.frozen ? 2 : 0)]);
+  }
+  netBullets(): NetBullet[] {
+    return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), b.rocket ? 1 : 0, b.owner]);
+  }
+  netMines(): NetMine[] {
+    return this.mines.map((m) => [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0]);
+  }
+
+  // -------------------------------------------------------------- AI
+
+  /** First tank a shot fired at `ang` from tank t would hit (or undefined). */
+  traceShot(t: Tank, ang: number, bounces: number): { hit?: Tank; len: number } {
+    const tip = TANK_R + 0.22;
+    const sx = t.x + Math.cos(ang) * tip, sy = t.y + Math.sin(ang) * tip;
+    if (bulletBlocked(this.tiles, sx, sy, BULLET_R)) return { len: 0 };
+    const segs = castRicochet(this.tiles, sx, sy, ang, bounces, 45);
+    let acc = 0;
+    for (let si = 0; si < segs.length; si++) {
+      const s = segs[si];
+      let best: Tank | undefined, bestT = 2;
+      for (const o of this.tanks) {
+        if (!o.alive) continue;
+        if (o === t && si === 0) continue;
+        const u = segCircle(s, o.x, o.y, TANK_R + BULLET_R + 0.04);
+        if (u >= 0 && u < bestT) { bestT = u; best = o; }
+      }
+      // mines also stop bullets: shooting into a mine near us is bad, near foes is fine
+      const segLen = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+      if (best) return { hit: best, len: acc + segLen * bestT };
+      acc += segLen;
+    }
+    return { len: acc };
+  }
+
+  private nearestFoe(t: Tank): Tank | undefined {
+    let best: Tank | undefined, bd = Infinity;
+    for (const o of this.tanks) {
+      if (!o.alive || o.team === t.team) continue;
+      const d = Math.hypot(o.x - t.x, o.y - t.y);
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best;
+  }
+
+  private updateAI(t: Tank) {
+    const ai = t.ai!;
+    const spec = t.spec;
+    ai.think -= DT;
+    ai.mineCd -= DT;
+    ai.hesitate -= DT;
+    const foe = this.nearestFoe(t);
+    if (!foe) return;
+
+    if (ai.think <= 0) {
+      ai.think = spec.skill >= 2 ? 0.18 : 0.3;
+      this.aiThinkAim(t, foe);
+      if (spec.mines > 0 && ai.mineCd <= 0 && this.ownMines(t) < spec.mines) {
+        const d = Math.hypot(foe.x - t.x, foe.y - t.y);
+        const allyNear = this.tanks.some((o) => o.alive && o !== t && o.team === t.team && Math.hypot(o.x - t.x, o.y - t.y) < MINE_BLAST + 0.6);
+        if (!allyNear && (d < 6 ? Math.random() < 0.35 : Math.random() < 0.06)) {
+          if (this.tryMine(t)) {
+            ai.mineCd = 3 + Math.random() * 4;
+            ai.path = [];
+            ai.pathT = 0;
+          }
+        }
+      }
+    }
+
+    // turret
+    if (!ai.aimValid && spec.skill === 0) {
+      ai.wanderT -= DT;
+      if (ai.wanderT <= 0) {
+        ai.wanderT = 1 + Math.random() * 2;
+        ai.wanderAim = Math.atan2(foe.y - t.y, foe.x - t.x) + (Math.random() - 0.5) * 2.2;
+      }
+      ai.aim = ai.wanderAim;
+    }
+    t.turret = rotateToward(t.turret, ai.aim, spec.turretSpeed * DT);
+
+    // fire
+    if (t.fireCd <= 0 && ai.hesitate <= 0 && this.ownBullets(t) < spec.maxBullets) {
+      const aligned = spec.skill === 0 || Math.abs(angDiff(t.turret, ai.aim)) < 0.06;
+      if (aligned) {
+        const res = this.traceShot(t, t.turret, spec.bounces);
+        if (res.hit && res.hit.team !== t.team) {
+          this.tryFire(t);
+          ai.hesitate = 0.1 + Math.random() * 0.25;
+        }
+      }
+    }
+
+    if (spec.speed > 0) this.aiMove(t, foe);
+  }
+
+  private aiThinkAim(t: Tank, foe: Tank) {
+    const ai = t.ai!;
+    const spec = t.spec;
+    if (spec.skill === 0) { ai.aimValid = false; return; }
+    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team);
+    let bestAng = 0, bestScore = -Infinity;
+    const tryAng = (ang: number, bias: number) => {
+      const res = this.traceShot(t, ang, spec.bounces);
+      if (!res.hit || res.hit.team === t.team) return;
+      const turn = Math.abs(angDiff(t.turret, ang));
+      const score = bias - res.len * 0.08 - turn * 0.6;
+      if (score > bestScore) { bestScore = score; bestAng = ang; }
+    };
+    for (const f of foes) {
+      tryAng(Math.atan2(f.y - t.y, f.x - t.x), 1);
+    }
+    if (spec.bounces > 0 && (spec.skill >= 2 || Math.random() < 0.5)) {
+      const n = spec.skill >= 2 ? 64 : 24;
+      const off = Math.random() * ((Math.PI * 2) / n);
+      for (let i = 0; i < n; i++) tryAng(off + (i * Math.PI * 2) / n, 0);
+    }
+    if (bestScore > -Infinity) {
+      // fine-tune around the best angle so ricochets graze less
+      if (spec.skill >= 3) for (const d of [-0.03, 0.03]) tryAng(bestAng + d, 0);
+      ai.aim = bestAng + (spec.skill >= 3 ? 0 : (Math.random() - 0.5) * 0.04);
+      ai.aimValid = true;
+    } else {
+      ai.aimValid = false;
+      ai.aim = Math.atan2(foe.y - t.y, foe.x - t.x) + (Math.random() - 0.5) * 0.6;
+    }
+  }
+
+  private aiMove(t: Tank, foe: Tank) {
+    const ai = t.ai!;
+    // threats: incoming bullets
+    let ax = 0, ay = 0, threat = false;
+    for (const b of this.bullets) {
+      const rx = t.x - b.x, ry = t.y - b.y;
+      const v2 = b.vx * b.vx + b.vy * b.vy;
+      const tt = (rx * b.vx + ry * b.vy) / v2;
+      if (tt <= 0 || tt > 0.9) continue;
+      const cx = rx - b.vx * tt, cy = ry - b.vy * tt;
+      const d = Math.hypot(cx, cy);
+      if (d > TANK_R + 0.55) continue;
+      threat = true;
+      if (d < 1e-3) { ax += -b.vy; ay += b.vx; } else { ax += (cx / d) * (1.2 - tt); ay += (cy / d) * (1.2 - tt); }
+    }
+    for (const m of this.mines) {
+      const dx = t.x - m.x, dy = t.y - m.y;
+      const d = Math.hypot(dx, dy);
+      if (d < MINE_BLAST + 0.7) { threat = true; ax += dx / (d + 0.01) * 1.5; ay += dy / (d + 0.01) * 1.5; }
+    }
+    if (threat) {
+      const l = Math.hypot(ax, ay) || 1;
+      ai.dodgeX = ax / l; ai.dodgeY = ay / l; ai.dodgeT = 0.25;
+      ai.path = [];
+    }
+    if (ai.dodgeT > 0) {
+      ai.dodgeT -= DT;
+      this.driveTank(t, ai.dodgeX, ai.dodgeY, DT);
+      return;
+    }
+
+    ai.pathT -= DT;
+    if (ai.path.length === 0 || ai.pathT <= 0) {
+      this.aiPlan(t, foe);
+      ai.pathT = 2 + Math.random() * 2.5;
+    }
+    if (ai.path.length) {
+      const c = ai.path[0];
+      const tx = (c % W) + 0.5, ty = Math.floor(c / W) + 0.5;
+      const dx = tx - t.x, dy = ty - t.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 0.3) ai.path.shift();
+      else this.driveTank(t, dx / d, dy / d, DT);
+    }
+    ai.stuckT += DT;
+    if (ai.stuckT > 1) {
+      if (Math.hypot(t.x - ai.lastX, t.y - ai.lastY) < 0.15 && ai.path.length) ai.path = [];
+      ai.stuckT = 0; ai.lastX = t.x; ai.lastY = t.y;
+    }
+  }
+
+  private aiPlan(t: Tank, foe: Tank) {
+    const ai = t.ai!;
+    const start = Math.floor(t.y) * W + Math.floor(t.x);
+    const blocked = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) if (isSolidTank(this.tiles[i])) blocked[i] = 1;
+    for (const m of this.mines) {
+      for (let cy = Math.floor(m.y - 2); cy <= Math.floor(m.y + 2); cy++)
+        for (let cx = Math.floor(m.x - 2); cx <= Math.floor(m.x + 2); cx++)
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < MINE_BLAST + 0.4) blocked[cy * W + cx] = 1;
+    }
+    const prev = new Int32Array(W * H).fill(-2);
+    const dist = new Int32Array(W * H);
+    prev[start] = -1;
+    const q = [start];
+    const reach: number[] = [];
+    for (let qi = 0; qi < q.length; qi++) {
+      const c = q[qi];
+      if (dist[c] > 9) continue;
+      reach.push(c);
+      const x = c % W, y = (c / W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const n = ny * W + nx;
+        if (prev[n] !== -2 || blocked[n]) continue;
+        if (dx && dy && (blocked[y * W + nx] || blocked[ny * W + x])) continue;
+        prev[n] = c;
+        dist[n] = dist[c] + 1;
+        q.push(n);
+      }
+    }
+    if (reach.length < 2) { ai.path = []; return; }
+    let best = -1, bestScore = -Infinity;
+    for (let k = 0; k < 14; k++) {
+      const c = reach[1 + Math.floor(Math.random() * (reach.length - 1))];
+      const cx = (c % W) + 0.5, cy = Math.floor(c / W) + 0.5;
+      const df = Math.hypot(foe.x - cx, foe.y - cy);
+      let score = -Math.abs(df - ai.prefDist) + Math.random() * 2.5 + Math.min(dist[c], 6) * 0.15;
+      for (const m of this.mines) score += Math.min(4, Math.hypot(m.x - cx, m.y - cy)) * 0.8;
+      for (const o of this.tanks) if (o.alive && o !== t && o.team === t.team && Math.hypot(o.x - cx, o.y - cy) < 1.5) score -= 2;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    const path: number[] = [];
+    for (let c = best; c !== -1 && c !== start; c = prev[c]) path.push(c);
+    path.reverse();
+    ai.path = path;
+  }
+}

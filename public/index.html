@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Tanks!</title>
+  <meta name="description" content="Remake moderne de Tanks (Wii Play) jouable en multijoueur en ligne." />
+  <meta name="theme-color" content="#1b1d24" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='8' y='26' width='48' height='24' rx='8' fill='%233d7bff'/><circle cx='32' cy='28' r='12' fill='%236fa0ff'/><rect x='38' y='24' width='22' height='7' rx='3' fill='%23233f8a'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body data-screen="home">
+  <canvas id="game"></canvas>
+  <div id="names"></div>
+
+  <!-- HUD -->
+  <div id="hud" hidden>
+    <div class="hud-left">
+      <div id="hud-mission"></div>
+      <div id="hud-lives"></div>
+    </div>
+    <div class="hud-center"><div id="hud-enemies"></div><div id="scoreboard"></div></div>
+    <div class="hud-right">
+      <span id="hud-ping"></span>
+      <button id="btn-music" class="icon-btn" title="Musique (M)">♪</button>
+      <button id="btn-menu" class="icon-btn" title="Menu (Échap)">☰</button>
+    </div>
+  </div>
+  <button id="mine-btn" aria-label="Poser une mine">MINE</button>
+
+  <div id="banner" hidden>
+    <div class="b-kicker"></div>
+    <div class="b-title"></div>
+    <div class="b-sub"></div>
+  </div>
+
+  <!-- HOME -->
+  <section id="home" class="screen">
+    <div class="card hero">
+      <h1 class="logo">TANKS<span>!</span></h1>
+      <p class="tagline">Le classique de Wii Play, remis à neuf. Ricochets, mines et coop en ligne jusqu'à 4.</p>
+      <div class="profile"></div>
+      <button id="btn-create" class="btn primary big">Créer une salle</button>
+      <div class="join">
+        <input id="join-code" placeholder="CODE" maxlength="8" autocomplete="off" spellcheck="false" />
+        <button id="btn-join" class="btn">Rejoindre</button>
+      </div>
+      <details class="help">
+        <summary>Commandes</summary>
+        <ul>
+          <li><kbd>ZQSD</kbd>/<kbd>WASD</kbd>/flèches : déplacer</li>
+          <li>Souris : viser · <kbd>Clic</kbd> : tirer</li>
+          <li><kbd>Espace</kbd> / clic droit : poser une mine</li>
+          <li>Manette : sticks + gâchettes · Mobile : joystick gauche, touche à droite pour tirer</li>
+          <li>Les obus rebondissent une fois. Attention à tes propres ricochets !</li>
+        </ul>
+      </details>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="screen" hidden>
+    <div class="card lobby">
+      <div class="lobby-head">
+        <div>
+          <div class="kicker">Salle</div>
+          <div id="room-code" class="code"></div>
+        </div>
+        <button id="btn-copy" class="btn">Copier le lien</button>
+      </div>
+      <ul id="lobby-players"></ul>
+      <div class="profile"></div>
+      <div id="mode-select" class="segmented">
+        <button data-mode="coop">Campagne coop</button>
+        <button data-mode="versus">Versus</button>
+      </div>
+      <p id="mode-desc" class="muted"></p>
+      <button id="btn-start" class="btn primary big">Lancer la partie</button>
+      <p id="lobby-wait" class="muted center">En attente du lancement par l'hôte…</p>
+      <button id="btn-leave" class="btn ghost">Quitter la salle</button>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="screen" hidden>
+    <div class="card results">
+      <div class="kicker">Résultats</div>
+      <h2 id="results-title"></h2>
+      <div id="results-body"></div>
+      <button id="btn-results-ok" class="btn primary">Continuer</button>
+    </div>
+  </section>
+
+  <!-- PAUSE MENU (game keeps running: it's online!) -->
+  <div id="menu" class="screen" hidden>
+    <div class="card menu">
+      <h2>Menu</h2>
+      <button id="menu-resume" class="btn primary">Reprendre</button>
+      <button id="menu-lobby" class="btn">Retour au salon (tous)</button>
+      <button id="menu-quit" class="btn ghost">Quitter la salle</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script type="module" src="/client.js"></script>
+</body>
+</html>
