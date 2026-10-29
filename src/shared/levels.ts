@@ -1,6 +1,7 @@
 import { H, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
+//         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  X boss
 const ENEMY_CHARS: Record<string, TankKind> = {
@@ -127,7 +128,7 @@ export const LEVELS: LevelDef[] = [
     name: 'Escouade',
     map: [
       '......................',
-      '......................',
+      '...........*..........',
       '..1..#........#.......',
       '.....#........#...a...',
       '..2..#..####..#.......',
@@ -140,7 +141,7 @@ export const LEVELS: LevelDef[] = [
       '.......#........#.....',
       '.......#..####..#..a..',
       '.......#........#.....',
-      '.......#........#.....',
+      '...*...#........#.....',
       '......................',
       '......................',
     ],
@@ -303,21 +304,21 @@ export const LEVELS: LevelDef[] = [
     name: 'Coalition',
     map: [
       '......................',
-      '.1.......o............',
+      '.1.......o.........+..',
       '.........o.......g....',
       '.2.......o............',
       '.........o....#####...',
       '....###..o............',
       '......#.......a.......',
       '......#...............',
-      '......#...HHHH........',
+      '...*..#...HHHH........',
       '......#...............',
       '......###.......m.....',
       '..............#####...',
       '...........o..........',
       '...........o......v...',
       '...........o..........',
-      '...........o..........',
+      '........+..o.......*..',
       '......................',
     ],
   },
@@ -387,6 +388,28 @@ export const LEVELS: LevelDef[] = [
       '......................',
     ],
   },
+  {
+    name: 'Va-et-vient',
+    map: [
+      '......................',
+      '......................',
+      '..1.......####........',
+      '..........#..#....v...',
+      '..2...*...#..#........',
+      '..........#..#........',
+      '.......####..####.....',
+      '.......#........#.....',
+      '.......#...+..g.#..*..',
+      '.......#........#.....',
+      '.......####..####.....',
+      '..........#..#........',
+      '..........#..#........',
+      '...+......#..#....w...',
+      '..........####........',
+      '......................',
+      '......................',
+    ],
+  },
 ];
 
 export interface ParsedLevel {
@@ -409,6 +432,8 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === 'H') tiles[i] = Tile.Tall;
       else if (c === 'o') tiles[i] = Tile.Cork;
       else if (c === '_') tiles[i] = Tile.Hole;
+      else if (c === '*') tiles[i] = Tile.PortalA;
+      else if (c === '+') tiles[i] = Tile.PortalB;
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
@@ -475,6 +500,7 @@ export function proceduralLevel(mission: number): ParsedLevel {
     if (cells.length < 30) continue;
     // fill unreachable pockets
     for (let i = 0; i < W * H; i++) if (!seen[i] && tiles[i] === Tile.Empty) tiles[i] = Tile.Wall;
+    addPortals(tiles, seen, mission, cells);
     const tier = Math.min(3, Math.floor((mission - 1) / 8));
     const count = Math.min(8, 3 + Math.floor((mission - 16) / 3));
     const enemies: ParsedLevel['enemies'] = [];
@@ -493,6 +519,34 @@ export function proceduralLevel(mission: number): ParsedLevel {
     return { name: `Mission spéciale ${mission}`, tiles, spawns, enemies };
   }
   return parseLevel(LEVELS[0]);
+}
+
+/**
+ * Later generated missions get one or two portal pairs, each linking the players' half to the enemies' half.
+ * Its own random stream, so the walls of a mission stay the same whether it has portals or not.
+ */
+function addPortals(tiles: number[], seen: Uint8Array, mission: number, cells: [number, number][]) {
+  const r = rng(mission * 104729 + 7);
+  if (mission < 19 || r() < 0.35) return;
+  const open = (x: number, y: number) =>
+    seen[y * W + x] && [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => tiles[(y + dy) * W + x + dx] === Tile.Empty);
+  const pick = (x0: number, x1: number): [number, number] | undefined => {
+    for (let tries = 0; tries < 60; tries++) {
+      const x = x0 + Math.floor(r() * (x1 - x0)), y = 1 + Math.floor(r() * (H - 2));
+      if (open(x, y)) return [x, y];
+    }
+    return undefined;
+  };
+  const pairs = r() < 0.4 ? 2 : 1;
+  for (let p = 0; p < pairs; p++) {
+    const a = pick(5, 10), b = pick(12, W - 2);
+    if (!a || !b) continue;
+    const t = p === 0 ? Tile.PortalA : Tile.PortalB;
+    tiles[a[1] * W + a[0]] = t;
+    tiles[b[1] * W + b[0]] = t;
+  }
+  // enemies never start on a portal
+  for (let i = cells.length - 1; i >= 0; i--) if (tiles[cells[i][1] * W + cells[i][0]] !== Tile.Empty) cells.splice(i, 1);
 }
 
 /** Every tenth mission is a boss fight. */

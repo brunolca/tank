@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, TANK_R, Tile, W, tankRadius, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
@@ -196,6 +196,34 @@ function crateTexture(kind: BonusKind) {
   return tex;
 }
 
+/** Spiral swirl painted once and shared by every portal (tinted by the material colour). */
+function swirlTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(255,255,255,0.9)';
+  g.lineCap = 'round';
+  for (let arm = 0; arm < 3; arm++) {
+    g.lineWidth = 6;
+    g.beginPath();
+    for (let k = 0; k <= 40; k++) {
+      const u = k / 40, a = arm * ((Math.PI * 2) / 3) + u * Math.PI * 2.2, r = 6 + u * 54;
+      if (k === 0) g.moveTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r);
+      else g.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r);
+    }
+    g.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+interface PortalView { root: THREE.Group; swirl: THREE.Mesh; ring: THREE.Mesh; color: number; x: number; y: number; phase: number }
+
 interface CrateView { root: THREE.Group; box: THREE.Mesh; halo: THREE.Mesh; beam: THREE.Mesh; born: number; x: number; y: number; kind: BonusKind }
 
 const geo = {
@@ -311,6 +339,10 @@ export class Renderer {
   private floorTimer = 0;
   private levelGroup = new THREE.Group();
   private blocks = new Map<number, THREE.Mesh>();
+  private portals: PortalView[] = [];
+  private swirlTex = swirlTexture();
+  private portalGeo = { ring: new THREE.TorusGeometry(0.4, 0.055, 10, 40), swirl: new THREE.CircleGeometry(0.38, 36), rim: new THREE.CylinderGeometry(0.46, 0.48, 0.05, 36) };
+  private portalRimMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.7 });
   private tanks = new Map<number, TankView>();
   private bullets = new Map<number, THREE.Mesh>();
   private mines = new Map<number, THREE.Group>();
@@ -444,6 +476,12 @@ export class Renderer {
     this.mines.clear();
     for (const c of this.crates.values()) this.removeCrate(c);
     this.crates.clear();
+    for (const p of this.portals) {
+      this.levelGroup.remove(p.root);
+      (p.swirl.material as THREE.Material).dispose();
+      (p.ring.material as THREE.Material).dispose();
+    }
+    this.portals = [];
     this.glow.clear(); this.smoke.clear(); this.debris.clear();
 
     this.paintFloor(tiles);
@@ -458,13 +496,65 @@ export class Renderer {
           m.castShadow = m.receiveShadow = true;
           this.levelGroup.add(m);
           this.blocks.set(y * W + x, m);
-        }
+        } else if (isPortal(t)) this.addPortal(x, y, PORTAL_COLORS[t - Tile.PortalA]);
       }
     }
     for (const info of infos) {
       const v = buildTank(info);
       this.tanks.set(info.id, v);
       this.scene.add(v.root);
+    }
+  }
+
+  /** A wooden hoop on the floor with a glowing swirl inside. */
+  private addPortal(x: number, y: number, color: number) {
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    const rim = new THREE.Mesh(this.portalGeo.rim, this.portalRimMat);
+    rim.position.y = 0.025;
+    rim.receiveShadow = true;
+    const ring = new THREE.Mesh(this.portalGeo.ring, new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8, roughness: 0.4 }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.07;
+    ring.castShadow = true;
+    const swirl = new THREE.Mesh(this.portalGeo.swirl, new THREE.MeshBasicMaterial({ map: this.swirlTex, color, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+    swirl.rotation.x = -Math.PI / 2;
+    swirl.position.y = 0.06;
+    root.add(rim, ring, swirl);
+    this.levelGroup.add(root);
+    this.portals.push({ root, swirl, ring, color, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
+  }
+
+  private animatePortals(dt: number) {
+    for (const p of this.portals) {
+      p.swirl.rotation.z += dt * 3.2;
+      const k = 1 + Math.sin(this.time * 3 + p.phase) * 0.06;
+      p.swirl.scale.set(k, k, k);
+      (p.ring.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.6 + Math.sin(this.time * 4 + p.phase) * 0.3;
+      if (Math.random() < 14 * dt) {
+        const a = Math.random() * Math.PI * 2, r = 0.15 + Math.random() * 0.25;
+        this.glow.emit({ x: p.x + Math.cos(a) * r, y: 0.1, z: p.y + Math.sin(a) * r, vx: -Math.sin(a) * 0.6, vy: 0.6 + Math.random() * 0.6, vz: Math.cos(a) * 0.6, life: 0.7, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: p.color, drag: 1 });
+      }
+    }
+  }
+
+  /** Something went through a portal: a puff of colour where it went in and a ring where it came out. */
+  warp(x0: number, y0: number, x1: number, y1: number, tank: boolean) {
+    const p = this.portals.find((o) => Math.abs(o.x - x1) < 0.6 && Math.abs(o.y - y1) < 0.6);
+    const color = p?.color ?? PORTAL_COLORS[0];
+    for (const [x, y, out] of [[x0, y0, 0], [x1, y1, 1]]) {
+      for (let i = 0; i < (tank ? 26 : 10); i++) {
+        const a = Math.random() * Math.PI * 2, s = (out ? 1.5 : -1.2) * (0.6 + Math.random());
+        const r = out ? 0.05 : 0.6;
+        this.glow.emit({ x: x + Math.cos(a) * r, y: 0.3 + Math.random() * 0.3, z: y + Math.sin(a) * r, vx: Math.cos(a) * s, vy: out ? 1 + Math.random() * 1.5 : 0.3, vz: Math.sin(a) * s, life: 0.35 + Math.random() * 0.2, s0: tank ? 0.1 : 0.06, s1: 0.01, c0: 0xffffff, c1: color, drag: 2 });
+      }
+    }
+    if (tank) {
+      const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(x1, 0.08, y1);
+      this.scene.add(ring);
+      this.shocks.push({ mesh: ring, t: 0, max: 0.45, size: 1.2 });
     }
   }
 
@@ -503,6 +593,15 @@ export class Renderer {
           g.fillStyle = 'rgba(60,30,10,0.35)';
           g.fillRect(x * PX + 4, y * PX + 4, PX - 8, PX - 8);
           g.restore();
+        } else if (isPortal(t)) {
+          // a coloured halo on the paper around the hoop
+          const cx = x * PX + PX / 2, cy = y * PX + PX / 2;
+          const col = '#' + PORTAL_COLORS[t - Tile.PortalA].toString(16).padStart(6, '0');
+          const hg = g.createRadialGradient(cx, cy, PX * 0.3, cx, cy, PX * 0.9);
+          hg.addColorStop(0, col + '66');
+          hg.addColorStop(1, col + '00');
+          g.fillStyle = hg;
+          g.fillRect(cx - PX, cy - PX, PX * 2, PX * 2);
         } else if (t === Tile.Hole) {
           const cx = x * PX + PX / 2, cy = y * PX + PX / 2;
           const hg = g.createRadialGradient(cx, cy, 2, cx, cy, PX * 0.55);
@@ -896,6 +995,7 @@ export class Renderer {
     this.glow.update(dt);
     this.smoke.update(dt);
     this.debris.update(dt);
+    this.animatePortals(dt);
     for (let i = this.shocks.length - 1; i >= 0; i--) {
       const s = this.shocks[i];
       s.t += dt;

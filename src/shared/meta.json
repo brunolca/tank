@@ -1,7 +1,7 @@
 {
-  "iteration": 3,
+  "iteration": 4,
   "date": "2026-10-29",
-  "title": "Le Colosse",
+  "title": "Les portails",
   "journal": [
     {
       "iteration": 1,
@@ -38,6 +38,18 @@
         "À mi-vie, il se met en colère : il fume, roule plus vite et tire plus souvent.",
         "Plus on est nombreux, plus il est coriace. Les coups portés restent acquis si vous devez recommencer la mission.",
         "Une musique plus sombre et plus rapide accompagne chaque combat de boss, et sa chute finit en feu d’artifice d’éclats dorés."
+      ]
+    },
+    {
+      "iteration": 4,
+      "date": "2026-10-29",
+      "title": "Les portails",
+      "notes": [
+        "Des portails apparaissent sur la table : des cerceaux de bois lumineux, bleus ou roses, qui vont par paires. Entre dans l’un, tu ressors aussitôt par l’autre.",
+        "Les obus passent aussi par les portails : un tir bien placé peut surgir à l’autre bout de la table et prendre l’ennemi à revers.",
+        "Méfiance : les tanks ennemis savent viser à travers les portails, et un ricochet peut te revenir par le même chemin.",
+        "Nouvelle mission 18, « Va-et-vient » : un tank vert retranché dans une forteresse fermée, que seuls les portails permettent d’atteindre.",
+        "Les missions « Escouade » et « Coalition » gagnent des portails, tout comme une bonne partie des missions générées après la 18ᵉ. Le Colosse, lui, est bien trop gros pour s’y glisser."
       ]
     }
   ]

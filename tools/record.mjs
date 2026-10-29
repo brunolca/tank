@@ -7,10 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 10, seconds: 16, bossHp: 8, hits: [5, 9, 12], volley: true, caption: 'Le Colosse', sub: 'Un boss toutes les 10 missions : il encaisse plusieurs coups' },
-  { mission: 20, seconds: 14, bossHp: 6, hits: [9], volley: true, buffs: ['shield'], caption: 'Salve circulaire', sub: 'Quand il s’illumine, mets-toi à l’abri !' },
-  { mission: 30, seconds: 15, bossHp: 5, hits: [3, 6, 9, 11, 13], buffs: ['bounce', 'fan'], caption: 'En colère', sub: 'À mi-vie, il accélère et tire plus vite… jusqu’à la chute' },
-  { mission: 6, seconds: 10, rich: true, crates: ['shield', 'fan'], caption: 'Et toujours les caisses bonus', sub: 'Bouclier, turbo, éventail, super-ricochet' },
+  { mission: 18, seconds: 16, portals: [1.5, 7, 12], caption: 'Les portails', sub: 'Entre dans l’un, ressors par l’autre : tanks et obus' },
+  { mission: 14, seconds: 13, portals: [1, 7], buffs: ['bounce'], caption: 'Tirs à travers les portails', sub: 'Les ennemis s’en servent aussi pour viser' },
+  { mission: 22, seconds: 12, portals: [2], rich: true, caption: 'Missions générées', sub: 'Une ou deux paires de portails après la mission 18' },
+  { mission: 6, seconds: 11, portals: [3], crates: ['shield', 'fan'], caption: 'Escouade', sub: 'Un raccourci pour prendre l’ennemi à revers' },
+  { mission: 10, seconds: 10, bossHp: 6, hits: [3, 6], volley: true, caption: 'Et toujours le Colosse', sub: 'Trop gros pour les portails !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -54,6 +55,7 @@ try {
       d.play(shot.mission, true, !!shot.rich, shot.bossHp);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
+      for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

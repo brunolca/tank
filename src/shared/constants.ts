@@ -20,6 +20,8 @@ export const enum Tile {
   Tall = 2,
   Cork = 3,
   Hole = 4,
+  PortalA = 5, // portals come in pairs: a tank or a shell entering one pops out of its twin
+  PortalB = 6,
 }
 
 export type TankKind =
@@ -95,10 +97,19 @@ export const BOSS_HP_PER_PLAYER = 3;
 export const FLAG_CHARGING = 64;
 export const FLAG_RAGE = 128;
 
+// ------------------------------------------------------------------ portals
+/** Colour of each portal pair (Tile.PortalA, Tile.PortalB). */
+export const PORTAL_COLORS = [0x4fc3ff, 0xff5fd2];
+/** Tanks bigger than this (the boss) are too wide to squeeze through a portal. */
+export const PORTAL_MAX_R = 0.45;
+
 export const PLAYER_COLORS = [0x3d7bff, 0xff4d5e, 0x2fd07a, 0xffa63d, 0x26c6f0, 0xc66bff];
 
 export function isSolidTank(t: number) {
-  return t !== Tile.Empty;
+  return t !== Tile.Empty && !isPortal(t);
+}
+export function isPortal(t: number) {
+  return t === Tile.PortalA || t === Tile.PortalB;
 }
 export function isSolidBullet(t: number) {
   return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork;

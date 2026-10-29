@@ -73,6 +73,15 @@ export const sfx = {
       tone(t, 0.1, 180, 60, 0.5, 'triangle');
     }
   },
+  /** Through a portal: a quick wobbling sweep, softer for shells. */
+  warp(tank: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const g = tank ? 0.16 : 0.06;
+    tone(t, 0.22, 300, 1400, g, 'sine');
+    tone(t + 0.04, 0.2, 450, 1900, g * 0.6, 'triangle');
+    if (tank) noise(t, 0.25, 4000, 2, 0.08, 'bandpass', 900);
+  },
   bounce() {
     if (!ctx) return;
     const t = ctx.currentTime;

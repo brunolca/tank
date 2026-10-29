@@ -54,7 +54,8 @@ export type GameEvent =
   | ['crate', number, number, number] // x y kind (a crate drops in)
   | ['hurt', number, number, number, number, number] // x y tankId hpLeft hpMax (a tough tank takes a hit)
   | ['volley', number, number, number] // x y tankId (the boss fires a ring of shells)
-  | ['rage', number, number, number]; // x y tankId (the boss is down to half health)
+  | ['rage', number, number, number] // x y tankId (the boss is down to half health)
+  | ['warp', number, number, number, number, number]; // x0 y0 x1 y1 tankId (0 for a shell) went through a portal
 
 export interface Results {
   mode: Mode;

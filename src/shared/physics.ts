@@ -1,4 +1,4 @@
-import { H, W, isSolidTank, isSolidBullet, Tile } from './constants';
+import { H, W, isPortal, isSolidTank, isSolidBullet, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -54,6 +54,28 @@ export function moveCircle(tiles: ArrayLike<number>, x: number, y: number, dx: n
   return [x, y];
 }
 
+/** Index of the other portal of the same colour, or -1. */
+export function portalTwin(tiles: ArrayLike<number>, cell: number): number {
+  const t = tiles[cell];
+  if (!isPortal(t)) return -1;
+  for (let i = 0; i < W * H; i++) if (i !== cell && tiles[i] === t) return i;
+  return -1;
+}
+
+/**
+ * Something moved from (px, py) to (x, y): if its centre just entered a portal cell, it pops out at the
+ * centre of the twin portal. Purely positional, so the server and the client prediction agree.
+ */
+export function warpTarget(tiles: ArrayLike<number>, px: number, py: number, x: number, y: number): [number, number] | null {
+  const cx = Math.floor(x), cy = Math.floor(y);
+  if (cx < 0 || cy < 0 || cx >= W || cy >= H) return null;
+  const cell = cy * W + cx;
+  if (!isPortal(tiles[cell]) || (Math.floor(px) === cx && Math.floor(py) === cy)) return null;
+  const twin = portalTwin(tiles, cell);
+  if (twin < 0) return null;
+  return [(twin % W) + 0.5, Math.floor(twin / W) + 0.5];
+}
+
 export function bulletBlocked(tiles: ArrayLike<number>, x: number, y: number, r: number): boolean {
   return (
     isSolidBullet(tileAt(tiles, Math.floor(x - r), Math.floor(y - r))) ||
@@ -65,19 +87,28 @@ export function bulletBlocked(tiles: ArrayLike<number>, x: number, y: number, r:
 
 export interface Segment { x0: number; y0: number; x1: number; y1: number }
 
-/** Cast a ray that ricochets off bullet-solid tiles. Point-sized (bullet radius approximated by inflating the walls a bit). */
+/** Cast a ray that ricochets off bullet-solid tiles and goes through portals. Point-sized (bullet radius approximated by inflating the walls a bit). */
 export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang: number, bounces: number, maxLen = 60): Segment[] {
   const segs: Segment[] = [];
   let dx = Math.cos(ang), dy = Math.sin(ang);
   let remaining = maxLen;
-  for (let b = 0; b <= bounces && remaining > 0; b++) {
+  for (let b = 0, hops = 0; b <= bounces && remaining > 0 && hops < 16; hops++) {
     const hit = dda(tiles, x, y, dx, dy, remaining);
-    segs.push({ x0: x, y0: y, x1: hit.x, y1: hit.y });
     remaining -= hit.t;
+    if (hit.warp >= 0) {
+      // the shell enters a portal: the segment ends at its edge and resumes from the twin's centre
+      const e = hit.t + 0.1; // dda stops a bullet radius early (inflated walls), the centre crosses a bit later
+      segs.push({ x0: x, y0: y, x1: x + dx * e, y1: y + dy * e });
+      x = (hit.warp % W) + 0.5;
+      y = Math.floor(hit.warp / W) + 0.5;
+      continue;
+    }
+    segs.push({ x0: x, y0: y, x1: hit.x, y1: hit.y });
     if (!hit.hit) break;
     if (hit.axis === 0) dx = -dx; else dy = -dy;
     x = hit.x + dx * 1e-4;
     y = hit.y + dy * 1e-4;
+    b++;
   }
   return segs;
 }
@@ -97,10 +128,15 @@ function dda(tiles: ArrayLike<number>, x: number, y: number, dx: number, dy: num
     let t: number, axis: number;
     if (tMaxX < tMaxY) { t = tMaxX; axis = 0; cx += stepX; tMaxX += tDeltaX; }
     else { t = tMaxY; axis = 1; cy += stepY; tMaxY += tDeltaY; }
-    if (t > maxT) return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis };
-    if (isSolidBullet(tileAt(tiles, cx, cy))) return { hit: true, t, x: x + dx * t, y: y + dy * t, axis };
+    if (t > maxT) return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis, warp: -1 };
+    const tile = tileAt(tiles, cx, cy);
+    if (isSolidBullet(tile)) return { hit: true, t, x: x + dx * t, y: y + dy * t, axis, warp: -1 };
+    if (isPortal(tile)) {
+      const twin = portalTwin(tiles, cy * W + cx);
+      if (twin >= 0) return { hit: false, t, x: x + dx * t, y: y + dy * t, axis, warp: twin };
+    }
   }
-  return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis: 0 };
+  return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis: 0, warp: -1 };
 }
 
 /** Distance parameter along segment where it first touches circle, or -1. */

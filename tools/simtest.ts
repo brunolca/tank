@@ -1,6 +1,7 @@
 import { getMission, isBossMission, LEVELS } from '../src/shared/levels';
-import { Game } from '../src/shared/sim';
-import { W, H } from '../src/shared/constants';
+import { Game, driveStep } from '../src/shared/sim';
+import { DT, H, SPECS, Tile, W } from '../src/shared/constants';
+import { castRicochet } from '../src/shared/physics';
 
 for (let i = 0; i < LEVELS.length; i++) {
   const bad = LEVELS[i].map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
@@ -96,4 +97,51 @@ console.log('total', Date.now() - t0, 'ms');
   for (let i = 0; i < 10 && boss.alive; i++) { g.killTank(boss, p); boss.buffs.invuln = 0; }
   if (boss.alive || !killed) fail('le boss ne tombe pas');
   if (process.exitCode !== 1) console.log('boss OK');
+}
+
+// portals: come in pairs, carry tanks and shells to their twin, the AI aims through them, the boss is too big
+{
+  const fail = (m: string) => { console.error('PORTAILS:', m); process.exitCode = 1; };
+  for (let mission = 1; mission <= LEVELS.length + 40; mission++) {
+    const tiles = getMission(mission).tiles;
+    for (const t of [Tile.PortalA, Tile.PortalB]) {
+      const n = tiles.filter((v) => v === t).length;
+      if (n !== 0 && n !== 2) fail(`mission ${mission} : ${n} portail(s) de type ${t}`);
+    }
+  }
+  const withPortals = [];
+  for (let mission = 19; mission <= 60; mission++) if (getMission(mission).tiles.includes(Tile.PortalA)) withPortals.push(mission);
+  if (withPortals.length < 5) fail(`trop peu de missions générées à portails (${withPortals.length})`);
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  tiles[8 * W + 4] = Tile.PortalA;
+  tiles[3 * W + 17] = Tile.PortalA;
+  const g = new Game(tiles);
+  const p = g.addTank('player', 0, 2.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  for (let i = 0; i < 30 && p.x < 10; i++) g.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+  if (Math.hypot(p.x - 17.5, p.y - 3.5) > 1.2) fail(`le tank n’a pas été téléporté (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`);
+  if (!g.events.some((e) => e[0] === 'warp' && e[5] === p.id)) fail('pas d’événement warp pour le tank');
+  // client prediction gives the same result
+  let [x, y, body] = [2.5, 8.5, 0];
+  for (let i = 0; i < 30 && x < 10; i++) [x, y, body] = driveStep(tiles, x, y, body, 1, 0, SPECS.player.speed, DT);
+  if (Math.hypot(x - 17.5, y - 3.5) > 1.2) fail('la prédiction ne passe pas par le portail');
+  // a shell fired into a portal pops out of the other one
+  g.events = [];
+  const q = g.addTank('player', 0, 6.5, 10.5, 0x3d7bff, 'p2', 'Q');
+  q.turret = Math.atan2(8.5 - 10.5, 4.5 - 6.5);
+  q.fireCd = 0;
+  g.tryFire(q);
+  for (let i = 0; i < 20; i++) g.step(new Map());
+  if (!g.events.some((e) => e[0] === 'warp' && e[5] === 0)) fail('l’obus n’a pas traversé le portail');
+  // the AI ray-caster sees through portals
+  const segs = castRicochet(tiles, 2.5, 8.5, 0, 0, 30);
+  if (segs.length < 2 || Math.hypot(segs[1].x0 - 17.5, segs[1].y0 - 3.5) > 0.01) fail('castRicochet ignore les portails');
+  // the boss can't use them
+  const b = new Game(tiles);
+  const boss = b.addTank('boss', 99, 1.5, 8.5, 0);
+  boss.ai = undefined;
+  b.frozen = false;
+  for (let i = 0; i < 60; i++) b.driveTank(boss, 1, 0, DT);
+  if (boss.y < 6) fail('le Colosse est passé par un portail');
+  if (process.exitCode !== 1) console.log(`portails OK (missions générées à portails : ${withPortals.join(', ')})`);
 }

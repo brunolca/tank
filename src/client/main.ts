@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, tankRadius, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import { getMission } from '../shared/levels';
 import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
@@ -260,6 +260,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     banner(`Manche ${msg.mission}`, 'Versus', 'Le dernier tank debout gagne la manche', 'intro');
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
+  else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
 function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
@@ -387,6 +388,8 @@ function sampleAt(tick: number) {
 
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 const lerpAng = (a: number, b: number, u: number) => a + angDiff(a, b) * u;
+/** Interpolation factor between two positions, snapped to 0 or 1 when the move is a portal jump. */
+const jumped = (x0: number, y0: number, x1: number, y1: number, u: number) => ((x1 - x0) ** 2 + (y1 - y0) ** 2 > 1.5 ? (u < 0.5 ? 0 : 1) : u);
 
 function onlineFrame(dt: number) {
   if (!snaps.length) return;
@@ -414,7 +417,8 @@ function onlineFrame(dt: number) {
       tanks.push({ id: ta[0], x: pred.x + offset.x, y: pred.y + offset.y, body: pred.body, turret: latest[5] & 1 ? aimAng : latest[4], alive, invisible: false, fx: latest[5] });
       continue;
     }
-    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], u), y: lerp(ta[2], tb[2], u), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5] });
+    const tw = jumped(ta[1], ta[2], tb[1], tb[2], u); // through a portal: no sliding across the map
+    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], tw), y: lerp(ta[2], tb[2], tw), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5] });
   }
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
@@ -433,7 +437,8 @@ function onlineFrame(dt: number) {
     if (ba[6] === myTankId) continue;
     const bb = b.B.get(ba[0]);
     if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!ba[5] }); continue; }
-    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], u), y: lerp(ba[2], bb[2], u), vx: bb[3], vy: bb[4], rocket: !!ba[5] });
+    const bw = jumped(ba[1], ba[2], bb[1], bb[2], u);
+    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!ba[5] });
   }
   renderer.syncBullets(bullets, dt);
   lastBullets = bullets;
@@ -512,6 +517,10 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'volley':
       renderer.volley(e[1], e[2]);
       if (audible) sfx.volley();
+      break;
+    case 'warp':
+      renderer.warp(e[1], e[2], e[3], e[4], e[5] > 0);
+      if (audible) sfx.warp(e[5] > 0);
       break;
     case 'rage':
       renderer.hurt(e[3], e[1], e[2]);
@@ -640,7 +649,7 @@ function renderLobby() {
   start.disabled = lobbyMode === 'versus' && n < 2;
   start.textContent = lobbyMode === 'versus' && n < 2 ? 'Il faut 2 joueurs' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   $('#mode-desc').textContent = lobbyMode === 'coop'
-    ? 'Campagne coopérative : 17 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
+    ? 'Campagne coopérative : 18 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
   renderHud();
 }
@@ -719,7 +728,8 @@ function attractFrame(dt: number) {
   const u = attractAcc / DT;
   const tanks: RTank[] = g.tanks.map((t) => {
     const p = attractPrev.get(t.id) ?? t;
-    return { id: t.id, x: lerp(p.x, t.x, u), y: lerp(p.y, t.y, u), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t) };
+    const w = jumped(p.x, p.y, t.x, t.y, u);
+    return { id: t.id, x: lerp(p.x, t.x, w), y: lerp(p.y, t.y, w), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t) };
   });
   renderer.syncTanks(tanks, -1, dt);
   lastTanks = tanks;
@@ -943,6 +953,19 @@ if (params.has('demo')) {
     /** Make the boss charge its ring of shells right now (to catch it on camera). */
     volley() {
       for (const t of attract?.tanks ?? []) if (t.alive && t.boss && t.boss.warn <= 0) t.boss.volleyT = 0;
+    },
+    /** Send every hero tank to the nearest portal (to show a jump on camera). */
+    portal() {
+      if (!attract) return;
+      const g = attract;
+      const cells = g.tiles.map((t, i) => (isPortal(t) ? i : -1)).filter((i) => i >= 0);
+      for (const t of g.tanks) {
+        if (!t.alive || t.kind !== 'player' || !t.ai || !cells.length) continue;
+        const d = (c: number) => Math.hypot((c % W) + 0.5 - t.x, Math.floor(c / W) + 0.5 - t.y);
+        t.ai.goal = cells.reduce((a, b) => (d(a) <= d(b) ? a : b));
+        t.ai.path = [];
+        t.ai.pathT = 0;
+      }
     },
     /** Drop a bonus crate (random kind if omitted) somewhere free in the demo arena. */
     crate(kind?: BonusKind) {

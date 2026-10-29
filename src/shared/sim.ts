@@ -1,9 +1,9 @@
 import {
   BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
-  FAN_SPREAD, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
-  TankKind, TankSpec, Tile, W, isSolidTank,
+  FAN_SPREAD, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
+  TankKind, TankSpec, Tile, W, isPortal, isSolidTank,
 } from './constants';
-import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt } from './physics';
+import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 
 export interface Tank {
@@ -96,6 +96,7 @@ interface AIState {
   hesitate: number;
   locked: boolean;
   prefDist: number;
+  goal?: number; // a cell to drive to (the demo sends tanks through portals), forgotten after a portal jump
 }
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
@@ -117,7 +118,12 @@ export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: 
   const goal = Math.abs(angDiff(body, target)) <= Math.abs(angDiff(body, alt)) ? target : alt;
   body = rotateToward(body, goal, 11 * dt);
   const sp = speed * dt;
+  const px = x, py = y;
   [x, y] = moveCircle(tiles, x, y, mx * sp, my * sp, r);
+  if (r <= PORTAL_MAX_R) {
+    const w = warpTarget(tiles, px, py, x, y);
+    if (w) [x, y] = w;
+  }
   return [x, y, body];
 }
 
@@ -316,7 +322,13 @@ export class Game {
   }
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
+    const px = t.x, py = t.y;
     [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt, t.r);
+    if ((t.x - px) ** 2 + (t.y - py) ** 2 > 1) {
+      // went through a portal
+      this.events.push(['warp', r2(px), r2(py), r2(t.x), r2(t.y), t.id]);
+      if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; t.ai.goal = undefined; }
+    }
   }
 
   ownBullets(t: Tank) {
@@ -391,6 +403,7 @@ export class Game {
     for (const b of this.bullets) {
       if (b.dead) continue;
       let bounced = false;
+      const ox = b.x, oy = b.y;
       const nx = b.x + b.vx * dt;
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) { b.vx = -b.vx; bounced = true; } else b.x = nx;
       const ny = b.y + b.vy * dt;
@@ -399,6 +412,11 @@ export class Game {
         b.bounces--;
         if (b.bounces < 0) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
         this.events.push(['bounce', r2(b.x), r2(b.y)]);
+      }
+      const w = warpTarget(this.tiles, ox, oy, b.x, b.y);
+      if (w) {
+        this.events.push(['warp', r2(b.x), r2(b.y), w[0], w[1], 0]);
+        [b.x, b.y] = w;
       }
       if (b.x < -1 || b.y < -1 || b.x > W + 1 || b.y > H + 1) b.dead = true;
     }
@@ -733,7 +751,8 @@ export class Game {
     const ai = t.ai!;
     const start = Math.floor(t.y) * W + Math.floor(t.x);
     const blocked = new Uint8Array(W * H);
-    for (let i = 0; i < W * H; i++) if (isSolidTank(this.tiles[i])) blocked[i] = 1;
+    // portals are left out of the plans: tanks that slip into one simply replan from the other side
+    for (let i = 0; i < W * H; i++) if (isSolidTank(this.tiles[i]) || (isPortal(this.tiles[i]) && i !== start && i !== ai.goal)) blocked[i] = 1;
     if (t.r > 0.45) {
       // big tanks only fit through cells whose neighbours are all free
       const solid = blocked.slice();
@@ -757,8 +776,8 @@ export class Game {
     const reach: number[] = [];
     for (let qi = 0; qi < q.length; qi++) {
       const c = q[qi];
-      if (dist[c] > 9) continue;
-      reach.push(c);
+      if (dist[c] > (ai.goal !== undefined ? 40 : 9)) continue;
+      if (dist[c] <= 9) reach.push(c);
       const x = c % W, y = (c / W) | 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const nx = x + dx, ny = y + dy;
@@ -773,8 +792,9 @@ export class Game {
     }
     if (reach.length < 2) { ai.path = []; return; }
     let best = -1, bestScore = -Infinity;
+    if (ai.goal !== undefined && prev[ai.goal] !== -2 && ai.goal !== start) best = ai.goal;
     // AI-driven player tanks (demo) love bonus crates
-    if (t.kind === 'player' && this.bonuses.length && Math.random() < 0.8) {
+    if (best < 0 && t.kind === 'player' && this.bonuses.length && Math.random() < 0.8) {
       for (const c of this.bonuses) {
         const cell = Math.floor(c.y) * W + Math.floor(c.x);
         if (prev[cell] === -2 || dist[cell] > 9) continue;
