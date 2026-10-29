@@ -1,7 +1,7 @@
 {
-  "iteration": 2,
-  "date": "2026-10-28",
-  "title": "Caisses surprises",
+  "iteration": 3,
+  "date": "2026-10-29",
+  "title": "Le Colosse",
   "journal": [
     {
       "iteration": 1,
@@ -26,6 +26,18 @@
         "Turbo : 10 secondes de vitesse en plus, avec des étincelles vertes derrière les chenilles.",
         "Tir en éventail : pendant 10 secondes, chaque tir lance trois obus d’un coup.",
         "Tes bonus actifs s’affichent en haut de l’écran, et un petit message s’envole au-dessus du tank qui en ramasse un."
+      ]
+    },
+    {
+      "iteration": 3,
+      "date": "2026-10-29",
+      "title": "Le Colosse",
+      "notes": [
+        "Un boss toutes les 10 missions : le Colosse, un énorme tank rouge couronné d’or. Il encaisse plusieurs coups, et sa barre de vie s’affiche en haut de l’écran.",
+        "Quand il s’illumine en orange, il prépare une salve circulaire : des obus partent dans toutes les directions. Mets-toi vite à l’abri derrière un mur !",
+        "À mi-vie, il se met en colère : il fume, roule plus vite et tire plus souvent.",
+        "Plus on est nombreux, plus il est coriace. Les coups portés restent acquis si vous devez recommencer la mission.",
+        "Une musique plus sombre et plus rapide accompagne chaque combat de boss, et sa chute finit en feu d’artifice d’éclats dorés."
       ]
     }
   ]

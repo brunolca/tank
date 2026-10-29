@@ -19,6 +19,7 @@ export interface TankInfo {
   pid?: string;
   name?: string;
   color: number;
+  hp?: number; // max hit points, only sent for tanks that take more than one hit (the boss)
 }
 
 export interface Input {
@@ -30,8 +31,9 @@ export interface Input {
   m: 0 | 1; // mine
 }
 
-// tank: [id, x, y, body, turret, flags]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan)
-export type NetTank = [number, number, number, number, number, number];
+// tank: [id, x, y, body, turret, flags, hp?]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan),
+// 64 boss charging a volley, 128 boss enraged. hp only for tanks with several hit points.
+export type NetTank = [number, number, number, number, number, number, number?];
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
 // mine: [id, x, y, blinking]
@@ -49,7 +51,10 @@ export type GameEvent =
   | ['block', number, number]
   | ['bonus', number, number, number, number] // x y kind tankId (picked up)
   | ['shield', number, number, number] // x y tankId (a shield absorbed a hit)
-  | ['crate', number, number, number]; // x y kind (a crate drops in)
+  | ['crate', number, number, number] // x y kind (a crate drops in)
+  | ['hurt', number, number, number, number, number] // x y tankId hpLeft hpMax (a tough tank takes a hit)
+  | ['volley', number, number, number] // x y tankId (the boss fires a ring of shells)
+  | ['rage', number, number, number]; // x y tankId (the boss is down to half health)
 
 export interface Results {
   mode: Mode;

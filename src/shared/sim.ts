@@ -1,6 +1,7 @@
 import {
-  BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BULLET_R, BULLET_SPEED, BonusKind, DT, FAN_SPREAD, H, MINE_BLAST, MINE_FUSE, MINE_R,
-  MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT, TankKind, TankSpec, Tile, W, isSolidTank,
+  BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  FAN_SPREAD, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
+  TankKind, TankSpec, Tile, W, isSolidTank,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
@@ -22,6 +23,18 @@ export interface Tank {
   spec: TankSpec;
   ai?: AIState;
   buffs: Buffs;
+  r: number; // hull radius
+  hp: number;
+  maxHp: number;
+  boss?: BossState;
+}
+
+/** The boss: a radial volley every few seconds (announced by a glow), and a rage mode at half health. */
+export interface BossState {
+  volleyT: number;
+  warn: number; // > 0 while the warning glow is on
+  spin: number;
+  rage: boolean;
 }
 
 /** Active bonuses: shield is a single-use flag, the others are seconds left. */
@@ -94,7 +107,7 @@ export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Shared by the server simulation and client-side prediction. */
-export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: number, mx: number, my: number, speed: number, dt: number): [number, number, number] {
+export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: number, mx: number, my: number, speed: number, dt: number, r = TANK_R): [number, number, number] {
   const len = Math.hypot(mx, my);
   if (len < 0.05) return [x, y, body];
   if (len > 1) { mx /= len; my /= len; }
@@ -104,7 +117,7 @@ export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: 
   const goal = Math.abs(angDiff(body, target)) <= Math.abs(angDiff(body, alt)) ? target : alt;
   body = rotateToward(body, goal, 11 * dt);
   const sp = speed * dt;
-  [x, y] = moveCircle(tiles, x, y, mx * sp, my * sp, TANK_R);
+  [x, y] = moveCircle(tiles, x, y, mx * sp, my * sp, r);
   return [x, y, body];
 }
 
@@ -136,7 +149,9 @@ export class Game {
       body: team === 0 ? 0 : Math.PI, turret: team === 0 ? 0 : Math.PI,
       alive: true, fireCd: team === 0 ? 0 : 2 + Math.random() * 1.5, mineCd: 0, spec,
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
+      r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1,
     };
+    if (kind === 'boss') t.boss = { volleyT: 5, warn: 0, spin: 0, rage: false };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
     return t;
@@ -156,7 +171,14 @@ export class Game {
   }
 
   tankInfos(): TankInfo[] {
-    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color }));
+    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color, hp: t.maxHp > 1 ? t.maxHp : undefined }));
+  }
+
+  /** Set a tough tank's hit points (the room scales the boss with the number of players). */
+  setHp(t: Tank, hp: number, maxHp = hp) {
+    t.maxHp = Math.max(1, Math.round(maxHp));
+    t.hp = Math.max(1, Math.min(t.maxHp, Math.round(hp)));
+    if (t.boss && t.hp <= t.maxHp / 2) this.enrage(t, false);
   }
 
   step(inputs: Map<string, Input>) {
@@ -171,6 +193,7 @@ export class Game {
       if (bf.turbo > 0) bf.turbo -= DT;
       if (bf.fan > 0) bf.fan -= DT;
       if (bf.invuln > 0) bf.invuln -= DT;
+      if (t.boss) this.updateBoss(t);
       if (t.ai) {
         this.updateAI(t);
       } else if (t.pid) {
@@ -240,6 +263,48 @@ export class Game {
     return t.spec.speed * (t.buffs.turbo > 0 ? TURBO_MULT : 1);
   }
 
+  // -------------------------------------------------------------- boss
+
+  updateBoss(t: Tank) {
+    const bs = t.boss!;
+    if (bs.warn > 0) {
+      bs.warn -= DT;
+      if (bs.warn <= 0) this.bossVolley(t);
+      return;
+    }
+    bs.volleyT -= DT;
+    if (bs.volleyT <= 0) {
+      bs.warn = BOSS_VOLLEY_WARN;
+      bs.volleyT = BOSS_VOLLEY_EVERY[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
+    }
+  }
+
+  /** A ring of shells all around the hull, rotated a little more each time. */
+  bossVolley(t: Tank) {
+    const bs = t.boss!;
+    const n = BOSS_VOLLEY_SHOTS[bs.rage ? 1 : 0];
+    bs.spin += 0.5 + Math.random() * 0.6;
+    const tip = t.r + 0.2;
+    for (let i = 0; i < n; i++) {
+      const a = bs.spin + (i * Math.PI * 2) / n, dx = Math.cos(a), dy = Math.sin(a);
+      const x = t.x + dx * tip, y = t.y + dy * tip;
+      if (bulletBlocked(this.tiles, x, y, BULLET_R)) continue;
+      const sp = BULLET_SPEED * 0.8;
+      this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces: 0, rocket: false, dead: false });
+    }
+    this.events.push(['volley', r2(t.x), r2(t.y), t.id]);
+  }
+
+  enrage(t: Tank, loud = true) {
+    if (!t.boss || t.boss.rage) return;
+    t.boss.rage = true;
+    t.spec = { ...t.spec, speed: t.spec.speed * 1.35, fireCd: t.spec.fireCd * 0.7, mines: t.spec.mines + 1 };
+    if (loud) {
+      t.boss.volleyT = Math.min(t.boss.volleyT, 1.5);
+      this.events.push(['rage', r2(t.x), r2(t.y), t.id]);
+    }
+  }
+
   applyInput(t: Tank, inp: Input) {
     let mx = inp.mx, my = inp.my;
     const len = Math.hypot(mx, my);
@@ -251,7 +316,7 @@ export class Game {
   }
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
-    [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt);
+    [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt, t.r);
   }
 
   ownBullets(t: Tank) {
@@ -269,11 +334,11 @@ export class Game {
     if (t.fireCd > 0 || this.ownBullets(t) >= t.spec.maxBullets) return false;
     t.fireCd = t.spec.fireCd;
     const dx = Math.cos(t.turret), dy = Math.sin(t.turret);
-    const tip = TANK_R + 0.22;
+    const tip = t.r + 0.22;
     const x = t.x + dx * tip, y = t.y + dy * tip;
     const sp = t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED;
     this.events.push(['shot', r2(x), r2(y), r2(t.turret), t.spec.rocket ? 1 : 0, t.id]);
-    if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, t.x + dx * TANK_R * 0.6, t.y + dy * TANK_R * 0.6, BULLET_R)) {
+    if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, t.x + dx * t.r * 0.6, t.y + dy * t.r * 0.6, BULLET_R)) {
       this.events.push(['pop', r2(x), r2(y)]);
       return true;
     }
@@ -307,16 +372,17 @@ export class Game {
         const a = alive[i], b = alive[j];
         let dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.hypot(dx, dy);
-        const min = TANK_R * 2;
+        const min = a.r + b.r;
         if (d >= min) continue;
         if (d < 1e-6) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
         const push = (min - d) / 2;
-        const aStatic = a.spec.speed === 0, bStatic = b.spec.speed === 0;
+        // static tanks don't budge, and the big boss shoves the small ones aside
+        const aStatic = a.spec.speed === 0 || a.r > b.r + 0.1, bStatic = b.spec.speed === 0 || b.r > a.r + 0.1;
         const ka = aStatic ? 0 : bStatic ? 2 : 1, kb = bStatic ? 0 : aStatic ? 2 : 1;
         a.x -= dx * push * ka; a.y -= dy * push * ka;
         b.x += dx * push * kb; b.y += dy * push * kb;
-        [a.x, a.y] = resolveCircle(this.tiles, a.x, a.y, TANK_R);
-        [b.x, b.y] = resolveCircle(this.tiles, b.x, b.y, TANK_R);
+        [a.x, a.y] = resolveCircle(this.tiles, a.x, a.y, a.r);
+        [b.x, b.y] = resolveCircle(this.tiles, b.x, b.y, b.r);
       }
     }
   }
@@ -341,7 +407,7 @@ export class Game {
       if (b.dead) continue;
       for (const t of this.tanks) {
         if (!t.alive) continue;
-        const rr = TANK_R + BULLET_R;
+        const rr = t.r + BULLET_R;
         if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
           b.dead = true;
           this.killTank(t, this.tankById(b.owner));
@@ -386,7 +452,7 @@ export class Game {
       if (m.fuse < 0 && m.t > 0.4) {
         for (const t of this.tanks) {
           if (!t.alive || t.team === m.team || t.id === m.owner) continue;
-          if (Math.hypot(t.x - m.x, t.y - m.y) < MINE_TRIGGER_R) { m.fuse = 0.55; break; }
+          if (Math.hypot(t.x - m.x, t.y - m.y) < MINE_TRIGGER_R + t.r - TANK_R) { m.fuse = 0.55; break; }
         }
       }
       if (m.fuse >= 0) {
@@ -403,7 +469,7 @@ export class Game {
     this.events.push(['mboom', r2(m.x), r2(m.y)]);
     const owner = this.tankById(m.owner);
     for (const t of this.tanks) {
-      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < MINE_BLAST + TANK_R * 0.4) this.killTank(t, owner);
+      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < MINE_BLAST + t.r * 0.4) this.killTank(t, owner);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < MINE_BLAST) b.dead = true;
@@ -428,6 +494,14 @@ export class Game {
 
   killTank(t: Tank, killer: Tank | undefined) {
     if (!t.alive || t.buffs.invuln > 0) return;
+    if (t.hp > 1) {
+      // tough tanks (the boss) soak up hits, with a short grace so one blast counts once
+      t.hp--;
+      t.buffs.invuln = 0.25;
+      this.events.push(['hurt', r2(t.x), r2(t.y), t.id, t.hp, t.maxHp]);
+      if (t.boss && t.hp <= t.maxHp / 2) this.enrage(t);
+      return;
+    }
     if (t.buffs.shield) {
       t.buffs.shield = false;
       t.buffs.invuln = 0.5;
@@ -448,12 +522,17 @@ export class Game {
   }
 
   netTanks(): NetTank[] {
-    return this.tanks.map((t) => [t.id, r2(t.x), r2(t.y), r2(t.body), r2(t.turret), (t.alive ? 1 : 0) | (t.spec.invisible && !this.frozen ? 2 : 0) | this.buffFlags(t)]);
+    return this.tanks.map((t): NetTank => {
+      const n: NetTank = [t.id, r2(t.x), r2(t.y), r2(t.body), r2(t.turret), (t.alive ? 1 : 0) | (t.spec.invisible && !this.frozen ? 2 : 0) | this.buffFlags(t)];
+      if (t.maxHp > 1) n.push(t.hp);
+      return n;
+    });
   }
   buffFlags(t: Tank) {
     const b = t.buffs;
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
-      | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0);
+      | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
+      | (t.boss && t.boss.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0);
   }
   netBonuses(): NetBonus[] {
     return this.bonuses.map((c) => [c.id, c.x, c.y, BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
@@ -469,7 +548,7 @@ export class Game {
 
   /** First tank a shot fired at `ang` from tank t would hit (or undefined). */
   traceShot(t: Tank, ang: number, bounces: number): { hit?: Tank; len: number } {
-    const tip = TANK_R + 0.22;
+    const tip = t.r + 0.22;
     const sx = t.x + Math.cos(ang) * tip, sy = t.y + Math.sin(ang) * tip;
     if (bulletBlocked(this.tiles, sx, sy, BULLET_R)) return { len: 0 };
     const segs = castRicochet(this.tiles, sx, sy, ang, bounces, 45);
@@ -480,7 +559,7 @@ export class Game {
       for (const o of this.tanks) {
         if (!o.alive) continue;
         if (o === t && si === 0) continue;
-        const u = segCircle(s, o.x, o.y, TANK_R + BULLET_R + 0.04);
+        const u = segCircle(s, o.x, o.y, o.r + BULLET_R + 0.04);
         if (u >= 0 && u < bestT) { bestT = u; best = o; }
       }
       // mines also stop bullets: shooting into a mine near us is bad, near foes is fine
@@ -509,6 +588,8 @@ export class Game {
     ai.hesitate -= DT;
     const foe = this.nearestFoe(t);
     if (!foe) return;
+    // the boss holds still (and holds its fire) while its volley charges
+    if (t.boss && t.boss.warn > 0) { t.turret += DT * 2.5; return; }
 
     if (ai.think <= 0) {
       ai.think = spec.skill >= 2 ? 0.18 : 0.3;
@@ -608,7 +689,7 @@ export class Game {
       if (t.spec.skill < 2 && (b.id + t.id) % 3 === 0) continue;
       const cx = rx - b.vx * tt, cy = ry - b.vy * tt;
       const d = Math.hypot(cx, cy);
-      if (d > TANK_R + 0.55) continue;
+      if (d > t.r + 0.55) continue;
       threat = true;
       if (d < 1e-3) { ax += -b.vy; ay += b.vx; } else { ax += (cx / d) * (1.2 - tt); ay += (cy / d) * (1.2 - tt); }
     }
@@ -653,6 +734,17 @@ export class Game {
     const start = Math.floor(t.y) * W + Math.floor(t.x);
     const blocked = new Uint8Array(W * H);
     for (let i = 0; i < W * H; i++) if (isSolidTank(this.tiles[i])) blocked[i] = 1;
+    if (t.r > 0.45) {
+      // big tanks only fit through cells whose neighbours are all free
+      const solid = blocked.slice();
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (solid[y * W + x]) continue;
+        for (let dy = -1; dy <= 1 && !blocked[y * W + x]; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H || solid[ny * W + nx]) { blocked[y * W + x] = 1; break; }
+        }
+      }
+    }
     for (const m of this.mines) {
       for (let cy = Math.floor(m.y - 2); cy <= Math.floor(m.y + 2); cy++)
         for (let cx = Math.floor(m.x - 2); cx <= Math.floor(m.x + 2); cx++)

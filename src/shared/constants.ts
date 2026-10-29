@@ -5,6 +5,7 @@ export const DT = 1 / TICK_RATE;
 export const SUBSTEPS = 2;
 
 export const TANK_R = 0.36;
+export const BOSS_R = 0.62;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
 export const MINE_BLAST = 1.55;
@@ -31,7 +32,8 @@ export type TankKind =
   | 'green'
   | 'violet'
   | 'white'
-  | 'black';
+  | 'black'
+  | 'boss';
 
 export interface TankSpec {
   speed: number;
@@ -43,6 +45,8 @@ export interface TankSpec {
   mines: number;
   skill: number; // 0 = scan only, 1 = direct, 2 = ricochet, 3 = ricochet + lead
   invisible?: boolean;
+  hp?: number; // hits it takes to go down (1 when omitted)
+  size?: number; // hull radius (TANK_R when omitted)
   reaction: number; // seconds between spotting a shot and pulling the trigger
   aimError: number; // max angular error (radians) when firing
   label: string;
@@ -59,6 +63,7 @@ export const SPECS: Record<TankKind, TankSpec> = {
   violet: { speed: 2.5, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.65, turretSpeed: 2.8, mines: 2, skill: 2, reaction: 0.35, aimError: 0.06, label: 'Violet' },
   white: { speed: 1.8, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.8, turretSpeed: 2.6, mines: 2, skill: 2, invisible: true, reaction: 0.4, aimError: 0.06, label: 'Blanc' },
   black: { speed: 3.3, maxBullets: 3, bounces: 0, rocket: true, fireCd: 0.9, turretSpeed: 3.8, mines: 2, skill: 3, reaction: 0.3, aimError: 0.04, label: 'Noir' },
+  boss: { speed: 1.05, maxBullets: 4, bounces: 1, rocket: false, fireCd: 0.75, turretSpeed: 2.2, mines: 3, skill: 2, reaction: 0.4, aimError: 0.05, hp: 8, size: BOSS_R, label: 'Colosse' },
 };
 
 export const ENEMY_COLORS: Record<TankKind, number> = {
@@ -72,7 +77,23 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   violet: 0x8a4fd6,
   white: 0xeeeeee,
   black: 0x2a2a30,
+  boss: 0xb8323a,
 };
+
+/** Hull radius of a tank kind (the boss is much bigger than everyone else). */
+export function tankRadius(kind: TankKind) {
+  return SPECS[kind]?.size ?? TANK_R;
+}
+
+// ------------------------------------------------------------------ boss
+export const BOSS_VOLLEY_WARN = 0.9; // seconds of glowing warning before a radial volley
+export const BOSS_VOLLEY_EVERY: [number, number] = [7.5, 4.8]; // calm, then enraged
+export const BOSS_VOLLEY_SHOTS: [number, number] = [10, 14];
+/** Extra hit points per extra player, so the boss lasts in a crowd too. */
+export const BOSS_HP_PER_PLAYER = 3;
+// flags bits used by the boss (after the bonus flags)
+export const FLAG_CHARGING = 64;
+export const FLAG_RAGE = 128;
 
 export const PLAYER_COLORS = [0x3d7bff, 0xff4d5e, 0x2fd07a, 0xffa63d, 0x26c6f0, 0xc66bff];
 

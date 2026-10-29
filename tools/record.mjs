@@ -7,11 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 4, seconds: 12, rich: true, crates: ['shield', 'turbo', 'fan'], caption: 'Caisses bonus', sub: 'Elles tombent sur la table : fonce les ramasser !' },
-  { mission: 6, seconds: 11, buffs: ['shield'], crates: ['shield'], caption: 'Bouclier', sub: 'Une bulle qui encaisse un coup à ta place' },
-  { mission: 9, seconds: 10, buffs: ['fan'], crates: ['fan'], caption: 'Tir en éventail', sub: 'Trois obus d’un coup' },
-  { mission: 12, seconds: 10, buffs: ['turbo', 'bounce'], crates: ['turbo'], caption: 'Turbo et super-ricochet', sub: 'Plus vite, et des obus qui rebondissent deux fois' },
-  { mission: 16, seconds: 12, rich: true, crates: ['bounce', 'fan'], buffs: ['shield'], caption: 'Ultime', sub: 'Tous les ennemis, tous les bonus' },
+  { mission: 10, seconds: 16, bossHp: 8, hits: [5, 9, 12], volley: true, caption: 'Le Colosse', sub: 'Un boss toutes les 10 missions : il encaisse plusieurs coups' },
+  { mission: 20, seconds: 14, bossHp: 6, hits: [9], volley: true, buffs: ['shield'], caption: 'Salve circulaire', sub: 'Quand il s’illumine, mets-toi à l’abri !' },
+  { mission: 30, seconds: 15, bossHp: 5, hits: [3, 6, 9, 11, 13], buffs: ['bounce', 'fan'], caption: 'En colère', sub: 'À mi-vie, il accélère et tire plus vite… jusqu’à la chute' },
+  { mission: 6, seconds: 10, rich: true, crates: ['shield', 'fan'], caption: 'Et toujours les caisses bonus', sub: 'Bouclier, turbo, éventail, super-ricochet' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -52,7 +51,9 @@ try {
   for (const shot of MONTAGE) {
     await page.evaluate((shot) => {
       const d = window.__demo;
-      d.play(shot.mission, true, !!shot.rich);
+      d.play(shot.mission, true, !!shot.rich, shot.bossHp);
+      if (shot.volley) setTimeout(() => d.volley?.(), 2500);
+      for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

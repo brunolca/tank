@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, tankRadius, type BonusKind } from '../shared/constants';
 import { getMission } from '../shared/levels';
 import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
@@ -249,9 +249,11 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
+  bossFight = enemies.some((e) => e.kind === 'boss');
   if (msg.mode === 'coop') {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
-    banner(`Mission ${msg.mission}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro');
+    if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
+    else banner(`Mission ${msg.mission}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro');
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(ENEMY_COLORS[k])}">${SPECS[k].label}</span>`).join('')}</div>`;
   } else {
@@ -273,7 +275,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
       break;
     case 'playing':
       hideBanner();
-      setMusicIntensity(1);
+      setMusicIntensity(bossFight ? 2 : 1);
       break;
     case 'cleared':
       setMusicIntensity(0);
@@ -336,7 +338,8 @@ function predictStep(x: number, y: number, body: number, mx: number, my: number,
       if (t[0] === myTankId || !(t[5] & 1)) continue;
       const dx = x - t[1], dy = y - t[2];
       const d = Math.hypot(dx, dy);
-      if (d < TANK_R * 2 && d > 1e-4) { x = t[1] + (dx / d) * TANK_R * 2; y = t[2] + (dy / d) * TANK_R * 2; }
+      const rr = TANK_R + tankRadius(infos.get(t[0])?.kind ?? 'player');
+      if (d < rr && d > 1e-4) { x = t[1] + (dx / d) * rr; y = t[2] + (dy / d) * rr; }
     }
   }
   return [x, y, body];
@@ -415,6 +418,7 @@ function onlineFrame(dt: number) {
   }
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
+  updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
   $('#hud-enemies').textContent = currentMode === 'coop' ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
 
   // bullets: interpolate everyone else's, extrapolate our own from the freshest state
@@ -459,8 +463,17 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (audible) sfx.pop();
       break;
     case 'boom':
-      renderer.explosion(e[1], e[2], false, renderer.tankColor(e[3]));
-      if (audible) sfx.boom(false);
+      if (renderer.tankKind(e[3]) === 'boss') {
+        // the boss goes down in a chain of blasts
+        renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, 0xf2c14e), i * 180);
+        floater(e[1], e[2], 'Colosse vaincu !', 0xf2c14e);
+        if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
+        if (online && bossFight) setMusicIntensity(1);
+      } else {
+        renderer.explosion(e[1], e[2], false, renderer.tankColor(e[3]));
+        if (audible) sfx.boom(false);
+      }
       if (e[3] === myTankId && online) toast('Détruit !', 1500);
       break;
     case 'mineSet':
@@ -491,6 +504,21 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1], e[2], 'Bouclier brisé !', BONUS_INFO.shield.color);
       if (audible) sfx.shieldBreak();
       break;
+    case 'hurt':
+      renderer.hurt(e[3], e[1], e[2]);
+      floater(e[1], e[2], `${e[4]} / ${e[5]}`, ENEMY_COLORS.boss);
+      if (audible) sfx.bossHit();
+      break;
+    case 'volley':
+      renderer.volley(e[1], e[2]);
+      if (audible) sfx.volley();
+      break;
+    case 'rage':
+      renderer.hurt(e[3], e[1], e[2]);
+      floater(e[1], e[2], 'En colère !', 0xff3b2f);
+      if (audible) sfx.rage();
+      $('#boss-bar').classList.add('rage');
+      break;
   }
 }
 
@@ -518,6 +546,36 @@ function renderBuffs(flags: number) {
     .filter((k) => mask & BONUS_INFO[k].flag)
     .map((k) => `<span class="buff" style="--c:${hex(BONUS_INFO[k].color)}">${BONUS_INFO[k].label}</span>`)
     .join('');
+}
+
+// ------------------------------------------------------------------ boss health bar
+
+let bossFight = false;
+let bossKey = '';
+const charging = new Set<number>();
+/** Health bar of the toughest enemy on the table, and the warning whine when the boss charges a volley. */
+function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: number) => number) {
+  let boss: RTank | undefined;
+  for (const t of tanks) if (t.alive && maxOf(t.id) > 1) { boss = t; break; }
+  const bar = $('#boss-bar');
+  for (const t of tanks) {
+    const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
+    if (on && !charging.has(t.id) && online) sfx.bossCharge();
+    if (on) charging.add(t.id); else charging.delete(t.id);
+  }
+  if (!boss || screen !== 'game') {
+    if (bossKey) { bar.hidden = true; bar.classList.remove('rage'); bossKey = ''; }
+    return;
+  }
+  const hp = hpOf(boss.id), max = maxOf(boss.id);
+  const key = `${boss.id}:${hp}/${max}`;
+  if (key === bossKey) return;
+  bossKey = key;
+  bar.hidden = false;
+  bar.classList.toggle('rage', hp <= max / 2);
+  $('#boss-name').textContent = SPECS.boss.label;
+  $('#boss-hp').textContent = `${hp} / ${max}`;
+  $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
 
 // ------------------------------------------------------------------ name tags
@@ -582,7 +640,7 @@ function renderLobby() {
   start.disabled = lobbyMode === 'versus' && n < 2;
   start.textContent = lobbyMode === 'versus' && n < 2 ? 'Il faut 2 joueurs' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   $('#mode-desc').textContent = lobbyMode === 'coop'
-    ? 'Campagne coopérative : 16 missions faites main puis missions générées à l’infini. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
+    ? 'Campagne coopérative : 17 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
   renderHud();
 }
@@ -612,7 +670,7 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -632,7 +690,10 @@ function startAttract(opts: AttractOpts = attractOpts) {
     const left = ['pink', 'violet', 'ash'] as const;
     lvl.spawns.forEach(([x, y], i) => g.addTank(left[i % left.length], 1, x, y, 0));
   }
-  lvl.enemies.forEach((e) => g.addTank(e.kind === 'white' && !opts.heroes ? 'ash' : e.kind, 2, e.x, e.y, 0));
+  lvl.enemies.forEach((e) => {
+    const t = g.addTank(e.kind === 'white' && !opts.heroes ? 'ash' : e.kind, 2, e.x, e.y, 0);
+    if (opts.bossHp && t.maxHp > 1) g.setHp(t, opts.bossHp, t.maxHp);
+  });
   g.frozen = false;
   attract = g;
   attractEnd = 0;
@@ -662,6 +723,7 @@ function attractFrame(dt: number) {
   });
   renderer.syncTanks(tanks, -1, dt);
   lastTanks = tanks;
+  updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
   renderer.syncBullets(g.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket })), dt);
   renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 })));
   renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
@@ -870,9 +932,17 @@ if (params.has('demo')) {
   document.body.classList.add('demo');
   const demo = {
     meta: META,
-    play(mission: number, heroes = true, rich = false) {
+    play(mission: number, heroes = true, rich = false, bossHp?: number) {
       attract = undefined;
-      startAttract({ mission, heroes, rich });
+      startAttract({ mission, heroes, rich, bossHp });
+    },
+    /** Land a hit on the boss (to show its health bar and its anger on camera). */
+    hitBoss() {
+      for (const t of attract?.tanks ?? []) if (t.alive && t.boss) { t.buffs.invuln = 0; attract!.killTank(t, undefined); }
+    },
+    /** Make the boss charge its ring of shells right now (to catch it on camera). */
+    volley() {
+      for (const t of attract?.tanks ?? []) if (t.alive && t.boss && t.boss.warn <= 0) t.boss.volleyT = 0;
     },
     /** Drop a bonus crate (random kind if omitted) somewhere free in the demo arena. */
     crate(kind?: BonusKind) {

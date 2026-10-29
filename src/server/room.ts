@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { DT, PLAYER_COLORS, TankKind } from '../shared/constants';
+import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, TankKind } from '../shared/constants';
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { ClientMsg, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
@@ -37,6 +37,7 @@ export class Room extends DurableObject<Env> {
   private round = 0;
   private killedEnemies = new Set<number>(); // enemy indices destroyed in current mission (persist across retries)
   private enemyIndexByTank = new Map<number, number>();
+  private enemyHp = new Map<number, number>(); // damage dealt to tough enemies (the boss) sticks across retries
   private phaseTimer = 0;
   private loop?: ReturnType<typeof setInterval>;
   private roomCode = '';
@@ -212,6 +213,7 @@ export class Room extends DurableObject<Env> {
     this.lives = 3;
     this.round = 0;
     this.killedEnemies.clear();
+    this.enemyHp.clear();
     this.loadStage();
     this.startLoop();
   }
@@ -243,6 +245,10 @@ export class Room extends DurableObject<Env> {
     this.level.enemies.forEach((e, idx) => {
       if (this.killedEnemies.has(idx)) return;
       const t = game.addTank(e.kind, 99, e.x, e.y, 0);
+      if (t.maxHp > 1) {
+        const max = t.maxHp + BOSS_HP_PER_PLAYER * Math.max(0, participants.length - 1);
+        game.setHp(t, this.enemyHp.get(idx) ?? max, max);
+      }
       this.enemyIndexByTank.set(t.id, idx);
     });
     game.bonusOn = true;
@@ -368,6 +374,7 @@ export class Room extends DurableObject<Env> {
         if (this.phaseTimer <= 0) {
           this.mission++;
           this.killedEnemies.clear();
+          this.enemyHp.clear();
           if (this.mission % 5 === 1) this.lives++;
           this.loadStage();
         }
@@ -399,6 +406,10 @@ export class Room extends DurableObject<Env> {
         this.setPhase('cleared', 3.5);
         this.broadcastPhase();
       } else if (playersAlive === 0) {
+        for (const t of game.tanks) {
+          const idx = this.enemyIndexByTank.get(t.id);
+          if (idx !== undefined && t.alive && t.maxHp > 1) this.enemyHp.set(idx, t.hp);
+        }
         this.lives--;
         this.setPhase('failed', 3.5);
         this.broadcastPhase();

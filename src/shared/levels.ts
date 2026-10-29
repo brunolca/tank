@@ -2,9 +2,9 @@ import { H, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  X boss
 const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', X: 'boss',
 };
 
 export interface LevelDef {
@@ -208,6 +208,28 @@ export const LEVELS: LevelDef[] = [
       '.........#...#........',
       '.........#...#........',
       '.........#...#........',
+      '......................',
+    ],
+  },
+  {
+    name: 'Le Colosse',
+    map: [
+      '......................',
+      '......................',
+      '..1.......oo..........',
+      '.......H.........H....',
+      '..2....H.........H....',
+      '......................',
+      '.....oo...............',
+      '...............a......',
+      '..........H...........',
+      '..........H.....X.....',
+      '.....oo...............',
+      '...............a......',
+      '......................',
+      '.......H.........H....',
+      '.......H.........H....',
+      '..........oo..........',
       '......................',
     ],
   },
@@ -473,14 +495,68 @@ export function proceduralLevel(mission: number): ParsedLevel {
   return parseLevel(LEVELS[0]);
 }
 
+/** Every tenth mission is a boss fight. */
+export const isBossMission = (mission: number) => mission % 10 === 0;
+
+const BOSS_ARENAS: string[][] = [
+  [
+    '......................',
+    '......................',
+    '..1.....#......#......',
+    '........#......#......',
+    '..2.....#......#......',
+    '......................',
+    '.............oo.......',
+    '....HH................',
+    '.................X....',
+    '....HH................',
+    '.............oo.......',
+    '......................',
+    '........#......#......',
+    '........#......#......',
+    '........#......#......',
+    '......................',
+    '......................',
+  ],
+  [
+    '......................',
+    '.1....................',
+    '.......o......o.......',
+    '.2.....o......o.......',
+    '.......o..__..o.......',
+    '..........__..........',
+    '....###..........###..',
+    '......................',
+    '.................X....',
+    '......................',
+    '....###..........###..',
+    '..........__..........',
+    '.......o..__..o.......',
+    '.......o......o.......',
+    '.......o......o.......',
+    '......................',
+    '......................',
+  ],
+];
+const BOSS_ESCORTS: TankKind[][] = [['pink', 'green'], ['violet', 'green'], ['violet', 'black'], ['white', 'black']];
+
+/** Endless-mode boss fights: an open arena, the boss and two escorts that get nastier. */
+function bossLevel(mission: number): ParsedLevel {
+  const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
+  const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
+  lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });
+  return lvl;
+}
+
 export function getMission(mission: number): ParsedLevel {
   if (mission <= LEVELS.length) return parseLevel(LEVELS[mission - 1]);
+  if (isBossMission(mission)) return bossLevel(mission);
   return proceduralLevel(mission);
 }
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 export function versusArena(round: number): ParsedLevel {
-  const pool = [1, 2, 3, 5, 6, 7, 9, 11, 13, 14];
+  const pool = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15];
   const base = parseLevel(LEVELS[pool[round % pool.length]]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

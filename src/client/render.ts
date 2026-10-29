@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, H, MINE_BLAST, Tile, W, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, TANK_R, Tile, W, tankRadius, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
@@ -155,6 +155,8 @@ interface TankView {
   recoil: number;
   materials: THREE.MeshStandardMaterial[];
   bubble?: THREE.Mesh;
+  scale: number; // hull radius / TANK_R (the boss is drawn bigger)
+  hit: number; // white flash after a hit, fades out
 }
 
 // ------------------------------------------------------------------ bonus crates
@@ -213,7 +215,12 @@ const geo = {
   beam: new THREE.CylinderGeometry(0.3, 0.36, 1.8, 24, 1, true),
   halo: new THREE.CircleGeometry(0.5, 36),
   bubble: new THREE.SphereGeometry(0.62, 28, 16),
+  spike: new THREE.ConeGeometry(0.05, 0.13, 8),
+  band: new THREE.TorusGeometry(0.205, 0.022, 8, 28),
+  stud: new THREE.SphereGeometry(0.045, 10, 8),
+  sideGun: new THREE.CylinderGeometry(0.03, 0.035, 0.26, 10),
 };
+const goldMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3, metalness: 0.75, emissive: 0x3a2400, emissiveIntensity: 0.4 });
 
 const treadMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.9 });
 
@@ -250,7 +257,35 @@ function buildTank(info: TankInfo): TankView {
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
-  const view: TankView = { info, root, hull, turret, lastMarkX: NaN, lastMarkY: NaN, wasAlive: true, recoil: 0, materials: [bodyMat, topMat, barrelMat] };
+  const scale = tankRadius(info.kind) / TANK_R;
+  const view: TankView = { info, root, hull, turret, lastMarkX: NaN, lastMarkY: NaN, wasAlive: true, recoil: 0, materials: [bodyMat, topMat, barrelMat], scale, hit: 0 };
+  if (info.kind === 'boss') {
+    // a big toy general: golden crown on the turret, studs and two little side guns on the hull
+    const band = new THREE.Mesh(geo.band, goldMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.13;
+    turret.add(band);
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const sp = new THREE.Mesh(geo.spike, goldMat);
+      sp.position.set(Math.cos(a) * 0.2, 0.2, Math.sin(a) * 0.2);
+      turret.add(sp);
+    }
+    for (const [sx, sz] of [[0.36, 0.26], [0.36, -0.26], [-0.36, 0.26], [-0.36, -0.26]]) {
+      const st = new THREE.Mesh(geo.stud, goldMat);
+      st.position.set(sx, 0.37, sz);
+      hull.add(st);
+    }
+    for (const z of [-0.2, 0.2]) {
+      const g = new THREE.Mesh(geo.sideGun, barrelMat);
+      g.rotation.z = Math.PI / 2;
+      g.position.set(0.48, 0.3, z);
+      hull.add(g);
+    }
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  hull.scale.setScalar(scale);
+  turret.scale.setScalar(scale);
   if (info.kind === 'player') {
     const ring = new THREE.Mesh(geo.ring, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2;
@@ -528,6 +563,8 @@ export class Renderer {
       v.recoil = Math.max(0, v.recoil - dt * 4);
       v.turret.position.x = -Math.cos(t.turret) * v.recoil * 0.12;
       v.turret.position.z = -Math.sin(t.turret) * v.recoil * 0.12;
+      v.turret.position.y = 0.37 * v.scale;
+      this.tankGlow(v, t, dt);
       if (v.ring) {
         (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(this.time * 4) * 0.25;
       }
@@ -551,6 +588,61 @@ export class Renderer {
         }
       }
     }
+  }
+
+  /** Hit flash, the boss's charging glow and its angry smoke. */
+  private tankGlow(v: TankView, t: RTank, dt: number) {
+    const fx = t.fx ?? 0;
+    v.hit = Math.max(0, v.hit - dt * 4);
+    let glow = v.hit, col = 0xffffff;
+    if (fx & FLAG_CHARGING) {
+      glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
+      col = 0xff5a20;
+      if (Math.random() < 60 * dt) {
+        // sparks sucked into the hull
+        const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
+        this.glow.emit({ x: t.x + Math.cos(a) * d, y: 0.5, z: t.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.2, vz: -Math.sin(a) * d * 2.2, life: 0.4, s0: 0.03, s1: 0.1, c0: 0xffd060, c1: 0xff4010 });
+      }
+    } else if (fx & FLAG_RAGE) {
+      glow = Math.max(glow, 0.12 + Math.sin(this.time * 8) * 0.1);
+      col = v.hit > 0.2 ? 0xffffff : 0xff2010;
+      if (Math.random() < 12 * dt) {
+        this.smoke.emit({ x: t.x + (Math.random() - 0.5) * 0.6, y: 0.7, z: t.y + (Math.random() - 0.5) * 0.6, vy: 0.9, life: 0.9, s0: 0.1, s1: 0.35, c0: 0x2a2a2a, c1: 0x777777, drag: 1.5 });
+      }
+    }
+    if (glow <= 0.001 && !v.materials[0].emissiveIntensity) return;
+    for (const m of v.materials) {
+      m.emissive.setHex(col);
+      m.emissiveIntensity = glow;
+    }
+  }
+
+  /** A tough tank (the boss) took a hit. */
+  hurt(id: number, x: number, y: number) {
+    const v = this.tanks.get(id);
+    if (v) { v.hit = 1; v.recoil = 1; }
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.debris.emit({
+        x, y: 0.6, z: y, vx: Math.cos(a) * (1 + Math.random() * 2), vy: 2 + Math.random() * 3, vz: Math.sin(a) * (1 + Math.random() * 2),
+        life: 1 + Math.random() * 0.5, s0: 0.05 + Math.random() * 0.04, s1: 0.02, c0: Math.random() < 0.3 ? 0xf2c14e : ENEMY_COLORS.boss, c1: 0x2a2a2a, grav: 10, drag: 0.4,
+      });
+    }
+    this.spark(x, y);
+    this.shake = Math.max(this.shake, 0.15);
+  }
+
+  /** The boss's ring of shells: a flash and a shock wave. */
+  volley(x: number, y: number) {
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xffb070, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.08, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.5, size: 2.2 });
+    this.flash.position.set(x, 1.4, y);
+    this.flash.intensity = 30;
+    this.flashT = 0.2;
+    this.shake = Math.max(this.shake, 0.2);
   }
 
   private tankBuffs(v: TankView, t: RTank, visible: boolean, dt: number) {
@@ -779,18 +871,19 @@ export class Renderer {
 
   private deathMark(x: number, y: number, info: TankInfo) {
     const color = '#' + new THREE.Color(info.kind === 'player' ? info.color : ENEMY_COLORS[info.kind]).getHexString();
+    const big = tankRadius(info.kind) / TANK_R;
     this.floorMark((g) => {
       g.save();
       g.translate(x * PX, y * PX);
       g.rotate(0.2);
       g.strokeStyle = 'rgba(25,15,8,0.75)';
       g.lineCap = 'round';
-      g.lineWidth = 9;
-      const s = PX * 0.3;
+      g.lineWidth = 9 * big;
+      const s = PX * 0.3 * big;
       g.beginPath(); g.moveTo(-s, -s); g.lineTo(s, s); g.moveTo(s, -s); g.lineTo(-s, s); g.stroke();
       g.strokeStyle = color;
       g.globalAlpha = 0.5;
-      g.lineWidth = 4;
+      g.lineWidth = 4 * big;
       g.stroke();
       g.restore();
     });
@@ -868,6 +961,10 @@ export class Renderer {
     const v = new THREE.Vector3(x, h, y).project(this.camera);
     const r = this.canvas.getBoundingClientRect();
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  }
+
+  tankKind(id: number) {
+    return this.tanks.get(id)?.info.kind;
   }
 
   tankColor(id: number) {

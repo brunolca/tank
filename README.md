@@ -2,7 +2,7 @@
 
 Remake moderne de *Tanks* (Wii Play) en 3D (Three.js), multijoueur en ligne sur Cloudflare Workers + Durable Objects.
 
-- **Campagne coop** (1 à 4 joueurs) : 16 missions faites main, puis des missions générées à l'infini. 9 types de tanks ennemis (brun, gris, turquoise, jaune, rose, vert, violet, blanc invisible, noir). Vies partagées.
+- **Campagne coop** (1 à 4 joueurs) : 17 missions faites main, puis des missions générées à l'infini. 9 types de tanks ennemis (brun, gris, turquoise, jaune, rose, vert, violet, blanc invisible, noir) et un boss, le Colosse, toutes les 10 missions. Vies partagées.
 - **Versus** (2 à 4 joueurs) : chacun pour soi, premier à 5 manches.
 - Obus qui ricochent, mines, blocs de liège destructibles, trous.
 - Contrôles : clavier + souris, manette, tactile.

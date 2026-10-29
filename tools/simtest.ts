@@ -1,4 +1,4 @@
-import { getMission, LEVELS } from '../src/shared/levels';
+import { getMission, isBossMission, LEVELS } from '../src/shared/levels';
 import { Game } from '../src/shared/sim';
 import { W, H } from '../src/shared/constants';
 
@@ -7,7 +7,7 @@ for (let i = 0; i < LEVELS.length; i++) {
   if (LEVELS[i].map.length !== H || bad.length) { console.error('BAD MAP', i + 1, LEVELS[i].map.length, bad); process.exitCode = 1; }
 }
 let t0 = Date.now();
-for (let mission = 1; mission <= LEVELS.length + 8; mission++) {
+for (let mission = 1; mission <= LEVELS.length + 13; mission++) {
   const lvl = getMission(mission);
   if (!lvl.spawns.length || !lvl.enemies.length) { console.error(`M${mission}: no spawn or no enemy`); process.exitCode = 1; }
   const g = new Game(lvl.tiles);
@@ -65,4 +65,35 @@ console.log('total', Date.now() - t0, 'ms');
     if (!fails()) console.log('bonus OK');
   }
   function fails() { return process.exitCode === 1; }
+}
+
+// boss: soaks hits, gets angry at half health, fires a ring of shells, then goes down
+{
+  const fail = (m: string) => { console.error('BOSS:', m); process.exitCode = 1; };
+  for (const mission of [10, 20, 30]) {
+    const lvl = getMission(mission);
+    if (!isBossMission(mission) || !lvl.enemies.some((e) => e.kind === 'boss')) fail(`la mission ${mission} n’a pas de boss`);
+  }
+  const lvl = getMission(10);
+  const g = new Game(lvl.tiles);
+  const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
+  const be = lvl.enemies.find((e) => e.kind === 'boss')!;
+  const boss = g.addTank('boss', 99, be.x, be.y, 0);
+  g.setHp(boss, 6);
+  g.frozen = false;
+  let killed = false;
+  g.onKill = (v) => { if (v === boss) killed = true; };
+  for (let i = 0; i < 2; i++) { g.killTank(boss, p); boss.buffs.invuln = 0; }
+  if (boss.hp !== 4 || !boss.alive) fail(`PV après 2 coups : ${boss.hp}`);
+  g.killTank(boss, p); boss.buffs.invuln = 0;
+  if (!boss.boss?.rage || !g.events.some((e) => e[0] === 'rage')) fail('pas de colère à mi-vie');
+  g.events = [];
+  boss.boss!.volleyT = 0;
+  const before = g.bullets.length;
+  for (let i = 0; i < 40; i++) g.step(new Map());
+  if (!g.events.some((e) => e[0] === 'volley') || g.bullets.length - before < 6) fail('pas de salve circulaire');
+  if (!(g.netTanks().find((t) => t[0] === boss.id)?.[6])) fail('PV absents de l’instantané');
+  for (let i = 0; i < 10 && boss.alive; i++) { g.killTank(boss, p); boss.buffs.invuln = 0; }
+  if (boss.alive || !killed) fail('le boss ne tombe pas');
+  if (process.exitCode !== 1) console.log('boss OK');
 }

@@ -130,6 +130,35 @@ export const sfx = {
     noise(t, 0.35, 5000, 1.5, 0.35, 'highpass');
     tone(t, 0.3, 1400, 350, 0.12, 'square');
   },
+  /** The boss takes a hit: a heavy metal clang. */
+  bossHit() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.35, 320, 290, 0.22, 'square');
+    tone(t, 0.5, 480, 470, 0.12, 'triangle');
+    noise(t, 0.2, 4000, 2, 0.3, 'bandpass', 1500);
+  },
+  /** Rising whine while the boss charges its ring of shells. */
+  bossCharge() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.9, 180, 900, 0.1, 'sawtooth');
+    tone(t, 0.9, 182, 905, 0.06, 'square');
+  },
+  volley() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.4, 3000, 0.6, 0.7, 'lowpass', 200);
+    tone(t, 0.3, 150, 50, 0.6, 'triangle');
+  },
+  /** Half health: the boss growls and speeds up. */
+  rage() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 1.1, 70, 45, 0.5, 'sawtooth');
+    tone(t + 0.05, 1.0, 105, 60, 0.3, 'square');
+    noise(t, 1.0, 500, 0.7, 0.5, 'lowpass', 80);
+  },
   click() {
     if (!ctx) return;
     tone(ctx.currentTime, 0.04, 1200, 1000, 0.08, 'triangle');
@@ -145,6 +174,9 @@ let intensity = 0;
 
 const BASS = [55, 55, 82.4, 55, 73.4, 73.4, 65.4, 61.7];
 const LEAD = [440, 0, 523, 0, 587, 523, 440, 0, 392, 0, 440, 0, 523, 494, 440, 0];
+// boss fights (intensity 2): faster, lower, more menacing
+const BOSS_BASS = [41.2, 41.2, 43.7, 41.2, 49, 46.2, 43.7, 36.7];
+const BOSS_LEAD = [330, 0, 311, 330, 0, 392, 370, 0, 330, 0, 311, 330, 466, 0, 440, 0];
 
 export function setMusicIntensity(v: number) {
   intensity = v;
@@ -171,18 +203,22 @@ export const isMusicOn = () => musicOn;
 
 function scheduleMusic() {
   if (!ctx) return;
-  const spb = 60 / 132 / 2; // eighth notes at 132 bpm
+  const boss = intensity >= 2;
+  const spb = 60 / (boss ? 150 : 132) / 2; // eighth notes at 132 bpm (150 for the boss)
+  const bass = boss ? BOSS_BASS : BASS, lead = boss ? BOSS_LEAD : LEAD;
   while (nextNote < ctx.currentTime + 0.2) {
     const t = nextNote;
     const s = step % 16;
     // snare march pattern
-    if (s % 4 === 2 || (intensity > 0 && s % 2 === 1 && Math.random() < 0.3)) {
+    if (s % 4 === 2 || (intensity > 0 && s % 2 === 1 && Math.random() < (boss ? 0.5 : 0.3))) {
       musicNoise(t, 0.09, 2500, 0.35);
     }
-    if (s % 4 === 0) musicTone(t, 0.12, 120, 45, 0.6, 'sine');
-    musicTone(t, spb * 0.9, BASS[(step >> 1) % BASS.length], BASS[(step >> 1) % BASS.length], 0.22, 'triangle');
+    if (s % 4 === 0 || (boss && s % 4 === 3)) musicTone(t, 0.12, 120, 45, 0.6, 'sine');
+    const b = bass[(step >> 1) % bass.length];
+    musicTone(t, spb * 0.9, b, b, 0.22, 'triangle');
+    if (boss) musicTone(t, spb * 0.5, b * 2, b * 2, 0.08, 'sawtooth');
     if (intensity > 0) {
-      const f = LEAD[s];
+      const f = lead[s];
       if (f) musicTone(t, spb * 0.8, f, f, 0.06, 'square');
     }
     nextNote += spb;
