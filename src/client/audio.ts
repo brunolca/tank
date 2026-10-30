@@ -168,6 +168,13 @@ export const sfx = {
     tone(t + 0.05, 1.0, 105, 60, 0.3, 'square');
     noise(t, 1.0, 500, 0.7, 0.5, 'lowpass', 80);
   },
+  /** Night: an enemy has spotted you (a little « hein ?! »). */
+  alert() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.09, 520, 560, 0.12, 'square');
+    tone(t + 0.09, 0.16, 780, 1050, 0.12, 'square');
+  },
   click() {
     if (!ctx) return;
     tone(ctx.currentTime, 0.04, 1200, 1000, 0.08, 'triangle');

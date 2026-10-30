@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
@@ -157,7 +157,32 @@ interface TankView {
   bubble?: THREE.Mesh;
   scale: number; // hull radius / TANK_R (the boss is drawn bigger)
   hit: number; // white flash after a hit, fades out
+  lamp: THREE.Mesh; // little headlamp on the turret, lit at night
+  lampMat: THREE.MeshBasicMaterial;
+  alert?: THREE.Sprite; // « ! » above an enemy that has spotted someone (night)
+  alertT: number;
 }
+
+/** Red « ! » bubble shown above enemies that have spotted a foe at night. */
+function alertTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#e2453c';
+  g.beginPath(); g.arc(32, 30, 24, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.moveTo(24, 48); g.lineTo(32, 62); g.lineTo(40, 48); g.fill();
+  g.lineWidth = 4; g.strokeStyle = '#fff4e0';
+  g.beginPath(); g.arc(32, 30, 24, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#fff4e0';
+  g.font = '900 34px Rubik, system-ui, sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('!', 32, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const alertMat = new THREE.SpriteMaterial({ map: alertTexture(), depthWrite: false, depthTest: false, transparent: true });
+const LAMP_PLAYER = 0xfff1c8, LAMP_ENEMY = 0xffb050, LAMP_ALERT = 0xff3020;
 
 // ------------------------------------------------------------------ bonus crates
 
@@ -247,6 +272,7 @@ const geo = {
   band: new THREE.TorusGeometry(0.205, 0.022, 8, 28),
   stud: new THREE.SphereGeometry(0.045, 10, 8),
   sideGun: new THREE.CylinderGeometry(0.03, 0.035, 0.26, 10),
+  lamp: new THREE.SphereGeometry(0.055, 12, 8),
 };
 const goldMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3, metalness: 0.75, emissive: 0x3a2400, emissiveIntensity: 0.4 });
 
@@ -280,13 +306,25 @@ function buildTank(info: TankInfo): TankView {
   const muzzle = new THREE.Mesh(geo.muzzle, barrelMat);
   muzzle.rotation.z = Math.PI / 2;
   muzzle.position.set(0.56, 0.09, 0);
-  turret.add(dome, cap, barrel, muzzle);
+  const lampMat = new THREE.MeshBasicMaterial({ color: info.kind === 'player' ? LAMP_PLAYER : LAMP_ENEMY });
+  const lamp = new THREE.Mesh(geo.lamp, lampMat);
+  lamp.position.set(0.2, 0.1, 0.12);
+  lamp.visible = false;
+  turret.add(dome, cap, barrel, muzzle, lamp);
   root.add(hull, turret);
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
   const scale = tankRadius(info.kind) / TANK_R;
-  const view: TankView = { info, root, hull, turret, lastMarkX: NaN, lastMarkY: NaN, wasAlive: true, recoil: 0, materials: [bodyMat, topMat, barrelMat], scale, hit: 0 };
+  const view: TankView = { info, root, hull, turret, lastMarkX: NaN, lastMarkY: NaN, wasAlive: true, recoil: 0, materials: [bodyMat, topMat, barrelMat], scale, hit: 0, lamp, lampMat, alertT: 0 };
+  if (info.kind !== 'player') {
+    const alert = new THREE.Sprite(alertMat);
+    alert.position.y = 0.95 * scale + 0.35;
+    alert.visible = false;
+    alert.renderOrder = 5;
+    root.add(alert);
+    view.alert = alert;
+  }
   if (info.kind === 'boss') {
     // a big toy general: golden crown on the turret, studs and two little side guns on the hull
     const band = new THREE.Mesh(geo.band, goldMat);
@@ -368,6 +406,17 @@ export class Renderer {
   private corkMat = new THREE.MeshStandardMaterial({ map: corkTexture(), roughness: 0.95 });
   private raycaster = new THREE.Raycaster();
   private aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.45);
+  // night: the daylight fades out, tanks drive with headlights and shells light up the walls
+  private hemi: THREE.HemisphereLight;
+  private sun: THREE.DirectionalLight;
+  private rim: THREE.DirectionalLight;
+  private heads: THREE.SpotLight[] = [];
+  private shellLights: THREE.PointLight[] = [];
+  private night = 0;
+  private nightTarget = 0;
+  private nightApplied = -1;
+  private nightStart = 0;
+  private tmpColor = new THREE.Color();
   time = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -380,9 +429,9 @@ export class Renderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.5, 200);
 
-    const hemi = new THREE.HemisphereLight(0xfff3e0, 0x5a4a3c, 1.1);
+    const hemi = (this.hemi = new THREE.HemisphereLight(0xfff3e0, 0x5a4a3c, 1.1));
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff0d8, 2.4);
+    const sun = (this.sun = new THREE.DirectionalLight(0xfff0d8, 2.4));
     sun.position.set(W / 2 - 7, 20, H / 2 - 9);
     sun.target.position.set(W / 2, 0, H / 2);
     sun.castShadow = true;
@@ -393,12 +442,25 @@ export class Renderer {
     sun.shadow.normalBias = 0.02;
     sun.shadow.radius = 4;
     this.scene.add(sun, sun.target);
-    const rim = new THREE.DirectionalLight(0x9ec5ff, 0.5);
+    const rim = (this.rim = new THREE.DirectionalLight(0x9ec5ff, 0.5));
     rim.position.set(W / 2 + 10, 8, H / 2 + 12);
     this.scene.add(rim);
 
     this.flash = new THREE.PointLight(0xffa040, 0, 7, 1.6);
     this.scene.add(this.flash);
+    // a fixed pool of night lights (hidden by day) so the shaders compile once per level, not per shot
+    for (let i = 0; i < 4; i++) {
+      const sp = new THREE.SpotLight(0xffe9c0, 0, 9, 0.48, 0.65, 1.3);
+      sp.visible = false;
+      this.scene.add(sp, sp.target);
+      this.heads.push(sp);
+    }
+    for (let i = 0; i < 3; i++) {
+      const pl = new THREE.PointLight(0xffd9a0, 0, 3, 1.5);
+      pl.visible = false;
+      this.scene.add(pl);
+      this.shellLights.push(pl);
+    }
 
     // table under the arena
     const table = new THREE.Mesh(
@@ -465,7 +527,50 @@ export class Renderer {
 
   // ---------------------------------------------------------------- level
 
+  /** Night falls in a little over a second; daylight comes back at once (on the next level). */
+  setNight(on: boolean) {
+    this.nightTarget = on ? 1 : 0;
+    this.nightStart = performance.now() - this.night * 1200;
+    if (!on) this.night = 0;
+    for (const l of [...this.heads, ...this.shellLights]) l.visible = on;
+  }
+  get isNight() { return this.nightTarget > 0; }
+
+  private applyNight() {
+    const k = this.night;
+    if (Math.abs(k - this.nightApplied) < 0.002) return;
+    this.nightApplied = k;
+    const mix = (a: number, b: number) => new THREE.Color(a).lerp(new THREE.Color(b), k);
+    this.hemi.intensity = 1.1 + (0.18 - 1.1) * k;
+    this.hemi.color.copy(mix(0xfff3e0, 0x6f86c8));
+    this.hemi.groundColor.copy(mix(0x5a4a3c, 0x16142a));
+    this.sun.intensity = 2.4 + (0.32 - 2.4) * k;
+    this.sun.color.copy(mix(0xfff0d8, 0x8aa4ff));
+    this.rim.intensity = 0.5 + (0.28 - 0.5) * k;
+    for (const v of this.tanks.values()) v.lamp.visible = k > 0.05;
+  }
+
+  /** Night: headlights for the players' tanks (they follow the turret, so you light where you aim). */
+  private headlights(list: RTank[]) {
+    let n = 0;
+    if (this.night > 0) {
+      for (const t of list) {
+        if (n >= this.heads.length) break;
+        const v = this.tanks.get(t.id);
+        if (!v || !t.alive || v.info.kind !== 'player') continue;
+        const sp = this.heads[n++];
+        const dx = Math.cos(t.turret), dy = Math.sin(t.turret);
+        sp.position.set(t.x + dx * 0.3, 0.62, t.y + dy * 0.3);
+        sp.target.position.set(t.x + dx * 4.5, 0, t.y + dy * 4.5);
+        sp.color.setHex(0xffe9c0).lerp(this.tmpColor.setHex(v.info.color), 0.15);
+        sp.intensity = 15 * this.night;
+      }
+    }
+    for (let i = n; i < this.heads.length; i++) this.heads[i].intensity = 0;
+  }
+
   setLevel(tiles: number[], infos: TankInfo[]) {
+    this.nightApplied = -1; // the new tanks' lamps follow the current light
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
     for (const t of this.tanks.values()) this.scene.remove(t.root);
@@ -668,6 +773,7 @@ export class Renderer {
         (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(this.time * 4) * 0.25;
       }
       this.tankBuffs(v, t, visible, dt);
+      this.tankAlert(v, t, dt);
       // tread marks
       if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
       const d = Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY);
@@ -687,6 +793,21 @@ export class Renderer {
         }
       }
     }
+    this.headlights(list);
+  }
+
+  /** Night: the enemy's lamp turns red and a « ! » pops above it while it has someone in sight. */
+  private tankAlert(v: TankView, t: RTank, dt: number) {
+    if (!v.alert) return;
+    const on = this.night > 0.3 && !!((t.fx ?? 0) & FLAG_ALERT);
+    if (on && !v.alert.visible) v.alertT = 0;
+    v.alert.visible = on;
+    v.lampMat.color.setHex(on ? LAMP_ALERT : LAMP_ENEMY);
+    if (!on) return;
+    v.alertT += dt;
+    const u = Math.min(1, v.alertT / 0.25);
+    const s = 0.62 * (u < 1 ? Math.sin(u * Math.PI * 0.75) * 1.25 : 1) * (1 + Math.sin(this.time * 6) * 0.04);
+    v.alert.scale.set(s, s, s);
   }
 
   /** Hit flash, the boss's charging glow and its angry smoke. */
@@ -852,7 +973,16 @@ export class Renderer {
         if (Math.random() < 0.8) this.smoke.emit({ x: b.x - b.vx * back, y: 0.45, z: b.y - b.vy * back, vy: 0.2, life: 0.9, s0: 0.08, s1: 0.26, c0: 0xcfcfcf, c1: 0xf2f2f2, drag: 1.5 });
       } else if (Math.random() < 60 * dt) {
         this.smoke.emit({ x: b.x, y: 0.45, z: b.y, life: 0.35, s0: 0.06, s1: 0.02, c0: 0xffffff, c1: 0xe8e2d8 });
+        if (this.night > 0.3) this.glow.emit({ x: b.x, y: 0.45, z: b.y, life: 0.25, s0: 0.07, s1: 0.01, c0: 0xffe0a0, c1: 0xff7020 });
       }
+    }
+    // at night the first few shells carry a little light along the walls
+    for (let i = 0; i < this.shellLights.length; i++) {
+      const pl = this.shellLights[i], b = list[i];
+      if (!b || this.night <= 0) { pl.intensity = 0; continue; }
+      pl.position.set(b.x, 0.5, b.y);
+      pl.color.setHex(b.rocket ? 0xff9a40 : 0xffd9a0);
+      pl.intensity = 2.6 * this.night;
     }
     for (const [id, m] of this.bullets) {
       if (!seen.has(id)) { this.scene.remove(m); this.bullets.delete(id); }
@@ -895,6 +1025,12 @@ export class Renderer {
   muzzle(x: number, y: number, ang: number, rocket: boolean, shooterId: number) {
     const v = this.tanks.get(shooterId);
     if (v) v.recoil = 1;
+    if (this.night > 0.3 && this.flashT <= 0) {
+      // the muzzle flash lights up the night (and gives the shooter away)
+      this.flash.position.set(x, 0.8, y);
+      this.flash.intensity = 9;
+      this.flashT = 0.09;
+    }
     const dx = Math.cos(ang), dy = Math.sin(ang);
     for (let i = 0; i < 8; i++) {
       const s = 1 + Math.random() * 2.5;
@@ -996,6 +1132,16 @@ export class Renderer {
     this.smoke.update(dt);
     this.debris.update(dt);
     this.animatePortals(dt);
+    if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
+    this.applyNight();
+    if (this.night > 0.5 && Math.random() < 5 * dt) {
+      // fireflies drifting over the table
+      this.glow.emit({
+        x: 1 + Math.random() * (W - 2), y: 0.3 + Math.random() * 0.7, z: 1 + Math.random() * (H - 2),
+        vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.3) * 0.2, vz: (Math.random() - 0.5) * 0.5,
+        life: 2.5 + Math.random() * 1.5, s0: 0.05, s1: 0.01, c0: 0xf0ff9a, c1: 0x5cff8a, drag: 0.1,
+      });
+    }
     for (let i = this.shocks.length - 1; i >= 0; i--) {
       const s = this.shocks[i];
       s.t += dt;

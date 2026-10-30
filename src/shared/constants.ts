@@ -103,6 +103,14 @@ export const PORTAL_COLORS = [0x4fc3ff, 0xff5fd2];
 /** Tanks bigger than this (the boss) are too wide to squeeze through a portal. */
 export const PORTAL_MAX_R = 0.45;
 
+// ------------------------------------------------------------------ night
+/** At night the AI only makes out foes this close (tiles), unless they just gave themselves away by firing. */
+export const NIGHT_SIGHT = 4.5;
+/** Seconds a muzzle flash keeps a tank visible to everyone at night. */
+export const NIGHT_REVEAL = 1.6;
+/** Flags bit: this enemy has spotted a foe (the client shows a « ! » at night). */
+export const FLAG_ALERT = 256;
+
 export const PLAYER_COLORS = [0x3d7bff, 0xff4d5e, 0x2fd07a, 0xffa63d, 0x26c6f0, 0xc66bff];
 
 export function isSolidTank(t: number) {

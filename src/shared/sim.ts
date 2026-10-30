@@ -1,6 +1,6 @@
 import {
   BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
-  FAN_SPREAD, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
+  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
   TankKind, TankSpec, Tile, W, isPortal, isSolidTank,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -27,6 +27,8 @@ export interface Tank {
   hp: number;
   maxHp: number;
   boss?: BossState;
+  reveal: number; // night: seconds left during which the last muzzle flash gives this tank away
+  alert: boolean; // AI: a foe is in sight right now
 }
 
 /** The boss: a radial volley every few seconds (announced by a glow), and a rage mode at half health. */
@@ -97,7 +99,15 @@ interface AIState {
   locked: boolean;
   prefDist: number;
   goal?: number; // a cell to drive to (the demo sends tanks through portals), forgotten after a portal jump
+  seenX: number; // night: where a foe was last seen, remembered for seenT seconds
+  seenY: number;
+  seenT: number;
+  prowlX: number; // night: a spot to prowl to when nobody is in sight
+  prowlY: number;
+  prowlT: number;
 }
+
+type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
   ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5,
@@ -139,6 +149,8 @@ export class Game {
   bonusNext = 8;
   bonusEvery: [number, number] = [13, 19];
   bonusCap = 2;
+  /** Night mission: the AI only sees foes close by, or those whose muzzle flash just lit up. */
+  night = false;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -155,7 +167,7 @@ export class Game {
       body: team === 0 ? 0 : Math.PI, turret: team === 0 ? 0 : Math.PI,
       alive: true, fireCd: team === 0 ? 0 : 2 + Math.random() * 1.5, mineCd: 0, spec,
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
-      r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1,
+      r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false,
     };
     if (kind === 'boss') t.boss = { volleyT: 5, warn: 0, spin: 0, rage: false };
     if (kind !== 'player') this.enableAI(t);
@@ -172,6 +184,7 @@ export class Game {
         think: Math.random() * 0.3, aim: t.turret, aimValid: false, wanderAim: t.turret, wanderT: 0,
         path: [], pathT: 0, dodgeX: 0, dodgeY: 0, dodgeT: 0, stuckT: 0, lastX: x, lastY: y,
         mineCd: 2 + Math.random() * 3, hesitate: 0, locked: false, prefDist: PREF_DIST[kind] ?? 5,
+        seenX: x, seenY: y, seenT: 0, prowlX: x, prowlY: y, prowlT: 0,
       };
     }
   }
@@ -199,6 +212,7 @@ export class Game {
       if (bf.turbo > 0) bf.turbo -= DT;
       if (bf.fan > 0) bf.fan -= DT;
       if (bf.invuln > 0) bf.invuln -= DT;
+      if (t.reveal > 0) t.reveal -= DT;
       if (t.boss) this.updateBoss(t);
       if (t.ai) {
         this.updateAI(t);
@@ -345,6 +359,7 @@ export class Game {
   tryFire(t: Tank): boolean {
     if (t.fireCd > 0 || this.ownBullets(t) >= t.spec.maxBullets) return false;
     t.fireCd = t.spec.fireCd;
+    t.reveal = NIGHT_REVEAL;
     const dx = Math.cos(t.turret), dy = Math.sin(t.turret);
     const tip = t.r + 0.22;
     const x = t.x + dx * tip, y = t.y + dy * tip;
@@ -550,7 +565,7 @@ export class Game {
     const b = t.buffs;
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
-      | (t.boss && t.boss.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0);
+      | (t.boss && t.boss.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (this.night && t.alert ? FLAG_ALERT : 0);
   }
   netBonuses(): NetBonus[] {
     return this.bonuses.map((c) => [c.id, c.x, c.y, BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
@@ -588,10 +603,17 @@ export class Game {
     return { len: acc };
   }
 
+  /** Can tank t make out tank o? Always by day; at night only up close, or right after o fired. */
+  canSee(t: Tank, o: Tank) {
+    if (!this.night || o.team === t.team || o.reveal > 0) return true;
+    const d = NIGHT_SIGHT + o.r;
+    return (o.x - t.x) ** 2 + (o.y - t.y) ** 2 < d * d;
+  }
+
   private nearestFoe(t: Tank): Tank | undefined {
     let best: Tank | undefined, bd = Infinity;
     for (const o of this.tanks) {
-      if (!o.alive || o.team === t.team) continue;
+      if (!o.alive || o.team === t.team || !this.canSee(t, o)) continue;
       const d = Math.hypot(o.x - t.x, o.y - t.y);
       if (d < bd) { bd = d; best = o; }
     }
@@ -605,7 +627,12 @@ export class Game {
     ai.mineCd -= DT;
     ai.hesitate -= DT;
     const foe = this.nearestFoe(t);
-    if (!foe) return;
+    t.alert = !!foe;
+    if (!foe) {
+      if (this.night && this.tanks.some((o) => o.alive && o.team !== t.team)) this.aiProwl(t);
+      return;
+    }
+    ai.seenX = foe.x; ai.seenY = foe.y; ai.seenT = 5;
     // the boss holds still (and holds its fire) while its volley charges
     if (t.boss && t.boss.warn > 0) { t.turret += DT * 2.5; return; }
 
@@ -640,7 +667,7 @@ export class Game {
     if (t.fireCd <= 0 && ai.hesitate <= 0 && this.ownBullets(t) < spec.maxBullets) {
       const aligned = spec.skill === 0 || Math.abs(angDiff(t.turret, ai.aim)) < 0.06;
       const res = aligned ? this.traceShot(t, t.turret, spec.bounces) : undefined;
-      if (res?.hit && res.hit.team !== t.team) {
+      if (res?.hit && res.hit.team !== t.team && this.canSee(t, res.hit)) {
         if (!ai.locked) {
           // spotted a shot: take a human-ish moment before pulling the trigger
           ai.locked = true;
@@ -661,11 +688,41 @@ export class Game {
     if (spec.speed > 0) this.aiMove(t, foe);
   }
 
+  /** Night, nobody in sight: sweep the turret and creep toward the last sighting, or prowl around. */
+  private aiProwl(t: Tank) {
+    const ai = t.ai!;
+    if (t.boss && t.boss.warn > 0) { t.turret += DT * 2.5; return; }
+    ai.locked = false;
+    ai.aimValid = false;
+    ai.seenT -= DT;
+    ai.prowlT -= DT;
+    let spot: Pt;
+    if (ai.seenT > 0) spot = { x: ai.seenX, y: ai.seenY };
+    else {
+      if (ai.prowlT <= 0) {
+        // it can hear engines somewhere out there: head roughly toward a random foe
+        const foes = this.tanks.filter((o) => o.alive && o.team !== t.team);
+        const f = foes[Math.floor(Math.random() * foes.length)];
+        ai.prowlT = 3 + Math.random() * 3;
+        ai.prowlX = Math.max(1, Math.min(W - 1, f.x + (Math.random() - 0.5) * 8));
+        ai.prowlY = Math.max(1, Math.min(H - 1, f.y + (Math.random() - 0.5) * 8));
+      }
+      spot = { x: ai.prowlX, y: ai.prowlY };
+    }
+    ai.wanderT -= DT;
+    if (ai.wanderT <= 0) {
+      ai.wanderT = 0.8 + Math.random() * 1.4;
+      ai.wanderAim = Math.atan2(spot.y - t.y, spot.x - t.x) + (Math.random() - 0.5) * 2.4;
+    }
+    t.turret = rotateToward(t.turret, ai.wanderAim, t.spec.turretSpeed * 0.6 * DT);
+    if (t.spec.speed > 0) this.aiMove(t, spot);
+  }
+
   private aiThinkAim(t: Tank, foe: Tank) {
     const ai = t.ai!;
     const spec = t.spec;
     if (spec.skill === 0) { ai.aimValid = false; return; }
-    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team);
+    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team && this.canSee(t, o));
     let bestAng = 0, bestScore = -Infinity;
     const tryAng = (ang: number, bias: number) => {
       const res = this.traceShot(t, ang, spec.bounces);
@@ -693,7 +750,7 @@ export class Game {
     }
   }
 
-  private aiMove(t: Tank, foe: Tank) {
+  private aiMove(t: Tank, foe: Pt) {
     const ai = t.ai!;
     // threats: incoming bullets
     let ax = 0, ay = 0, threat = false;
@@ -747,7 +804,7 @@ export class Game {
     }
   }
 
-  private aiPlan(t: Tank, foe: Tank) {
+  private aiPlan(t: Tank, foe: Pt) {
     const ai = t.ai!;
     const start = Math.floor(t.y) * W + Math.floor(t.x);
     const blocked = new Uint8Array(W * H);

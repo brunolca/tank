@@ -252,6 +252,7 @@ export class Room extends DurableObject<Env> {
       this.enemyIndexByTank.set(t.id, idx);
     });
     game.bonusOn = true;
+    game.night = !!this.level.night;
     if (this.mode === 'versus') { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
     game.onKill = (victim, killer) => this.onKill(victim, killer);
     this.game = game;
@@ -271,6 +272,7 @@ export class Room extends DurableObject<Env> {
       tanks: this.game.tankInfos(),
       lives: this.lives,
       tick: this.game.tick,
+      night: this.level.night ? 1 : undefined,
     });
     this.send(ws, this.phaseMsg());
   }

@@ -322,6 +322,9 @@ body.demo #boss-bar { top: 18px; }
 @keyframes boss-rage { to { box-shadow: 0 0 26px rgba(255, 60, 40, 0.55); } }
 #banner.boss .b-kicker { color: #ff5d4c; }
 #banner.boss .b-title { color: #f2c14e; }
+#banner.night .b-kicker { color: #9db4ff; }
+#banner.night .b-kicker::before { content: '☾ '; }
+#banner.night .b-title { color: #e8eeff; text-shadow: 0 0 24px rgba(140, 170, 255, 0.55); }
 
 /* banner */
 #banner {

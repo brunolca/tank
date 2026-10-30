@@ -32,7 +32,7 @@ export interface Input {
 }
 
 // tank: [id, x, y, body, turret, flags, hp?]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan),
-// 64 boss charging a volley, 128 boss enraged. hp only for tanks with several hit points.
+// 64 boss charging a volley, 128 boss enraged, 256 enemy has spotted a foe (night). hp only for tanks with several hit points.
 export type NetTank = [number, number, number, number, number, number, number?];
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
@@ -76,6 +76,7 @@ export type ServerMsg =
       tanks: TankInfo[];
       lives: number;
       tick: number;
+      night?: 1; // night mission (older clients just play it in daylight)
     }
   | { t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number> }
   | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[] }

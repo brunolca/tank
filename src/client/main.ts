@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import { getMission } from '../shared/levels';
 import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
@@ -242,6 +242,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   currentMission = msg.mission;
   currentLevelName = msg.name;
   renderer.setLevel(tiles, msg.tanks);
+  renderer.setNight(!!msg.night);
   show('game');
   setMusicIntensity(0);
   $('#hud-mission').innerHTML = msg.mode === 'coop'
@@ -253,13 +254,14 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (msg.mode === 'coop') {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
     if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
-    else banner(`Mission ${msg.mission}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro');
+    else banner(`Mission ${msg.mission}${msg.night ? ' · Nuit' : ''}`, msg.name, `Tanks ennemis : ${enemies.length}`, msg.night ? 'intro night' : 'intro');
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(ENEMY_COLORS[k])}">${SPECS[k].label}</span>`).join('')}</div>`;
   } else {
-    banner(`Manche ${msg.mission}`, 'Versus', 'Le dernier tank debout gagne la manche', 'intro');
+    banner(`Manche ${msg.mission}${msg.night ? ' · Nuit' : ''}`, 'Versus', 'Le dernier tank debout gagne la manche', msg.night ? 'intro night' : 'intro');
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
+  else if (msg.night) setTimeout(() => toast(msg.mode === 'coop' ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
@@ -562,6 +564,8 @@ function renderBuffs(flags: number) {
 let bossFight = false;
 let bossKey = '';
 const charging = new Set<number>();
+const alerted = new Set<number>();
+let lastAlert = 0;
 /** Health bar of the toughest enemy on the table, and the warning whine when the boss charges a volley. */
 function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: number) => number) {
   let boss: RTank | undefined;
@@ -571,6 +575,9 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
     if (on && !charging.has(t.id) && online) sfx.bossCharge();
     if (on) charging.add(t.id); else charging.delete(t.id);
+    const seen = !!((t.fx ?? 0) & FLAG_ALERT) && t.alive;
+    if (seen && !alerted.has(t.id) && online && performance.now() - lastAlert > 400) { sfx.alert(); lastAlert = performance.now(); }
+    if (seen) alerted.add(t.id); else alerted.delete(t.id);
   }
   if (!boss || screen !== 'game') {
     if (bossKey) { bar.hidden = true; bar.classList.remove('rage'); bossKey = ''; }
@@ -679,7 +686,7 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -688,6 +695,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
   const lvl = getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
   const g = new Game(lvl.tiles);
   g.bonusOn = true;
+  // the home-screen background sometimes plays in the dark, as a teaser
+  g.night = opts.night ?? (!!lvl.night || (!opts.heroes && opts.mission === undefined && Math.random() < 0.25));
   if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
   if (opts.heroes) {
     // player-coloured tanks driven by the AI: used by the gameplay videos
@@ -708,6 +717,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   attractEnd = 0;
   attractPrev.clear();
   renderer.setLevel(g.tiles, g.tankInfos());
+  renderer.setNight(g.night);
 }
 function stopAttract() {
   attract = undefined;
@@ -942,9 +952,10 @@ if (params.has('demo')) {
   document.body.classList.add('demo');
   const demo = {
     meta: META,
-    play(mission: number, heroes = true, rich = false, bossHp?: number) {
+    /** `night`: force the mission into the dark (true) or daylight (false); its own setting when omitted. */
+    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean) {
       attract = undefined;
-      startAttract({ mission, heroes, rich, bossHp });
+      startAttract({ mission, heroes, rich, bossHp, night });
     },
     /** Land a hit on the boss (to show its health bar and its anger on camera). */
     hitBoss() {

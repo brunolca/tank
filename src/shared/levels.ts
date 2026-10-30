@@ -11,6 +11,7 @@ const ENEMY_CHARS: Record<string, TankKind> = {
 export interface LevelDef {
   name: string;
   map: string[];
+  night?: boolean; // dark table: the AI only sees up close (or a muzzle flash), players drive with headlights
 }
 
 export const LEVELS: LevelDef[] = [
@@ -410,6 +411,29 @@ export const LEVELS: LevelDef[] = [
       '......................',
     ],
   },
+  {
+    name: 'Couvre-feu',
+    night: true,
+    map: [
+      '......................',
+      '.......#......#.......',
+      '..1....#..b...#....p..',
+      '.......#......#.......',
+      '..2....o......o.......',
+      '.......o..HH..o.......',
+      '..........HH..........',
+      '####..............####',
+      '......___....___..a...',
+      '####..............####',
+      '..........HH..........',
+      '.......o..HH..o.......',
+      '.......o......o.......',
+      '.......#......#.......',
+      '.......#..y...#....a..',
+      '.......#......#.......',
+      '......................',
+    ],
+  },
 ];
 
 export interface ParsedLevel {
@@ -417,6 +441,7 @@ export interface ParsedLevel {
   tiles: number[];
   spawns: [number, number][];
   enemies: { kind: TankKind; x: number; y: number }[];
+  night?: boolean;
 }
 
 export function parseLevel(def: LevelDef): ParsedLevel {
@@ -438,7 +463,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies };
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
@@ -516,7 +541,9 @@ export function proceduralLevel(mission: number): ParsedLevel {
         break;
       }
     }
-    return { name: `Mission spéciale ${mission}`, tiles, spawns, enemies };
+    // about a third of the later generated missions are played at night (own random stream again)
+    const night = mission > 20 && rng(mission * 31337 + 5)() < 0.32;
+    return { name: night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`, tiles, spawns, enemies, night };
   }
   return parseLevel(LEVELS[0]);
 }
@@ -599,6 +626,8 @@ function bossLevel(mission: number): ParsedLevel {
   const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
   const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
   lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });
+  // every other boss fight from the 30th happens at night
+  if (mission >= 30 && (mission / 10) % 2 === 1) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
   return lvl;
 }
 
@@ -615,6 +644,7 @@ export function versusArena(round: number): ParsedLevel {
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];
   base.spawns = corners.map(([cx, cy]) => nearestFree(base.tiles, cx, cy));
+  base.night = round % 4 === 3; // every fourth round is fought in the dark
   return base;
 }
 

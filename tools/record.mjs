@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 18, seconds: 16, portals: [1.5, 7, 12], caption: 'Les portails', sub: 'Entre dans l’un, ressors par l’autre : tanks et obus' },
-  { mission: 14, seconds: 13, portals: [1, 7], buffs: ['bounce'], caption: 'Tirs à travers les portails', sub: 'Les ennemis s’en servent aussi pour viser' },
-  { mission: 22, seconds: 12, portals: [2], rich: true, caption: 'Missions générées', sub: 'Une ou deux paires de portails après la mission 18' },
-  { mission: 6, seconds: 11, portals: [3], crates: ['shield', 'fan'], caption: 'Escouade', sub: 'Un raccourci pour prendre l’ennemi à revers' },
-  { mission: 10, seconds: 10, bossHp: 6, hits: [3, 6], volley: true, caption: 'Et toujours le Colosse', sub: 'Trop gros pour les portails !' },
+  { mission: 19, seconds: 18, caption: 'La nuit tombe', sub: 'Mission 19 « Couvre-feu » : chaque tank allume son projecteur' },
+  { mission: 6, seconds: 13, night: true, buffs: ['fan'], caption: 'L’éclair du canon te trahit', sub: 'De nuit, les ennemis ne voient que de près… ou ceux qui tirent' },
+  { mission: 22, seconds: 13, portals: [2], caption: 'Missions de nuit générées', sub: 'Un tiers des missions après la 20ᵉ, portails compris' },
+  { mission: 10, seconds: 12, night: true, bossHp: 6, hits: [3, 7], volley: true, caption: 'Le Colosse de nuit', sub: 'Un combat de boss sur deux à partir de la 30ᵉ' },
+  { mission: 14, seconds: 10, rich: true, night: false, portals: [1.5], caption: 'Et au lever du jour…', sub: 'Portails, caisses bonus et toujours plus de missions' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -52,7 +52,7 @@ try {
   for (const shot of MONTAGE) {
     await page.evaluate((shot) => {
       const d = window.__demo;
-      d.play(shot.mission, true, !!shot.rich, shot.bossHp);
+      d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);

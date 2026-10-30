@@ -1,7 +1,7 @@
 {
-  "iteration": 4,
-  "date": "2026-10-29",
-  "title": "Les portails",
+  "iteration": 5,
+  "date": "2026-10-30",
+  "title": "La nuit tombe",
   "journal": [
     {
       "iteration": 1,
@@ -50,6 +50,18 @@
         "Méfiance : les tanks ennemis savent viser à travers les portails, et un ricochet peut te revenir par le même chemin.",
         "Nouvelle mission 18, « Va-et-vient » : un tank vert retranché dans une forteresse fermée, que seuls les portails permettent d’atteindre.",
         "Les missions « Escouade » et « Coalition » gagnent des portails, tout comme une bonne partie des missions générées après la 18ᵉ. Le Colosse, lui, est bien trop gros pour s’y glisser."
+      ]
+    },
+    {
+      "iteration": 5,
+      "date": "2026-10-30",
+      "title": "La nuit tombe",
+      "notes": [
+        "Des missions de nuit : la table s’assombrit sous la lune et chaque tank allume son projecteur, qui éclaire là où tu vises.",
+        "Dans le noir, les ennemis ne te voient que de près… ou au moment où tu tires : l’éclair du canon trahit ta position. Approche-toi en silence !",
+        "Quand un ennemi te repère, sa lampe vire au rouge et un « ! » surgit au-dessus de lui, avec un petit bruit d’alerte.",
+        "Nouvelle mission 19, « Couvre-feu », à jouer de nuit. Environ un tiers des missions générées se jouent aussi dans le noir, et un combat contre le Colosse sur deux à partir de la 30ᵉ.",
+        "En versus, une manche sur quatre se dispute de nuit. Les obus y laissent une traînée lumineuse et des lucioles flottent au-dessus de la table."
       ]
     }
   ]

@@ -145,3 +145,39 @@ console.log('total', Date.now() - t0, 'ms');
   if (boss.y < 6) fail('le Colosse est passé par un portail');
   if (process.exitCode !== 1) console.log(`portails OK (missions générées à portails : ${withPortals.join(', ')})`);
 }
+
+// night: the AI only sees foes close by or right after they fire; a few missions are played in the dark
+{
+  const fail = (m: string) => { console.error('NUIT:', m); process.exitCode = 1; };
+  if (!getMission(LEVELS.length).night) fail('la dernière mission faite main devrait être de nuit');
+  const nights = [];
+  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).night) nights.push(mission);
+  if (nights.length < 10) fail(`trop peu de missions de nuit (${nights.length})`);
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  const g = new Game(tiles);
+  g.night = true;
+  const p = g.addTank('player', 0, 2.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const e = g.addTank('pink', 99, 12.5, 8.5, 0);
+  e.fireCd = 0;
+  g.frozen = false;
+  let shots = 0;
+  const idle = new Map([['p1', { s: 0, mx: 0, my: 0, a: Math.PI, f: 0 as const, m: 0 as const }]]);
+  for (let i = 0; i < 60; i++) {
+    p.x = 2.5; p.y = 8.5;
+    g.step(idle);
+    shots += g.events.filter((ev) => ev[0] === 'shot' && ev[5] === e.id).length;
+    g.events = [];
+  }
+  if (shots) fail('l’ennemi tire sur un joueur qu’il ne voit pas');
+  if (g.netTanks().find((t) => t[0] === e.id)![5] & 256) fail('l’ennemi est en alerte sans rien voir');
+  p.turret = Math.PI; p.fireCd = 0;
+  g.tryFire(p); // the muzzle flash gives the player away
+  if (!g.canSee(e, p)) fail('le tir ne trahit pas le joueur');
+  p.reveal = 0;
+  p.x = e.x - 3; p.y = e.y;
+  if (!g.canSee(e, p)) fail('l’ennemi ne voit pas un joueur tout proche');
+  g.night = false;
+  p.x = 2.5;
+  if (!g.canSee(e, p)) fail('de jour, tout le monde se voit');
+  if (process.exitCode !== 1) console.log(`nuit OK (missions de nuit : ${nights.join(', ')})`);
+}
