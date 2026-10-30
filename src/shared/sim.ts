@@ -151,6 +151,8 @@ export class Game {
   bonusCap = 2;
   /** Night mission: the AI only sees foes close by, or those whose muzzle flash just lit up. */
   night = false;
+  /** Extra bounces for every player shell (the « Ricochets fous » daily twist). */
+  playerBounces = 0;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -369,7 +371,7 @@ export class Game {
       this.events.push(['pop', r2(x), r2(y)]);
       return true;
     }
-    const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0);
+    const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0) + (t.kind === 'player' ? this.playerBounces : 0);
     this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false });
     if (t.buffs.fan > 0) {
       // two extra shells on each side of the main one (they may push past the ammo cap)

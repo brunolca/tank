@@ -1,6 +1,8 @@
 import type { TankKind } from './constants';
+import type { DailyTwist } from './daily';
 
-export type Mode = 'coop' | 'versus';
+// 'daily' (the daily challenge) came with iteration 6: older tabs show it like the coop campaign at worst.
+export type Mode = 'coop' | 'versus' | 'daily';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'gameover';
 
 export interface PlayerInfo {
@@ -57,9 +59,36 @@ export type GameEvent =
   | ['rage', number, number, number] // x y tankId (the boss is down to half health)
   | ['warp', number, number, number, number, number]; // x0 y0 x1 y1 tankId (0 for a shell) went through a portal
 
+/** One finished run on the daily board. */
+export interface BoardEntry {
+  team: { name: string; color: number }[];
+  cleared: number; // stages cleared (DAILY_STAGES = the whole challenge)
+  ticks: number; // simulation ticks spent fighting (30 per second)
+  lives: number; // lives left at the end
+}
+
+/** The board of one day: best runs first (most stages, then fastest). */
+export interface BoardDay {
+  day: number;
+  twist: DailyTwist;
+  entries: BoardEntry[];
+  total: number; // runs recorded that day
+  rank?: number; // rank of the run just submitted (1 = best)
+}
+
+/** Daily challenge progress, sent with the level and phase messages. */
+export interface DailyState {
+  day: number;
+  twist: DailyTwist;
+  stage: number;
+  stages: number;
+  ticks: number; // fighting time so far
+}
+
 export interface Results {
   mode: Mode;
   mission?: number;
+  daily?: { state: DailyState; cleared: number; board?: BoardDay };
   players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number }[];
   winner?: string;
 }
@@ -77,8 +106,9 @@ export type ServerMsg =
       lives: number;
       tick: number;
       night?: 1; // night mission (older clients just play it in daylight)
+      daily?: DailyState;
     }
-  | { t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number> }
+  | { t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState }
   | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[] }
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };

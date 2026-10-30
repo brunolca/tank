@@ -173,7 +173,7 @@ kbd {
 #lobby-players li em { color: var(--muted); font-style: normal; font-weight: 400; }
 #lobby-players .host { margin-left: auto; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
 
-.segmented { display: grid; grid-template-columns: 1fr 1fr; background: rgba(0, 0, 0, 0.3); border-radius: 14px; padding: 4px; gap: 4px; }
+.segmented { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); background: rgba(0, 0, 0, 0.3); border-radius: 14px; padding: 4px; gap: 4px; }
 .segmented button {
   font: inherit;
   font-weight: 600;
@@ -531,3 +531,60 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 18
 .file input { display: none; }
 #fb-context { max-height: 220px; overflow: auto; font-size: 11px; background: rgba(0, 0, 0, 0.3); padding: 10px; border-radius: 10px; -webkit-user-select: text; user-select: text; }
 .fb-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------- daily challenge ---------- */
+@media (min-width: 980px) {
+  #home { grid-auto-flow: column; justify-content: center; align-items: center; gap: 22px; }
+  #daily-card { width: 380px; }
+}
+#home { row-gap: 18px; }
+.daily-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.daily-date { font-size: 22px; font-weight: 900; line-height: 1.15; }
+.daily-date::first-letter { text-transform: uppercase; }
+.twist {
+  flex: none;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #1b1d24;
+  background: linear-gradient(180deg, #ffd27f, #ffab35);
+  box-shadow: 0 0 18px rgba(255, 180, 61, 0.35);
+  transform: rotate(3deg);
+}
+.board { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: rank; font-variant-numeric: tabular-nums; }
+.board li {
+  counter-increment: rank;
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  font-size: 14px;
+}
+.board li::before { content: counter(rank); font-weight: 900; color: var(--muted); text-align: center; }
+.board li:nth-child(1)::before { content: '★'; color: #f2c14e; }
+.board li.me { border-color: var(--accent); background: rgba(255, 180, 61, 0.12); }
+.board li.empty { display: block; color: var(--muted); border-style: dashed; background: none; text-align: center; }
+.board li.empty::before { content: none; }
+.board .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board .who i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 6px; box-shadow: 0 0 8px var(--c); }
+.board .stg { color: var(--muted); font-size: 12px; font-weight: 600; }
+.board .time { font-weight: 800; }
+#hud-clock {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+#hud-clock span { color: var(--accent); margin-left: 6px; font-size: 12px; font-weight: 600; }
+.daily-result { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.daily-result .big { font-size: 20px; font-weight: 900; text-align: center; }
+.daily-result .big em { font-style: normal; color: var(--accent); }
+#banner.daily .b-kicker { color: var(--accent); }

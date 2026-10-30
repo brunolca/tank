@@ -1,7 +1,7 @@
 {
-  "iteration": 5,
+  "iteration": 6,
   "date": "2026-10-30",
-  "title": "La nuit tombe",
+  "title": "Le défi du jour",
   "journal": [
     {
       "iteration": 1,
@@ -62,6 +62,18 @@
         "Quand un ennemi te repère, sa lampe vire au rouge et un « ! » surgit au-dessus de lui, avec un petit bruit d’alerte.",
         "Nouvelle mission 19, « Couvre-feu », à jouer de nuit. Environ un tiers des missions générées se jouent aussi dans le noir, et un combat contre le Colosse sur deux à partir de la 30ᵉ.",
         "En versus, une manche sur quatre se dispute de nuit. Les obus y laissent une traînée lumineuse et des lucioles flottent au-dessus de la table."
+      ]
+    },
+    {
+      "iteration": 6,
+      "date": "2026-10-30",
+      "title": "Le défi du jour",
+      "notes": [
+        "Nouveau : le défi du jour. Cinq missions inédites, les mêmes pour tout le monde, qui changent chaque jour à minuit (heure universelle). Lance-le depuis l’accueil avec « Relever le défi », seul ou jusqu’à 4.",
+        "Chaque jour a sa consigne : « Nuit noire », « Portails partout », « Pluie de caisses », « Ricochets fous » (tes obus rebondissent une fois de plus) ou « Le Colosse attend » (un combat de boss en dernière étape).",
+        "Trois vies pour tout le défi, sans vie bonus. Un chrono tourne en haut de l’écran pendant les combats : le classement du jour départage les équipes par étapes réussies, puis par temps.",
+        "L’accueil affiche le défi du jour, sa consigne et les meilleurs temps. À la fin du défi, tu découvres ta place dans le classement.",
+        "Chaque étape porte un nom tiré du jour, comme « La Serre brumeuse » ou « Le Moulin pressé »."
       ]
     }
   ]

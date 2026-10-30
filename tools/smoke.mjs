@@ -10,6 +10,8 @@ const fail = (msg) => { errors.push(msg); };
 try {
   const v = await fetch(server.url + '/api/version').then((r) => r.json());
   if (v.iteration !== meta.iteration) fail(`/api/version renvoie ${v.iteration}, attendu ${meta.iteration}`);
+  const daily = await fetch(server.url + '/api/daily').then((r) => r.json());
+  if (!Array.isArray(daily.entries) || !daily.twist) fail(`/api/daily ne renvoie pas de classement : ${JSON.stringify(daily).slice(0, 200)}`);
 
   const page = async (name, url) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });

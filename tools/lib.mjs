@@ -29,7 +29,9 @@ export async function startServer(port = 8790) {
 export async function launchBrowser() {
   const mac = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const executablePath = process.env.CHROME_PATH || (process.platform === 'darwin' && fs.existsSync(mac) ? mac : undefined);
-  return chromium.launch({ executablePath, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=angle', '--ignore-gpu-blocklist', '--window-size=1280,720'] });
+  return chromium.launch({ executablePath, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=angle', '--ignore-gpu-blocklist', '--window-size=1280,720',
+    // e.g. CHROME_ARGS="--use-angle=swiftshader --enable-unsafe-swiftshader" where no GPU is reachable
+    ...(process.env.CHROME_ARGS ?? '').split(' ').filter(Boolean)] });
 }
 
 export function readMeta() {

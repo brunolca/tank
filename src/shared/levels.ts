@@ -468,7 +468,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed >>> 0 || 1;
   return () => {
     s ^= s << 13; s >>>= 0;
@@ -485,8 +485,11 @@ const ROSTER_BY_TIER: TankKind[][] = [
   ['violet', 'white', 'green', 'black'],
 ];
 
-export function proceduralLevel(mission: number): ParsedLevel {
-  const r = rng(mission * 7919 + 13);
+/** Options for generated missions: the daily challenge picks its own layout seed, portals, night and name. */
+export interface GenOptions { seed?: number; portals?: boolean; night?: boolean; name?: string }
+
+export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLevel {
+  const r = rng(opt.seed ?? mission * 7919 + 13);
   for (let attempt = 0; attempt < 30; attempt++) {
     const tiles = new Array(W * H).fill(Tile.Empty);
     const set = (x: number, y: number, t: Tile) => {
@@ -525,7 +528,7 @@ export function proceduralLevel(mission: number): ParsedLevel {
     if (cells.length < 30) continue;
     // fill unreachable pockets
     for (let i = 0; i < W * H; i++) if (!seen[i] && tiles[i] === Tile.Empty) tiles[i] = Tile.Wall;
-    addPortals(tiles, seen, mission, cells);
+    addPortals(tiles, seen, mission, cells, opt);
     const tier = Math.min(3, Math.floor((mission - 1) / 8));
     const count = Math.min(8, 3 + Math.floor((mission - 16) / 3));
     const enemies: ParsedLevel['enemies'] = [];
@@ -542,8 +545,8 @@ export function proceduralLevel(mission: number): ParsedLevel {
       }
     }
     // about a third of the later generated missions are played at night (own random stream again)
-    const night = mission > 20 && rng(mission * 31337 + 5)() < 0.32;
-    return { name: night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`, tiles, spawns, enemies, night };
+    const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);
+    return { name: opt.name ?? (night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`), tiles, spawns, enemies, night };
   }
   return parseLevel(LEVELS[0]);
 }
@@ -552,9 +555,10 @@ export function proceduralLevel(mission: number): ParsedLevel {
  * Later generated missions get one or two portal pairs, each linking the players' half to the enemies' half.
  * Its own random stream, so the walls of a mission stay the same whether it has portals or not.
  */
-function addPortals(tiles: number[], seen: Uint8Array, mission: number, cells: [number, number][]) {
-  const r = rng(mission * 104729 + 7);
-  if (mission < 19 || r() < 0.35) return;
+function addPortals(tiles: number[], seen: Uint8Array, mission: number, cells: [number, number][], opt: GenOptions) {
+  const r = rng((opt.seed ?? mission) * 104729 + 7);
+  if (opt.portals === false) return;
+  if (opt.portals !== true && (mission < 19 || r() < 0.35)) return;
   const open = (x: number, y: number) =>
     seen[y * W + x] && [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => tiles[(y + dy) * W + x + dx] === Tile.Empty);
   const pick = (x0: number, x1: number): [number, number] | undefined => {
@@ -622,7 +626,7 @@ const BOSS_ARENAS: string[][] = [
 const BOSS_ESCORTS: TankKind[][] = [['pink', 'green'], ['violet', 'green'], ['violet', 'black'], ['white', 'black']];
 
 /** Endless-mode boss fights: an open arena, the boss and two escorts that get nastier. */
-function bossLevel(mission: number): ParsedLevel {
+export function bossLevel(mission: number): ParsedLevel {
   const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
   const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
   lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });

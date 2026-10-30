@@ -1,8 +1,9 @@
 import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
-import { getMission } from '../shared/levels';
+import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
+import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
-import type { ClientMsg, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
+import type { BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
 import { initAudio, isMusicOn, setMusicIntensity, sfx, startMusic, toggleMusic } from './audio';
 import { setupFeedback, type Region } from './feedback';
@@ -35,6 +36,8 @@ let myColor = Number(localStorage.getItem('tanks.color') ?? PLAYER_COLORS[0]);
 if (!PLAYER_COLORS.includes(myColor)) myColor = PLAYER_COLORS[0];
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
+/** The coop campaign and the daily challenge share their rules (lives, enemies, results). */
+const coopLike = (m: Mode) => m !== 'versus';
 
 function renderProfile(el: HTMLElement) {
   el.innerHTML = `
@@ -67,6 +70,7 @@ function escapeHtml(s: string) {
 type Screen = 'home' | 'lobby' | 'game' | 'results';
 let screen: Screen = 'home';
 function show(s: Screen) {
+  if (s === 'home' && screen !== 'home') void loadDaily();
   screen = s;
   $('#home').hidden = s !== 'home';
   $('#lobby').hidden = s !== 'lobby';
@@ -107,6 +111,7 @@ let reconnectTries = 0;
 let everOpened = false;
 let lobbyPlayers: PlayerInfo[] = [];
 let lobbyMode: Mode = 'coop';
+let wantDaily = false; // « Relever le défi » from the home screen: switch the new room to the daily challenge
 let phase: Phase = 'lobby';
 let ping = 0;
 
@@ -192,6 +197,8 @@ let lastBullets: RBullet[] = [];
 let lastMines: RMine[] = [];
 let currentMission = 0;
 let currentLevelName = '';
+let dailyState: DailyState | undefined; // daily challenge in progress (stage, fighting time)
+let dailyK = 0; // server tick when dailyState arrived, to run the clock between messages
 
 function onMessage(msg: ServerMsg) {
   switch (msg.t) {
@@ -203,6 +210,10 @@ function onMessage(msg: ServerMsg) {
       lobbyPlayers = msg.players;
       lobbyMode = msg.mode;
       phase = msg.phase;
+      if (wantDaily && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
+        wantDaily = false;
+        if (msg.mode !== 'daily') send({ t: 'mode', mode: 'daily' });
+      }
       renderLobby();
       if (msg.phase === 'lobby' && screen !== 'results') { online = false; show('lobby'); hideBanner(); startAttract(); }
       break;
@@ -245,15 +256,23 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   renderer.setNight(!!msg.night);
   show('game');
   setMusicIntensity(0);
-  $('#hud-mission').innerHTML = msg.mode === 'coop'
+  dailyState = msg.daily;
+  dailyK = msg.tick;
+  $('#hud-mission').innerHTML = msg.daily
+    ? `<b>Défi · étape ${msg.daily.stage}/${msg.daily.stages}</b><span>${escapeHtml(msg.name)}</span>`
+    : msg.mode === 'coop'
     ? `<b>Mission ${msg.mission}</b><span>${escapeHtml(msg.name)}</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
   bossFight = enemies.some((e) => e.kind === 'boss');
-  if (msg.mode === 'coop') {
+  if (coopLike(msg.mode)) {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
-    if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
+    if (msg.daily) {
+      const tw = TWIST_INFO[msg.daily.twist];
+      banner(`Défi du jour · étape ${msg.daily.stage}/${msg.daily.stages}${msg.night ? ' · Nuit' : ''}`, msg.name,
+        `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${msg.night ? ' night' : ''}${bossFight ? ' boss' : ''}`);
+    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
     else banner(`Mission ${msg.mission}${msg.night ? ' · Nuit' : ''}`, msg.name, `Tanks ennemis : ${enemies.length}`, msg.night ? 'intro night' : 'intro');
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(ENEMY_COLORS[k])}">${SPECS[k].label}</span>`).join('')}</div>`;
@@ -261,7 +280,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     banner(`Manche ${msg.mission}${msg.night ? ' · Nuit' : ''}`, 'Versus', 'Le dernier tank debout gagne la manche', msg.night ? 'intro night' : 'intro');
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
-  else if (msg.night) setTimeout(() => toast(msg.mode === 'coop' ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
@@ -270,6 +289,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   phase = msg.phase;
   lives = msg.lives;
   if (msg.scores) scores = msg.scores;
+  if (msg.daily) { dailyState = msg.daily; dailyK = latestK; }
   renderHud();
   if (prev === msg.phase && msg.phase === 'playing') return;
   switch (msg.phase) {
@@ -283,7 +303,10 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
     case 'cleared':
       setMusicIntensity(0);
       sfx.jingle('clear');
-      banner('Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : '', 'good');
+      if (msg.daily) {
+        const last = msg.daily.stage >= msg.daily.stages;
+        banner('Bravo !', last ? 'Défi relevé !' : `Étape ${msg.daily.stage} réussie`, `Chrono : ${formatTicks(msg.daily.ticks)}`, 'good');
+      } else banner('Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : '', 'good');
       break;
     case 'failed':
       setMusicIntensity(0);
@@ -425,7 +448,7 @@ function onlineFrame(dt: number) {
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
   updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
-  $('#hud-enemies').textContent = currentMode === 'coop' ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
+  $('#hud-enemies').textContent = coopLike(currentMode) ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
 
   // bullets: interpolate everyone else's, extrapolate our own from the freshest state
   const bullets: RBullet[] = [];
@@ -623,7 +646,7 @@ function updateNameTags(tanks: RTank[]) {
 
 function renderHud() {
   const livesEl = $('#hud-lives');
-  livesEl.innerHTML = currentMode === 'coop' ? `<span class="tank-ico"></span> × ${lives}` : '';
+  livesEl.innerHTML = coopLike(currentMode) ? `<span class="tank-ico"></span> × ${lives}` : '';
   const sb = $('#scoreboard');
   if (currentMode === 'versus') {
     sb.innerHTML = lobbyPlayers
@@ -655,28 +678,84 @@ function renderLobby() {
   const n = lobbyPlayers.filter((p) => p.connected).length;
   start.disabled = lobbyMode === 'versus' && n < 2;
   start.textContent = lobbyMode === 'versus' && n < 2 ? 'Il faut 2 joueurs' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
-  $('#mode-desc').textContent = lobbyMode === 'coop'
-    ? 'Campagne coopérative : 18 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
+  const today = dayNumber();
+  $('#mode-desc').textContent = lobbyMode === 'daily'
+    ? `Défi du jour (${dayLabel(today)}) : ${DAILY_STAGES} missions générées, les mêmes pour tout le monde aujourd’hui, avec 3 vies et sans vie bonus. Consigne du jour : ${TWIST_INFO[dailyTwist(today)].label.toLowerCase()}. ${TWIST_INFO[dailyTwist(today)].desc} Le chrono décide du classement.`
+    : lobbyMode === 'coop'
+    ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
   renderHud();
 }
 
+// ------------------------------------------------------------------ daily challenge
+
+/** Running time of the daily run, ticking locally while the fight is on. */
+function updateClock() {
+  const el = $('#hud-clock');
+  el.hidden = !dailyState || !online;
+  if (el.hidden || !dailyState) return;
+  const extra = phase === 'playing' ? Math.max(0, latestK - dailyK) : 0;
+  el.innerHTML = `⏱ ${formatTicks(dailyState.ticks + extra)}<span>${escapeHtml(TWIST_INFO[dailyState.twist]?.label ?? '')}</span>`;
+}
+
+const ordinal = (n: number) => `${n}<sup>${n === 1 ? 'er' : 'e'}</sup>`;
+
+function boardHtml(b: BoardDay | undefined, highlight?: number) {
+  if (!b) return '<li class="empty">Classement indisponible pour l’instant.</li>';
+  if (!b.entries.length) return '<li class="empty">Personne n’a encore relevé ce défi : à toi l’honneur !</li>';
+  return b.entries
+    .map((e, i) => `<li class="${i + 1 === highlight ? 'me' : ''}"><span class="who">${e.team
+      .map((p) => `<i style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}`)
+      .join(', ')}</span><span class="stg">${e.cleared}/${DAILY_STAGES}</span><span class="time">${formatTicks(e.ticks)}</span></li>`)
+    .join('');
+}
+
+function dailyResultHtml(d: NonNullable<Results['daily']>) {
+  const b = d.board;
+  const rank = d.cleared > 0 && b?.rank
+    ? `${ordinal(b.rank)} sur ${b.total} équipe${b.total > 1 ? 's' : ''} aujourd’hui`
+    : d.cleared === 0 ? 'Aucune étape réussie : pas de chrono au classement. Retente ta chance !' : '';
+  return `<div class="daily-result">
+    <div class="big">${d.cleared}/${d.state.stages} étapes · <em>${formatTicks(d.state.ticks)}</em></div>
+    ${rank ? `<p class="muted center">${rank}</p>` : ''}
+    <ol class="board">${boardHtml(b, d.cleared > 0 ? b?.rank : undefined)}</ol>
+  </div>`;
+}
+
+/** The home screen card: today's twist and best runs. */
+async function loadDaily() {
+  const day = dayNumber();
+  const tw = TWIST_INFO[dailyTwist(day)];
+  $('#daily-date').textContent = dayLabel(day);
+  $('#daily-twist').textContent = tw.label;
+  $('#daily-desc').textContent = `${DAILY_STAGES} missions, les mêmes pour tout le monde aujourd’hui. ${tw.desc} 3 vies, seul ou à plusieurs : le chrono décide.`;
+  try {
+    const b = await fetch('/api/daily').then((r) => (r.ok ? (r.json() as Promise<BoardDay>) : undefined));
+    $('#daily-board').innerHTML = boardHtml(b?.entries ? { ...b, entries: b.entries.slice(0, 5) } : undefined);
+  } catch {
+    $('#daily-board').innerHTML = boardHtml(undefined);
+  }
+}
+
 function showResults(r: Results) {
   const kinds = Object.keys(SPECS).filter((k) => k !== 'player') as (keyof typeof SPECS)[];
-  const title = r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
+  const title = r.daily
+    ? (r.daily.cleared >= r.daily.state.stages ? 'Défi du jour relevé !' : `Défi du jour · ${r.daily.cleared}/${r.daily.state.stages} étapes`)
+    : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
+  const coop = coopLike(r.mode);
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${r.mode === 'coop' ? kinds.map((k) => `<th title="${SPECS[k].label}"><i class="dot" style="--c:${hex(ENEMY_COLORS[k])}"></i></th>`).join('') : '<th>Kills</th>'}<th>Morts</th><th>${r.mode === 'coop' ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${SPECS[k].label}"><i class="dot" style="--c:${hex(ENEMY_COLORS[k])}"></i></th>`).join('') : '<th>Kills</th>'}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
           return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}</td>${
-            r.mode === 'coop' ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
+            coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
           }<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
-    </table>`;
+    </table>${r.daily ? dailyResultHtml(r.daily) : ''}`;
   show('results');
 }
 
@@ -686,18 +765,19 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; daily?: { day: number; stage: number } }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
-  const lvl = getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
+  const lvl: ParsedLevel = opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
   const g = new Game(lvl.tiles);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
   g.night = opts.night ?? (!!lvl.night || (!opts.heroes && opts.mission === undefined && Math.random() < 0.25));
   if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
+  if (opts.daily) applyTwist(g, dailyTwist(opts.daily.day));
   if (opts.heroes) {
     // player-coloured tanks driven by the AI: used by the gameplay videos
     lvl.spawns.forEach(([x, y], i) => {
@@ -766,6 +846,7 @@ function frame(now: number) {
     while (acc >= DT && n++ < 4) { acc -= DT; clientTick(); }
     if (acc > DT) acc = 0;
     onlineFrame(dt);
+    updateClock();
   } else if (attract) {
     attractFrame(dt);
     updateNameTags([]);
@@ -784,12 +865,12 @@ function unlockAudio() {
 addEventListener('pointerdown', unlockAudio, { once: false });
 addEventListener('keydown', unlockAudio, { once: false });
 
-$('#btn-create').addEventListener('click', async () => {
+async function createRoom(btn: HTMLButtonElement, daily: boolean) {
   sfx.click();
-  const btn = $<HTMLButtonElement>('#btn-create');
   btn.disabled = true;
   try {
     const r = await fetch('/api/new').then((r) => r.json() as Promise<{ room: string }>);
+    wantDaily = daily;
     connect(r.room);
     show('lobby');
   } catch {
@@ -797,7 +878,9 @@ $('#btn-create').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
   }
-});
+}
+$('#btn-create').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-create'), false));
+$('#btn-daily').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-daily'), true));
 
 function joinFromInput() {
   const code = $<HTMLInputElement>('#join-code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -908,7 +991,8 @@ setupFeedback({
         phase: online ? phase : undefined,
         mission: online ? currentMission : attractOpts.mission,
         level: online ? currentLevelName : undefined,
-        lives: online && currentMode === 'coop' ? lives : undefined,
+        lives: online && coopLike(currentMode) ? lives : undefined,
+        daily: online ? dailyState : undefined,
         scores: online && currentMode === 'versus' ? scores : undefined,
         players: lobbyPlayers.map((p) => ({ name: p.name, host: p.host, connected: p.connected, me: p.id === pid || undefined })),
         me: me ? { x: r2(me.x), y: r2(me.y), alive: me.alive, pendingInputs: pending.length } : undefined,
@@ -956,6 +1040,22 @@ if (params.has('demo')) {
     play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean) {
       attract = undefined;
       startAttract({ mission, heroes, rich, bossHp, night });
+    },
+    /** Play a stage of a daily challenge: today's, or the nearest day that has the given twist. */
+    daily(stage = 1, twist?: DailyTwist) {
+      let day = dayNumber();
+      if (twist) for (let k = 0; k < 7 && dailyTwist(day) !== twist; k++) day++;
+      attract = undefined;
+      startAttract({ heroes: true, daily: { day, stage } });
+      const lvl = dailyLevel(day, stage);
+      banner(`Défi du jour · étape ${stage}/${DAILY_STAGES}`, lvl.name, TWIST_INFO[dailyTwist(day)].label, `intro daily${lvl.night ? ' night' : ''}`);
+      setTimeout(hideBanner, 2600);
+      return day;
+    },
+    /** Show the home screen (and its daily challenge card) over the demo for a moment. */
+    home(ms = 4000) {
+      show('home');
+      setTimeout(() => { show('game'); $('#hud').hidden = true; }, ms);
     },
     /** Land a hit on the boss (to show its health bar and its anger on camera). */
     hitBoss() {
@@ -1006,6 +1106,7 @@ if (params.has('demo')) {
 // boot
 const m = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,8})/);
 startAttract();
+void loadDaily();
 if (m) {
   connect(m[1].toUpperCase());
   show('lobby');

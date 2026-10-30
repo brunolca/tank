@@ -24,7 +24,7 @@
       <div id="hud-lives"></div>
       <div id="hud-buffs"></div>
     </div>
-    <div class="hud-center"><div id="hud-enemies"></div><div id="scoreboard"></div></div>
+    <div class="hud-center"><div id="hud-enemies"></div><div id="hud-clock" hidden></div><div id="scoreboard"></div></div>
     <div class="hud-right">
       <span id="hud-ping"></span>
       <button id="btn-music" class="icon-btn" title="Musique (M)">♪</button>
@@ -67,6 +67,18 @@
         </ul>
       </details>
     </div>
+    <div id="daily-card" class="card daily">
+      <div class="daily-head">
+        <div>
+          <div class="kicker">Défi du jour</div>
+          <div id="daily-date" class="daily-date"></div>
+        </div>
+        <span id="daily-twist" class="twist"></span>
+      </div>
+      <p id="daily-desc" class="muted"></p>
+      <ol id="daily-board" class="board"></ol>
+      <button id="btn-daily" class="btn primary">Relever le défi</button>
+    </div>
   </section>
 
   <!-- LOBBY -->
@@ -83,6 +95,7 @@
       <div class="profile"></div>
       <div id="mode-select" class="segmented">
         <button data-mode="coop">Campagne coop</button>
+        <button data-mode="daily">Défi du jour</button>
         <button data-mode="versus">Versus</button>
       </div>
       <p id="mode-desc" class="muted"></p>

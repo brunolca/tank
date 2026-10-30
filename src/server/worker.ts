@@ -1,9 +1,11 @@
 import META from '../shared/meta.json';
 
+import { dayNumber } from '../shared/daily';
 import { parseFeedbackForm } from './feedback';
 
 export { Room } from './room';
 export { FeedbackStore } from './feedback';
+export { Board } from './board';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -20,6 +22,16 @@ export default {
     }
     if (url.pathname === '/api/new') {
       return Response.json({ room: newCode() });
+    }
+    if (url.pathname === '/api/daily') {
+      // today's challenge board (read only: rooms write the runs they host)
+      const board = env.BOARD.get(env.BOARD.idFromName('daily'));
+      const day = dayNumber();
+      try {
+        return Response.json(await board.get(day), { headers: { 'cache-control': 'no-store' } });
+      } catch {
+        return Response.json({ error: 'Classement indisponible.' }, { status: 503 });
+      }
     }
     if (url.pathname.startsWith('/api/feedback')) return feedback(req, url, env);
     const m = url.pathname.match(/^\/api\/room\/([A-Z0-9]{4,8})\/ws$/);

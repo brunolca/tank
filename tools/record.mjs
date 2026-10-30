@@ -7,11 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 19, seconds: 18, caption: 'La nuit tombe', sub: 'Mission 19 « Couvre-feu » : chaque tank allume son projecteur' },
-  { mission: 6, seconds: 13, night: true, buffs: ['fan'], caption: 'L’éclair du canon te trahit', sub: 'De nuit, les ennemis ne voient que de près… ou ceux qui tirent' },
-  { mission: 22, seconds: 13, portals: [2], caption: 'Missions de nuit générées', sub: 'Un tiers des missions après la 20ᵉ, portails compris' },
-  { mission: 10, seconds: 12, night: true, bossHp: 6, hits: [3, 7], volley: true, caption: 'Le Colosse de nuit', sub: 'Un combat de boss sur deux à partir de la 30ᵉ' },
-  { mission: 14, seconds: 10, rich: true, night: false, portals: [1.5], caption: 'Et au lever du jour…', sub: 'Portails, caisses bonus et toujours plus de missions' },
+  { home: 6.5, seconds: 7, caption: '' },
+  { daily: [1, 'portails'], seconds: 14, portals: [3], caption: 'Nouveau : le défi du jour', sub: 'Cinq missions, les mêmes pour tout le monde, et un classement' },
+  { daily: [3, 'nuit'], seconds: 12, caption: 'Nuit noire', sub: 'Les cinq étapes se jouent dans l’ombre' },
+  { daily: [2, 'caisses'], seconds: 12, caption: 'Pluie de caisses', sub: 'Les bonus tombent trois fois plus souvent' },
+  { daily: [4, 'ricochets'], seconds: 11, caption: 'Ricochets fous', sub: 'Tes obus rebondissent une fois de plus' },
+  { daily: [5, 'colosse'], seconds: 13, hits: [3, 6, 9], volley: true, caption: 'Le Colosse attend', sub: 'Certains jours, la dernière étape est un combat de boss' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -24,7 +25,7 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`${server.url}/?demo=1&mission=${MONTAGE[0].mission}`);
+  await page.goto(`${server.url}/?demo=1&mission=${MONTAGE[0].mission ?? 1}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__demo?.state?.tick > 0, null, { timeout: 30000 });
 
   // CDP screencast -> system ffmpeg at a constant 30 fps (frames are duplicated to fill the gaps)
@@ -52,7 +53,9 @@ try {
   for (const shot of MONTAGE) {
     await page.evaluate((shot) => {
       const d = window.__demo;
-      d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night);
+      if (shot.home) d.home(shot.home * 1000);
+      else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
+      else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);

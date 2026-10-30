@@ -1,3 +1,4 @@
+import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { getMission, isBossMission, LEVELS } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
 import { DT, H, SPECS, Tile, W } from '../src/shared/constants';
@@ -180,4 +181,54 @@ console.log('total', Date.now() - t0, 'ms');
   p.x = 2.5;
   if (!g.canSee(e, p)) fail('de jour, tout le monde se voit');
   if (process.exitCode !== 1) console.log(`nuit OK (missions de nuit : ${nights.join(', ')})`);
+}
+
+// daily challenge: five valid stages a day, the same for everyone, twists that do what they say
+{
+  const fail = (m: string) => { console.error('DÉFI:', m); process.exitCode = 1; };
+  const today = dayNumber(Date.UTC(2026, 9, 30));
+  const seen = new Set<string>();
+  let worst = 0;
+  for (let day = today; day < today + 30; day++) {
+    const twist = dailyTwist(day);
+    seen.add(twist);
+    for (let stage = 1; stage <= DAILY_STAGES; stage++) {
+      const lvl = dailyLevel(day, stage);
+      if (!lvl.spawns.length || !lvl.enemies.length) fail(`jour ${day} étape ${stage} : ni départ ni ennemi`);
+      if (JSON.stringify(dailyLevel(day, stage)) !== JSON.stringify(lvl)) fail(`jour ${day} étape ${stage} : pas déterministe`);
+      for (const t of [Tile.PortalA, Tile.PortalB]) {
+        const n = lvl.tiles.filter((v) => v === t).length;
+        if (n !== 0 && n !== 2) fail(`jour ${day} étape ${stage} : ${n} portail(s)`);
+      }
+      if (twist === 'nuit' && !lvl.night) fail(`jour ${day} : étape ${stage} de jour malgré « nuit »`);
+      if (twist !== 'nuit' && lvl.night) fail(`jour ${day} : étape ${stage} de nuit sans la consigne`);
+      if (twist === 'portails' && !lvl.tiles.includes(Tile.PortalA)) fail(`jour ${day} : étape ${stage} sans portail`);
+      if ((twist === 'colosse' && stage === DAILY_STAGES) !== lvl.enemies.some((e) => e.kind === 'boss')) fail(`jour ${day} étape ${stage} : Colosse mal placé`);
+      // a quick fight to make sure the stage runs and stays cheap
+      if (day < today + 5) {
+        const g = new Game(lvl.tiles);
+        applyTwist(g, twist);
+        const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
+        for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
+        g.frozen = false;
+        g.bonusOn = true;
+        const t0 = performance.now();
+        let n = 0;
+        for (; n < 30 * 20 && p.alive; n++) g.step(new Map([['p1', { s: n, mx: Math.cos(n / 50), my: Math.sin(n / 37), a: n / 20, f: n % 25 === 0 ? 1 : 0, m: 0 }]]));
+        worst = Math.max(worst, (performance.now() - t0) / n);
+      }
+    }
+  }
+  if (seen.size !== DAILY_TWISTS.length) fail(`consignes vues sur 30 jours : ${[...seen].join(', ')}`);
+  if (dailyLevel(today, 1).name === dailyLevel(today + 1, 1).name && JSON.stringify(dailyLevel(today, 1).tiles) === JSON.stringify(dailyLevel(today + 1, 1).tiles)) fail('deux jours de suite identiques');
+  // « ricochets fous »: player shells get one more bounce
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  const p = g.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  applyTwist(g, 'ricochets');
+  p.fireCd = 0;
+  g.tryFire(p);
+  if (g.bullets[0]?.bounces !== SPECS.player.bounces + 1) fail('« Ricochets fous » ne donne pas de rebond en plus');
+  if (formatTicks(30 * 125.5) !== '2:05,5') fail(`chrono mal formaté : ${formatTicks(30 * 125.5)}`);
+  if (process.exitCode !== 1) console.log(`défi du jour OK (pire tick ${worst.toFixed(3)} ms, aujourd’hui : ${dailyTwist(dayNumber())}, « ${dailyLevel(dayNumber(), 1).name} »)`);
 }

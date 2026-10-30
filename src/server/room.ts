@@ -1,7 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, TankKind } from '../shared/constants';
+import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
-import type { ClientMsg, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
+import type { BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
 
 interface Attachment {
@@ -39,6 +40,9 @@ export class Room extends DurableObject<Env> {
   private enemyIndexByTank = new Map<number, number>();
   private enemyHp = new Map<number, number>(); // damage dealt to tough enemies (the boss) sticks across retries
   private phaseTimer = 0;
+  private day = 0; // daily challenge: the day the run started (it keeps it past midnight)
+  private runTicks = 0; // daily challenge: ticks spent fighting
+  private board?: BoardDay; // daily challenge: the board once the run is over
   private loop?: ReturnType<typeof setInterval>;
   private roomCode = '';
 
@@ -137,7 +141,7 @@ export class Room extends DurableObject<Env> {
         break;
       }
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily')) {
           this.mode = msg.mode;
           await this.ctx.storage.put('mode', this.mode);
           this.broadcastLobby();
@@ -210,8 +214,11 @@ export class Room extends DurableObject<Env> {
       p.score = 0; p.kills = {}; p.deaths = 0; p.inGame = !!p.ws;
     }
     this.mission = 1;
-    this.lives = 3;
+    this.lives = this.mode === 'daily' ? DAILY_LIVES : 3;
     this.round = 0;
+    this.day = dayNumber();
+    this.runTicks = 0;
+    this.board = undefined;
     this.killedEnemies.clear();
     this.enemyHp.clear();
     this.loadStage();
@@ -221,7 +228,7 @@ export class Room extends DurableObject<Env> {
   private loadStage() {
     const participants = [...this.players.values()].filter((p) => p.ws).sort((a, b) => a.joined - b.joined);
     for (const p of participants) p.inGame = true;
-    this.level = this.mode === 'coop' ? getMission(this.mission) : versusArena(this.round);
+    this.level = this.mode === 'coop' ? getMission(this.mission) : this.mode === 'daily' ? dailyLevel(this.day, this.mission) : versusArena(this.round);
     const game = new Game(this.level.tiles);
     const spawns = this.level.spawns.slice();
     const used: [number, number][] = [];
@@ -233,7 +240,7 @@ export class Room extends DurableObject<Env> {
         pos = nearestFree(this.level!.tiles, Math.floor(base[0]), Math.floor(base[1]) + (i >= 2 ? 2 : -2), [...spawns, ...used]);
       }
       used.push(pos);
-      const team = this.mode === 'coop' ? 0 : i + 1;
+      const team = this.mode === 'versus' ? i + 1 : 0;
       const t = game.addTank('player', team, pos[0], pos[1], p.color, p.pid, p.name);
       if (this.mode === 'versus') {
         t.body = t.turret = Math.atan2(8.5 - pos[1], 11 - pos[0]);
@@ -254,6 +261,7 @@ export class Room extends DurableObject<Env> {
     game.bonusOn = true;
     game.night = !!this.level.night;
     if (this.mode === 'versus') { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
+    if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
     this.game = game;
     this.setPhase('intro', 3);
@@ -266,13 +274,14 @@ export class Room extends DurableObject<Env> {
     this.send(ws, {
       t: 'level',
       mode: this.mode,
-      mission: this.mode === 'coop' ? this.mission : this.round + 1,
-      name: this.mode === 'coop' ? this.level.name : `Manche ${this.round + 1}`,
+      mission: this.mode === 'versus' ? this.round + 1 : this.mission,
+      name: this.mode === 'versus' ? `Manche ${this.round + 1}` : this.level.name,
       tiles: this.game.tiles,
       tanks: this.game.tankInfos(),
       lives: this.lives,
       tick: this.game.tick,
       night: this.level.night ? 1 : undefined,
+      daily: this.dailyState(),
     });
     this.send(ws, this.phaseMsg());
   }
@@ -287,10 +296,11 @@ export class Room extends DurableObject<Env> {
     }
     if (killer?.pid) {
       const kp = this.players.get(killer.pid);
-      if (kp && kp.pid !== victim.pid && !(this.mode === 'coop' && victim.pid)) {
+      const coop = this.mode !== 'versus';
+      if (kp && kp.pid !== victim.pid && !(coop && victim.pid)) {
         const key: TankKind = victim.kind;
         kp.kills[key] = (kp.kills[key] ?? 0) + 1;
-        if (this.mode === 'coop') kp.score++;
+        if (coop) kp.score++;
       }
     }
   }
@@ -307,12 +317,41 @@ export class Room extends DurableObject<Env> {
     return {
       t: 'phase',
       phase: this.phase,
-      mission: this.mode === 'coop' ? this.mission : this.round + 1,
+      mission: this.mode === 'versus' ? this.round + 1 : this.mission,
       lives: this.lives,
       enemies: this.game ? this.game.aliveCount(99) : 0,
       scores,
       results: this.phase === 'gameover' ? this.results() : undefined,
+      daily: this.dailyState(),
     };
+  }
+
+  private dailyState(): DailyState | undefined {
+    if (this.mode !== 'daily') return undefined;
+    return { day: this.day, twist: dailyTwist(this.day), stage: this.mission, stages: DAILY_STAGES, ticks: this.runTicks };
+  }
+
+  /** Stages cleared in the current daily run. */
+  private dailyCleared() {
+    return this.phase === 'gameover' && this.lives > 0 ? DAILY_STAGES : this.mission - 1;
+  }
+
+  /** End of a daily run (all stages cleared, or no lives left): post it to the board, then show everyone the results. */
+  private async finishDaily() {
+    this.setPhase('gameover', 14);
+    const state = this.dailyState()!;
+    const cleared = this.dailyCleared();
+    try {
+      const board = this.env.BOARD.get(this.env.BOARD.idFromName('daily'));
+      const team = [...this.players.values()].filter((p) => p.inGame).sort((a, b) => a.joined - b.joined).map((p) => ({ name: p.name, color: p.color }));
+      const res = cleared > 0
+        ? await board.submit(state.day, { team, cleared, ticks: this.runTicks, lives: this.lives })
+        : await board.get(state.day);
+      this.board = res;
+    } catch {
+      this.board = undefined; // the board is down: results without a rank
+    }
+    if (this.phase === 'gameover' && this.mode === 'daily') this.broadcastPhase();
   }
 
   private broadcastPhase() {
@@ -324,7 +363,8 @@ export class Room extends DurableObject<Env> {
       .filter((p) => p.inGame)
       .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score }))
       .sort((a, b) => b.score - a.score);
-    return { mode: this.mode, mission: this.mission, players, winner: this.mode === 'versus' ? players[0]?.id : undefined };
+    const daily = this.mode === 'daily' ? { state: this.dailyState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
+    return { mode: this.mode, mission: this.mission, players, winner: this.mode === 'versus' ? players[0]?.id : undefined, daily };
   }
 
   private tick() {
@@ -365,6 +405,7 @@ export class Room extends DurableObject<Env> {
     }
 
     this.phaseTimer -= DT;
+    if (this.phase === 'playing' && this.mode === 'daily') this.runTicks++;
     switch (this.phase) {
       case 'intro':
         if (this.phaseTimer <= 0) { this.setPhase('playing', 0); this.broadcastPhase(); }
@@ -374,16 +415,18 @@ export class Room extends DurableObject<Env> {
         break;
       case 'cleared':
         if (this.phaseTimer <= 0) {
+          if (this.mode === 'daily' && this.mission >= DAILY_STAGES) { void this.finishDaily(); break; }
           this.mission++;
           this.killedEnemies.clear();
           this.enemyHp.clear();
-          if (this.mission % 5 === 1) this.lives++;
+          if (this.mode === 'coop' && this.mission % 5 === 1) this.lives++;
           this.loadStage();
         }
         break;
       case 'failed':
         if (this.phaseTimer <= 0) {
-          if (this.lives <= 0) { this.setPhase('gameover', 8); this.broadcastPhase(); }
+          if (this.lives <= 0 && this.mode === 'daily') void this.finishDaily();
+          else if (this.lives <= 0) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else this.loadStage();
         }
         break;
@@ -401,7 +444,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private checkEnd(game: Game) {
-    if (this.mode === 'coop') {
+    if (this.mode !== 'versus') {
       const playersAlive = game.aliveCount(0);
       const enemiesAlive = game.aliveCount(99);
       if (enemiesAlive === 0 && game.bullets.length === 0) {

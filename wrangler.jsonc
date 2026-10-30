@@ -12,12 +12,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
-      { "name": "FEEDBACK", "class_name": "FeedbackStore" }
+      { "name": "FEEDBACK", "class_name": "FeedbackStore" },
+      { "name": "BOARD", "class_name": "Board" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Room"] },
-    { "tag": "v2", "new_sqlite_classes": ["FeedbackStore"] }
+    { "tag": "v2", "new_sqlite_classes": ["FeedbackStore"] },
+    { "tag": "v3", "new_sqlite_classes": ["Board"] }
   ],
   "observability": {
     "enabled": true,
