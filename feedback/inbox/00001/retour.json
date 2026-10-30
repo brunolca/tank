@@ -1,0 +1,399 @@
+{
+  "id": 1,
+  "created": "2026-10-30T17:28:07.215Z",
+  "category": "bug",
+  "text": "tir en éventail ne fait rien",
+  "context": {
+    "game": {
+      "iteration": 5,
+      "iterationTitle": "La nuit tombe",
+      "screen": "game",
+      "online": true,
+      "room": "AKEJK",
+      "mode": "coop",
+      "phase": "playing",
+      "mission": 9,
+      "level": "Labyrinthe",
+      "lives": 1,
+      "players": [
+        {
+          "name": "Bruno",
+          "host": true,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "Panzer",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 5.5,
+        "y": 15.53,
+        "alive": false,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "me": true,
+          "x": 5.5,
+          "y": 15.53,
+          "alive": false
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Panzer",
+          "team": 0,
+          "x": 12,
+          "y": 12.14,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 99,
+          "x": 4.79,
+          "y": 12.56,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "yellow",
+          "label": "Jaune",
+          "team": 99,
+          "x": 5.51,
+          "y": 2.24,
+          "alive": false
+        },
+        {
+          "id": 5,
+          "kind": "marine",
+          "label": "Turquoise",
+          "team": 99,
+          "x": 3.5,
+          "y": 8.51,
+          "alive": false
+        },
+        {
+          "id": 6,
+          "kind": "marine",
+          "label": "Turquoise",
+          "team": 99,
+          "x": 10.61,
+          "y": 4.1,
+          "alive": false
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "tick": 748,
+      "recentEvents": [
+        [
+          643,
+          "shot",
+          3.44,
+          13.93,
+          -1.14,
+          0,
+          1
+        ],
+        [
+          643,
+          "pop",
+          3.42,
+          13.82
+        ],
+        [
+          645,
+          "bounce",
+          13.12,
+          0.1
+        ],
+        [
+          645,
+          "pop",
+          6.1,
+          10.7
+        ],
+        [
+          648,
+          "shot",
+          3.42,
+          14.42,
+          -1.19,
+          0,
+          1
+        ],
+        [
+          648,
+          "bounce",
+          11.69,
+          0.1
+        ],
+        [
+          648,
+          "pop",
+          3.39,
+          14.31
+        ],
+        [
+          649,
+          "shot",
+          8.89,
+          11.54,
+          -2.98,
+          0,
+          2
+        ],
+        [
+          649,
+          "pop",
+          5.89,
+          10.72
+        ],
+        [
+          652,
+          "pop",
+          13.85,
+          1.31
+        ],
+        [
+          657,
+          "shot",
+          8.89,
+          11.55,
+          -2.99,
+          0,
+          2
+        ],
+        [
+          659,
+          "shot",
+          3.56,
+          14.95,
+          -1.47,
+          0,
+          1
+        ],
+        [
+          659,
+          "pop",
+          3.5,
+          14.85
+        ],
+        [
+          663,
+          "bounce",
+          0.8,
+          16.89
+        ],
+        [
+          664,
+          "shot",
+          3.99,
+          14.95,
+          -1.59,
+          0,
+          1
+        ],
+        [
+          664,
+          "pop",
+          3.92,
+          14.85
+        ],
+        [
+          664,
+          "bounce",
+          4.14,
+          10.54
+        ],
+        [
+          669,
+          "pop",
+          13.65,
+          3.88
+        ],
+        [
+          670,
+          "pop",
+          0.11,
+          15.65
+        ],
+        [
+          672,
+          "bounce",
+          4.1,
+          10.73
+        ],
+        [
+          680,
+          "bounce",
+          4.19,
+          10.84
+        ],
+        [
+          681,
+          "shot",
+          3.36,
+          12.51,
+          1.05,
+          0,
+          3
+        ],
+        [
+          683,
+          "shot",
+          5.51,
+          15.1,
+          -2.31,
+          0,
+          1
+        ],
+        [
+          683,
+          "pop",
+          5.4,
+          15.07
+        ],
+        [
+          683,
+          "pop",
+          4.88,
+          10.81
+        ],
+        [
+          688,
+          "shot",
+          5.98,
+          15.13,
+          -2.38,
+          0,
+          1
+        ],
+        [
+          688,
+          "pop",
+          5.86,
+          15.11
+        ],
+        [
+          693,
+          "pop",
+          9.82,
+          9.41
+        ],
+        [
+          698,
+          "boom",
+          5.5,
+          15.53,
+          1
+        ],
+        [
+          701,
+          "pop",
+          9.81,
+          9.76
+        ],
+        [
+          705,
+          "bounce",
+          3.24,
+          11.12
+        ],
+        [
+          709,
+          "bounce",
+          6.72,
+          5.09
+        ],
+        [
+          711,
+          "bounce",
+          3.28,
+          11.16
+        ],
+        [
+          725,
+          "bounce",
+          13.59,
+          0.17
+        ],
+        [
+          730,
+          "pop",
+          14.13,
+          0.84
+        ],
+        [
+          731,
+          "bounce",
+          12.96,
+          0.12
+        ],
+        [
+          735,
+          "pop",
+          0.13,
+          16.45
+        ],
+        [
+          738,
+          "pop",
+          0.14,
+          15.73
+        ],
+        [
+          739,
+          "pop",
+          13.86,
+          1.59
+        ],
+        [
+          744,
+          "pop",
+          8.84,
+          11.91
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 41,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 120
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "viewport": "1512x862",
+      "screen": "1512x982",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/AKEJK",
+    "time": "2026-10-30T17:27:57.592Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

@@ -1,0 +1,379 @@
+{
+  "id": 4,
+  "created": "2026-10-30T21:23:38.322Z",
+  "category": "idee",
+  "text": "Ramasser de l'argent pour payer des améliorations, monter en xp. générer des bots allié avec argent/xp",
+  "context": {
+    "game": {
+      "iteration": 6,
+      "iterationTitle": "Le défi du jour",
+      "screen": "game",
+      "online": true,
+      "room": "SRX4G",
+      "mode": "versus",
+      "phase": "roundEnd",
+      "mission": 7,
+      "level": "Manche 7",
+      "scores": {
+        "7e1e3e3a-59fe-49fd-b202-d443c52c5164": 4,
+        "eede211c-0653-4000-9a4b-4ee5a06cb166": 1
+      },
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "Panzer59",
+          "host": false,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 4.44,
+        "y": 10.08,
+        "alive": false,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 1,
+          "x": 4.34,
+          "y": 12.25,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Panzer59",
+          "team": 2,
+          "me": true,
+          "x": 4.44,
+          "y": 10.08,
+          "alive": false
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "tick": 474,
+      "recentEvents": [
+        [
+          240,
+          "pop",
+          11.35,
+          9.11
+        ],
+        [
+          243,
+          "crate",
+          6.5,
+          1.5,
+          0
+        ],
+        [
+          258,
+          "pop",
+          9.29,
+          16.9
+        ],
+        [
+          267,
+          "pop",
+          9.09,
+          16.87
+        ],
+        [
+          275,
+          "shot",
+          8.78,
+          10.38,
+          -3.12,
+          0,
+          2
+        ],
+        [
+          275,
+          "bounce",
+          0.12,
+          1.39
+        ],
+        [
+          279,
+          "shot",
+          4.29,
+          9.81,
+          -0.66,
+          0,
+          1
+        ],
+        [
+          285,
+          "pop",
+          1.42,
+          0.13
+        ],
+        [
+          289,
+          "shot",
+          7.77,
+          9.83,
+          2.85,
+          0,
+          2
+        ],
+        [
+          292,
+          "shot",
+          3.15,
+          10.02,
+          -1.13,
+          0,
+          1
+        ],
+        [
+          301,
+          "shot",
+          6.91,
+          9.06,
+          3.07,
+          0,
+          2
+        ],
+        [
+          301,
+          "shot",
+          3.14,
+          11.02,
+          -1.15,
+          0,
+          1
+        ],
+        [
+          310,
+          "shot",
+          3.11,
+          11.8,
+          -1.21,
+          0,
+          1
+        ],
+        [
+          310,
+          "shot",
+          6.28,
+          9.51,
+          2.65,
+          0,
+          2
+        ],
+        [
+          313,
+          "pop",
+          3.31,
+          11.25
+        ],
+        [
+          313,
+          "bounce",
+          5.04,
+          6.09
+        ],
+        [
+          318,
+          "shot",
+          5.67,
+          9.97,
+          2.71,
+          0,
+          2
+        ],
+        [
+          318,
+          "bounce",
+          0.1,
+          10.16
+        ],
+        [
+          324,
+          "shot",
+          5.1,
+          10.03,
+          2.6,
+          0,
+          2
+        ],
+        [
+          327,
+          "bounce",
+          5.36,
+          6.11
+        ],
+        [
+          333,
+          "bounce",
+          0.11,
+          9.57
+        ],
+        [
+          337,
+          "boom",
+          4.44,
+          10.08,
+          2
+        ],
+        [
+          339,
+          "pop",
+          7.32,
+          10.86
+        ],
+        [
+          343,
+          "bounce",
+          0.17,
+          12.8
+        ],
+        [
+          343,
+          "shot",
+          4.23,
+          14.57,
+          -1.98,
+          0,
+          1
+        ],
+        [
+          346,
+          "bounce",
+          0.15,
+          12.6
+        ],
+        [
+          349,
+          "shot",
+          4.23,
+          15.07,
+          -1.97,
+          0,
+          1
+        ],
+        [
+          349,
+          "pop",
+          0.51,
+          12.74
+        ],
+        [
+          353,
+          "pop",
+          7.5,
+          10.83
+        ],
+        [
+          354,
+          "shot",
+          4.24,
+          15.56,
+          -1.95,
+          0,
+          1
+        ],
+        [
+          357,
+          "bounce",
+          16.86,
+          0.11
+        ],
+        [
+          385,
+          "pop",
+          7.92,
+          16.88
+        ],
+        [
+          386,
+          "pop",
+          21.84,
+          4.04
+        ],
+        [
+          395,
+          "bounce",
+          0.13,
+          4.99
+        ],
+        [
+          400,
+          "bounce",
+          0.13,
+          5.15
+        ],
+        [
+          409,
+          "bounce",
+          0.1,
+          5
+        ],
+        [
+          419,
+          "pop",
+          2.26,
+          0.15
+        ],
+        [
+          427,
+          "pop",
+          2.28,
+          0.1
+        ],
+        [
+          434,
+          "pop",
+          2.08,
+          0.1
+        ],
+        [
+          440,
+          "pop",
+          21.85,
+          11.15
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 33,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 38
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "fr-FR",
+      "viewport": "2048x991",
+      "screen": "2048x1152",
+      "dpr": 1.25,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 8,
+      "cores": 4,
+      "gl": {
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 630 (0x00005912) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "pixelRatio": 1.25
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/SRX4G",
+    "time": "2026-10-30T21:22:24.735Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

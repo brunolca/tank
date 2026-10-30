@@ -1,0 +1,394 @@
+{
+  "id": 7,
+  "created": "2026-10-30T21:39:27.493Z",
+  "category": "idee",
+  "text": "pouvoir choisir ses armes, gagner en munitions",
+  "context": {
+    "game": {
+      "iteration": 6,
+      "iterationTitle": "Le défi du jour",
+      "screen": "game",
+      "online": true,
+      "room": "SRX4G",
+      "mode": "coop",
+      "phase": "cleared",
+      "mission": 8,
+      "level": "Snipers",
+      "lives": 1,
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "Panzer59",
+          "host": false,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 16.11,
+        "y": 11.48,
+        "alive": true,
+        "pendingInputs": 2
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "x": 9.63,
+          "y": 3.18,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Panzer59",
+          "team": 0,
+          "me": true,
+          "x": 16.11,
+          "y": 11.48,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "green",
+          "label": "Vert",
+          "team": 99,
+          "x": 19.5,
+          "y": 2.5,
+          "alive": false
+        },
+        {
+          "id": 4,
+          "kind": "green",
+          "label": "Vert",
+          "team": 99,
+          "x": 19.5,
+          "y": 14.5,
+          "alive": false
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "tick": 427,
+      "recentEvents": [
+        [
+          406,
+          "shot",
+          16.84,
+          3.06,
+          2.13,
+          0,
+          2
+        ],
+        [
+          409,
+          "bounce",
+          17.27,
+          6.89
+        ],
+        [
+          409,
+          "boom",
+          15.36,
+          5.53,
+          3
+        ],
+        [
+          411,
+          "mboom",
+          5.6,
+          2.5
+        ],
+        [
+          412,
+          "pop",
+          8.99,
+          16.9
+        ],
+        [
+          416,
+          "shot",
+          17.65,
+          3,
+          2.31,
+          0,
+          2
+        ],
+        [
+          423,
+          "bounce",
+          15.09,
+          5.96
+        ],
+        [
+          428,
+          "pop",
+          15.69,
+          6.84
+        ],
+        [
+          431,
+          "boom",
+          19.54,
+          2.57,
+          2
+        ],
+        [
+          434,
+          "bounce",
+          15.16,
+          5.84
+        ],
+        [
+          441,
+          "pop",
+          16.2,
+          6.91
+        ],
+        [
+          111,
+          "shot",
+          3.08,
+          1.93,
+          0.05,
+          0,
+          1
+        ],
+        [
+          118,
+          "shot",
+          3.08,
+          1.93,
+          0.05,
+          0,
+          1
+        ],
+        [
+          128,
+          "shot",
+          3.08,
+          1.93,
+          0.05,
+          0,
+          1
+        ],
+        [
+          134,
+          "shot",
+          3.08,
+          1.93,
+          0.05,
+          0,
+          1
+        ],
+        [
+          186,
+          "shot",
+          19,
+          14.79,
+          2.62,
+          1,
+          4
+        ],
+        [
+          187,
+          "boom",
+          19.5,
+          2.5,
+          3
+        ],
+        [
+          198,
+          "bounce",
+          15.2,
+          16.88
+        ],
+        [
+          210,
+          "bounce",
+          21.86,
+          2.91
+        ],
+        [
+          212,
+          "pop",
+          21.09,
+          2.91
+        ],
+        [
+          224,
+          "bounce",
+          21.86,
+          2.91
+        ],
+        [
+          239,
+          "pop",
+          19.18,
+          3.06
+        ],
+        [
+          249,
+          "bounce",
+          0.19,
+          8.16
+        ],
+        [
+          295,
+          "pop",
+          14.29,
+          0.13
+        ],
+        [
+          306,
+          "shot",
+          20.03,
+          14.27,
+          5.87,
+          1,
+          4
+        ],
+        [
+          311,
+          "bounce",
+          21.8,
+          13.43
+        ],
+        [
+          329,
+          "shot",
+          19.58,
+          12.06,
+          1.63,
+          0,
+          2
+        ],
+        [
+          332,
+          "crate",
+          10.5,
+          2.5,
+          0
+        ],
+        [
+          336,
+          "shot",
+          19.77,
+          12.04,
+          1.81,
+          0,
+          2
+        ],
+        [
+          339,
+          "boom",
+          19.5,
+          14.5,
+          4
+        ],
+        [
+          345,
+          "shot",
+          19.05,
+          12.05,
+          1.69,
+          0,
+          2
+        ],
+        [
+          349,
+          "bounce",
+          18.94,
+          12.87
+        ],
+        [
+          353,
+          "shot",
+          18.49,
+          12.03,
+          1.26,
+          0,
+          2
+        ],
+        [
+          356,
+          "bounce",
+          7.19,
+          7.15
+        ],
+        [
+          356,
+          "bounce",
+          18.77,
+          12.82
+        ],
+        [
+          356,
+          "pop",
+          7.19,
+          7.22
+        ],
+        [
+          360,
+          "bounce",
+          18.55,
+          16.85
+        ],
+        [
+          374,
+          "pop",
+          17.86,
+          14.15
+        ],
+        [
+          392,
+          "pop",
+          17.89,
+          4.15
+        ],
+        [
+          406,
+          "pop",
+          21.88,
+          2.87
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 38,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 38
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "fr-FR",
+      "viewport": "2048x991",
+      "screen": "2048x1152",
+      "dpr": 1.25,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 8,
+      "cores": 4,
+      "gl": {
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 630 (0x00005912) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "pixelRatio": 1.25
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/SRX4G",
+    "time": "2026-10-30T21:39:15.287Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

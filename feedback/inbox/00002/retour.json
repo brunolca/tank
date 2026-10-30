@@ -1,0 +1,408 @@
+{
+  "id": 2,
+  "created": "2026-10-30T17:28:58.296Z",
+  "category": "bug",
+  "text": "Lorsqu'un niveau se finit, si les chars alliés continuent de tirer le niveau ne se finit jamais. Fix ou je désinstalle.",
+  "context": {
+    "game": {
+      "iteration": 5,
+      "iterationTitle": "La nuit tombe",
+      "screen": "game",
+      "online": true,
+      "room": "AKEJK",
+      "mode": "coop",
+      "phase": "gameover",
+      "mission": 9,
+      "level": "Labyrinthe",
+      "lives": 0,
+      "players": [
+        {
+          "name": "Bruno",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "Panzer",
+          "host": false,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 1.39,
+        "y": 11.36,
+        "alive": false,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "x": 5.5,
+          "y": 15.53,
+          "alive": false
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Panzer",
+          "team": 0,
+          "me": true,
+          "x": 1.39,
+          "y": 11.36,
+          "alive": false
+        },
+        {
+          "id": 3,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 99,
+          "x": 5.97,
+          "y": 7.52,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "yellow",
+          "label": "Jaune",
+          "team": 99,
+          "x": 5.51,
+          "y": 2.24,
+          "alive": false
+        },
+        {
+          "id": 5,
+          "kind": "marine",
+          "label": "Turquoise",
+          "team": 99,
+          "x": 3.5,
+          "y": 8.51,
+          "alive": false
+        },
+        {
+          "id": 6,
+          "kind": "marine",
+          "label": "Turquoise",
+          "team": 99,
+          "x": 10.61,
+          "y": 4.1,
+          "alive": false
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "tick": 1435,
+      "recentEvents": [
+        [
+          948,
+          "shot",
+          9.79,
+          11.25,
+          -2.95,
+          0,
+          2
+        ],
+        [
+          953,
+          "shot",
+          7.81,
+          8.82,
+          0.87,
+          0,
+          3
+        ],
+        [
+          956,
+          "shot",
+          9.79,
+          11.25,
+          -2.95,
+          0,
+          2
+        ],
+        [
+          968,
+          "bounce",
+          4.11,
+          10.13
+        ],
+        [
+          976,
+          "bounce",
+          4.11,
+          10.11
+        ],
+        [
+          984,
+          "bounce",
+          4.11,
+          10.1
+        ],
+        [
+          985,
+          "bounce",
+          0.1,
+          7.88
+        ],
+        [
+          991,
+          "bounce",
+          12.87,
+          14.91
+        ],
+        [
+          996,
+          "pop",
+          2.33,
+          7.11
+        ],
+        [
+          997,
+          "pop",
+          9.89,
+          9
+        ],
+        [
+          1004,
+          "pop",
+          11.14,
+          16.89
+        ],
+        [
+          1005,
+          "pop",
+          9.89,
+          8.95
+        ],
+        [
+          1013,
+          "pop",
+          9.89,
+          8.94
+        ],
+        [
+          1015,
+          "shot",
+          8.97,
+          10.9,
+          -2.21,
+          0,
+          2
+        ],
+        [
+          1019,
+          "shot",
+          7.91,
+          8.08,
+          1.06,
+          0,
+          3
+        ],
+        [
+          1020,
+          "shot",
+          8.68,
+          10.79,
+          -1.79,
+          0,
+          2
+        ],
+        [
+          1026,
+          "shot",
+          8.26,
+          10.78,
+          -1.5,
+          0,
+          2
+        ],
+        [
+          1034,
+          "shot",
+          7.59,
+          10.81,
+          -1.25,
+          0,
+          2
+        ],
+        [
+          1039,
+          "shot",
+          7.17,
+          10.84,
+          -1.12,
+          0,
+          2
+        ],
+        [
+          1040,
+          "bounce",
+          10.06,
+          11.88
+        ],
+        [
+          1044,
+          "pop",
+          10.52,
+          11.16
+        ],
+        [
+          1048,
+          "bounce",
+          7.38,
+          5.15
+        ],
+        [
+          1053,
+          "bounce",
+          8.68,
+          5.11
+        ],
+        [
+          1058,
+          "shot",
+          6.08,
+          7.84,
+          1.73,
+          0,
+          3
+        ],
+        [
+          1080,
+          "bounce",
+          0.86,
+          0.14
+        ],
+        [
+          1086,
+          "pop",
+          0.12,
+          1.21
+        ],
+        [
+          1086,
+          "pop",
+          9.19,
+          11.81
+        ],
+        [
+          1088,
+          "bounce",
+          11.15,
+          0.11
+        ],
+        [
+          1096,
+          "bounce",
+          12.41,
+          0.15
+        ],
+        [
+          1102,
+          "bounce",
+          4.63,
+          16.82
+        ],
+        [
+          1103,
+          "shot",
+          3.57,
+          7.84,
+          2.45,
+          0,
+          3
+        ],
+        [
+          1106,
+          "pop",
+          4.7,
+          16.84
+        ],
+        [
+          1108,
+          "pop",
+          12.41,
+          3.84
+        ],
+        [
+          1113,
+          "pop",
+          13.9,
+          3.31
+        ],
+        [
+          1124,
+          "bounce",
+          0.14,
+          10.72
+        ],
+        [
+          1130,
+          "pop",
+          3.7,
+          11.1
+        ],
+        [
+          1145,
+          "shot",
+          4.09,
+          7.95,
+          2.57,
+          0,
+          3
+        ],
+        [
+          1167,
+          "bounce",
+          0.17,
+          10.51
+        ],
+        [
+          1172,
+          "pop",
+          7.72,
+          16.89
+        ],
+        [
+          1173,
+          "boom",
+          1.39,
+          11.36,
+          2
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 56,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 120
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-GB",
+      "viewport": "1728x962",
+      "screen": "1728x1117",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/AKEJK",
+    "time": "2026-10-30T17:28:20.462Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}
