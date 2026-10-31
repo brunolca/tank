@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { home: 6.5, seconds: 7, caption: '' },
-  { daily: [1, 'portails'], seconds: 14, portals: [3], caption: 'Nouveau : le défi du jour', sub: 'Cinq missions, les mêmes pour tout le monde, et un classement' },
-  { daily: [3, 'nuit'], seconds: 12, caption: 'Nuit noire', sub: 'Les cinq étapes se jouent dans l’ombre' },
-  { daily: [2, 'caisses'], seconds: 12, caption: 'Pluie de caisses', sub: 'Les bonus tombent trois fois plus souvent' },
-  { daily: [4, 'ricochets'], seconds: 11, caption: 'Ricochets fous', sub: 'Tes obus rebondissent une fois de plus' },
-  { daily: [5, 'colosse'], seconds: 13, hits: [3, 6, 9], volley: true, caption: 'Le Colosse attend', sub: 'Certains jours, la dernière étape est un combat de boss' },
+  { arsenal: 7.5, seconds: 8, caption: '' },
+  { mission: 2, arms: ['ricochet'], seconds: 12, caption: 'Nouveau : l’arsenal · le Ricocheur', sub: 'Trois obus seulement, mais deux rebonds' },
+  { mission: 9, arms: ['fusee'], seconds: 11, caption: 'La Fusée', sub: 'Trois missiles rapides, sans rebond' },
+  { mission: 5, arms: ['sapeur'], seconds: 11, caption: 'Le Sapeur', sub: 'Cinq mines à semer derrière soi' },
+  { mission: 12, arms: ['canon', 'fusee'], rich: true, buffs: ['fan'], seconds: 12, caption: 'Le tir en éventail est réparé', sub: 'Et chaque obus prend la couleur de son tireur' },
+  { mission: 14, arms: ['ricochet', 'sapeur'], seconds: 10, caption: 'Un canon chacun', sub: 'À combiner entre amis, jusqu’à quatre' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -54,8 +54,9 @@ try {
     await page.evaluate((shot) => {
       const d = window.__demo;
       if (shot.home) d.home(shot.home * 1000);
+      else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
-      else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night);
+      else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);

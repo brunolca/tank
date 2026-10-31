@@ -1,7 +1,7 @@
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { getMission, isBossMission, LEVELS } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
-import { DT, H, SPECS, Tile, W } from '../src/shared/constants';
+import { DT, H, SPECS, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
 import { castRicochet } from '../src/shared/physics';
 
 for (let i = 0; i < LEVELS.length; i++) {
@@ -62,6 +62,9 @@ console.log('total', Date.now() - t0, 'ms');
     const before = g.bullets.length;
     g.tryFire(p);
     if (g.bullets.length - before < 2) fail(`éventail : ${g.bullets.length - before} obus au lieu de 3`);
+    // the three shells of a fan shot leave side by side: they must not destroy one another
+    for (let i = 0; i < 3; i++) g.step(new Map());
+    if (g.bullets.length - before < 3) fail(`éventail : il ne reste que ${g.bullets.length - before} obus après trois ticks`);
     g.killTank(p, undefined);
     if (p.alive) fail('le tank devrait être détruit sans bouclier');
     if (!fails()) console.log('bonus OK');
@@ -231,4 +234,31 @@ console.log('total', Date.now() - t0, 'ms');
   if (g.bullets[0]?.bounces !== SPECS.player.bounces + 1) fail('« Ricochets fous » ne donne pas de rebond en plus');
   if (formatTicks(30 * 125.5) !== '2:05,5') fail(`chrono mal formaté : ${formatTicks(30 * 125.5)}`);
   if (process.exitCode !== 1) console.log(`défi du jour OK (pire tick ${worst.toFixed(3)} ms, aujourd’hui : ${dailyTwist(dayNumber())}, « ${dailyLevel(dayNumber(), 1).name} »)`);
+}
+
+// arsenal: each cannon changes ammo, bounces, rockets and mines, and travels in the tank infos
+{
+  const fail = (m: string) => { console.error('ARSENAL:', m); process.exitCode = 1; };
+  const lvl = getMission(1);
+  for (const w of WEAPONS) {
+    const g = new Game(lvl.tiles);
+    const [sx, sy] = lvl.spawns[0];
+    const p = g.addTank('player', 0, sx, sy, 0x3d7bff, 'p1', 'P');
+    g.arm(p, w);
+    g.frozen = false;
+    const spec = playerSpec(w);
+    if (p.spec.maxBullets !== spec.maxBullets || p.spec.bounces !== spec.bounces || p.spec.mines !== spec.mines) fail(`${w} : fiche non appliquée`);
+    if ((g.tankInfos()[0].w ?? 'canon') !== w) fail(`${w} : absent des infos du tank`);
+    p.turret = -Math.PI / 2; // towards the open middle of the map
+    let fired = 0;
+    for (let i = 0; i < 40; i++) { p.fireCd = 0; if (g.tryFire(p)) fired++; }
+    if (g.bullets.length !== spec.maxBullets) fail(`${w} : ${g.bullets.length} obus en vol au lieu de ${spec.maxBullets}`);
+    if (g.bullets.some((b) => b.rocket !== spec.rocket || b.bounces !== spec.bounces)) fail(`${w} : obus mal réglés`);
+    let mines = 0;
+    for (let i = 0; i < 8; i++) { p.mineCd = 0; p.x = 2.5 + i * 1.1; if (g.tryMine(p)) mines++; }
+    if (mines !== spec.mines) fail(`${w} : ${mines} mines posées au lieu de ${spec.mines}`);
+    if (fired < spec.maxBullets) fail(`${w} : tir refusé`);
+  }
+  if (playerSpec('canon').maxBullets !== SPECS.player.maxBullets) fail('le canon doit garder la fiche du joueur');
+  if (process.exitCode !== 1) console.log('arsenal OK');
 }

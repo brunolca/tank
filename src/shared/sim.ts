@@ -1,7 +1,7 @@
 import {
   BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
-  TankKind, TankSpec, Tile, W, isPortal, isSolidTank,
+  TankKind, TankSpec, Tile, W, Weapon, isPortal, isSolidTank, playerSpec,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
@@ -29,6 +29,7 @@ export interface Tank {
   boss?: BossState;
   reveal: number; // night: seconds left during which the last muzzle flash gives this tank away
   alert: boolean; // AI: a foe is in sight right now
+  weapon?: Weapon; // player tanks: the cannon picked in the lobby (canon when omitted)
 }
 
 /** The boss: a radial volley every few seconds (announced by a glow), and a rage mode at half health. */
@@ -67,6 +68,7 @@ export interface Bullet {
   bounces: number;
   rocket: boolean;
   dead: boolean;
+  volley?: number; // shells fired together (fan shot) never collide with one another
 }
 
 export interface Mine {
@@ -191,8 +193,14 @@ export class Game {
     }
   }
 
+  /** Hand a player tank the cannon its driver picked in the lobby. */
+  arm(t: Tank, weapon: Weapon) {
+    t.weapon = weapon === 'canon' ? undefined : weapon;
+    t.spec = playerSpec(weapon);
+  }
+
   tankInfos(): TankInfo[] {
-    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color, hp: t.maxHp > 1 ? t.maxHp : undefined }));
+    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color, hp: t.maxHp > 1 ? t.maxHp : undefined, w: t.weapon }));
   }
 
   /** Set a tough tank's hit points (the room scales the boss with the number of players). */
@@ -372,14 +380,16 @@ export class Game {
       return true;
     }
     const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0) + (t.kind === 'player' ? this.playerBounces : 0);
-    this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false });
+    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false };
+    this.bullets.push(main);
     if (t.buffs.fan > 0) {
+      main.volley = main.id;
       // two extra shells on each side of the main one (they may push past the ammo cap)
       for (const da of [-FAN_SPREAD, FAN_SPREAD]) {
         const a = t.turret + da, ex = Math.cos(a), ey = Math.sin(a);
         const fx = t.x + ex * tip, fy = t.y + ey * tip;
         if (bulletBlocked(this.tiles, fx, fy, BULLET_R)) continue;
-        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false });
+        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id });
       }
     }
     return true;
@@ -456,7 +466,7 @@ export class Game {
       if (a.dead) continue;
       for (let j = i + 1; j < this.bullets.length; j++) {
         const b = this.bullets[j];
-        if (b.dead) continue;
+        if (b.dead || (a.volley && a.volley === b.volley)) continue;
         const rr = BULLET_R * 2 + 0.06;
         if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 < rr * rr) {
           a.dead = b.dead = true;

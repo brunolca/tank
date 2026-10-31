@@ -1,7 +1,7 @@
 {
-  "iteration": 6,
-  "date": "2026-10-30",
-  "title": "Le défi du jour",
+  "iteration": 7,
+  "date": "2026-10-31",
+  "title": "L’arsenal",
   "journal": [
     {
       "iteration": 1,
@@ -74,6 +74,19 @@
         "Trois vies pour tout le défi, sans vie bonus. Un chrono tourne en haut de l’écran pendant les combats : le classement du jour départage les équipes par étapes réussies, puis par temps.",
         "L’accueil affiche le défi du jour, sa consigne et les meilleurs temps. À la fin du défi, tu découvres ta place dans le classement.",
         "Chaque étape porte un nom tiré du jour, comme « La Serre brumeuse » ou « Le Moulin pressé »."
+      ]
+    },
+    {
+      "iteration": 7,
+      "date": "2026-10-31",
+      "title": "L’arsenal",
+      "notes": [
+        "Nouveau : dans le salon, chacun choisit son canon. Le Canon reste l’arme équilibrée, le Ricocheur tire trois obus à deux rebonds, la Fusée lance trois missiles rapides sans rebond et le Sapeur sème jusqu’à cinq mines.",
+        "Chaque canon a sa silhouette sur la table : long tube cerclé de laiton, lance-missiles à ailettes ou réserve de mines sur le dos.",
+        "Les obus des joueurs prennent la couleur de leur tireur : on sait enfin qui a tiré quoi.",
+        "Le tir en éventail marche vraiment : ses trois obus ne s’annulent plus entre eux au départ.",
+        "Une mission ou une manche gagnée se termine toujours : dès le dernier ennemi détruit, plus personne ne tire et la table se vide en une seconde et demie au plus.",
+        "En campagne, l’hôte peut repartir d’un palier déjà atteint : mission 1, 6, 11, 16…"
       ]
     }
   ]

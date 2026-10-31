@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, TankKind } from '../shared/constants';
+import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, isCheckpoint, isWeapon } from '../shared/constants';
 import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
@@ -10,6 +10,7 @@ interface Attachment {
   name: string;
   color: number;
   joined: number;
+  weapon?: Weapon;
 }
 
 interface Player extends Attachment {
@@ -34,6 +35,8 @@ export class Room extends DurableObject<Env> {
   private game?: Game;
   private level?: ParsedLevel;
   private mission = 1;
+  private from = 1; // coop: checkpoint the campaign starts at
+  private settle = -1; // seconds spent waiting for the last shells once a mission/round is decided (-1: not decided)
   private lives = 3;
   private round = 0;
   private killedEnemies = new Set<number>(); // enemy indices destroyed in current mission (persist across retries)
@@ -80,7 +83,7 @@ export class Room extends DurableObject<Env> {
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server);
     const att: Attachment = existing
-      ? { pid, name: existing.name, color: existing.color, joined: existing.joined }
+      ? { pid, name: existing.name, color: existing.color, joined: existing.joined, weapon: existing.weapon }
       : { pid, name: 'Joueur', color: this.freeColor(), joined: Date.now() };
     server.serializeAttachment(att);
     if (existing) {
@@ -93,6 +96,10 @@ export class Room extends DurableObject<Env> {
     this.broadcastLobby();
     if (this.game && this.level) this.sendLevel(server);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  private saveAttachment(p: Player, ws: WebSocket) {
+    ws.serializeAttachment({ pid: p.pid, name: p.name, color: p.color, joined: p.joined, weapon: p.weapon } satisfies Attachment);
   }
 
   private connectedCount() {
@@ -136,10 +143,23 @@ export class Room extends DurableObject<Env> {
         const wanted = Number(msg.color);
         const taken = [...this.players.values()].some((o) => o !== p && o.ws && o.color === wanted);
         if (PLAYER_COLORS.includes(wanted) && !taken) p.color = wanted;
-        ws.serializeAttachment({ pid: p.pid, name: p.name, color: p.color, joined: p.joined } satisfies Attachment);
+        this.saveAttachment(p, ws);
         this.broadcastLobby();
         break;
       }
+      case 'arm':
+        if (isWeapon(msg.w)) {
+          p.weapon = msg.w;
+          this.saveAttachment(p, ws);
+          this.broadcastLobby();
+        }
+        break;
+      case 'from':
+        if (p.pid === this.hostId() && this.phase === 'lobby' && isCheckpoint(Number(msg.n))) {
+          this.from = Number(msg.n);
+          this.broadcastLobby();
+        }
+        break;
       case 'mode':
         if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily')) {
           this.mode = msg.mode;
@@ -213,7 +233,7 @@ export class Room extends DurableObject<Env> {
     for (const p of this.players.values()) {
       p.score = 0; p.kills = {}; p.deaths = 0; p.inGame = !!p.ws;
     }
-    this.mission = 1;
+    this.mission = this.mode === 'coop' ? this.from : 1;
     this.lives = this.mode === 'daily' ? DAILY_LIVES : 3;
     this.round = 0;
     this.day = dayNumber();
@@ -242,6 +262,7 @@ export class Room extends DurableObject<Env> {
       used.push(pos);
       const team = this.mode === 'versus' ? i + 1 : 0;
       const t = game.addTank('player', team, pos[0], pos[1], p.color, p.pid, p.name);
+      game.arm(t, p.weapon ?? 'canon');
       if (this.mode === 'versus') {
         t.body = t.turret = Math.atan2(8.5 - pos[1], 11 - pos[0]);
       }
@@ -266,6 +287,7 @@ export class Room extends DurableObject<Env> {
     this.game = game;
     this.setPhase('intro', 3);
     this.lastEnemyCount = -1;
+    this.settle = -1;
     for (const p of this.players.values()) if (p.ws) this.sendLevel(p.ws);
   }
 
@@ -393,7 +415,7 @@ export class Room extends DurableObject<Env> {
       } else {
         inp = { ...p.last, f: 0, m: 0 };
       }
-      if (this.phase !== 'playing') inp = { ...inp, f: 0, m: 0 };
+      if (this.phase !== 'playing' || this.settle >= 0) inp = { ...inp, f: 0, m: 0 }; // cease-fire once the outcome is known
       inputs.set(p.pid, inp);
     }
     game.step(inputs);
@@ -447,9 +469,14 @@ export class Room extends DurableObject<Env> {
     if (this.mode !== 'versus') {
       const playersAlive = game.aliveCount(0);
       const enemiesAlive = game.aliveCount(99);
-      if (enemiesAlive === 0 && game.bullets.length === 0) {
-        this.setPhase('cleared', 3.5);
-        this.broadcastPhase();
+      if (enemiesAlive === 0) {
+        // wait for the last shells (nobody may fire any more), but never forever
+        if (this.settle < 0) this.settle = 0;
+        this.settle += DT;
+        if (game.bullets.length === 0 || this.settle >= SETTLE_MAX) {
+          this.setPhase('cleared', 3.5);
+          this.broadcastPhase();
+        } else if (this.lastEnemyCount !== 0) this.broadcastPhase();
       } else if (playersAlive === 0) {
         for (const t of game.tanks) {
           const idx = this.enemyIndexByTank.get(t.id);
@@ -464,7 +491,11 @@ export class Room extends DurableObject<Env> {
       this.lastEnemyCount = enemiesAlive;
     } else {
       const alive = game.tanks.filter((t) => t.alive);
-      if (alive.length <= 1 && game.bullets.length === 0) {
+      if (alive.length <= 1) {
+        if (this.settle < 0) this.settle = 0;
+        this.settle += DT;
+      }
+      if (alive.length <= 1 && (game.bullets.length === 0 || this.settle >= SETTLE_MAX)) {
         const w = alive[0]?.pid ? this.players.get(alive[0].pid) : undefined;
         if (w) w.score++;
         this.setPhase('roundEnd', 3.5);
@@ -514,11 +545,11 @@ export class Room extends DurableObject<Env> {
     const host = this.hostId();
     return [...this.players.values()]
       .sort((a, b) => a.joined - b.joined)
-      .map((p) => ({ id: p.pid, name: p.name, color: p.color, host: p.pid === host, connected: !!p.ws, score: p.score }));
+      .map((p) => ({ id: p.pid, name: p.name, color: p.color, host: p.pid === host, connected: !!p.ws, score: p.score, weapon: p.weapon }));
   }
 
   private broadcastLobby() {
-    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, phase: this.phase });
+    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, phase: this.phase, from: this.from });
   }
 
   private broadcast(msg: ServerMsg) {

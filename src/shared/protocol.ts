@@ -1,4 +1,4 @@
-import type { TankKind } from './constants';
+import type { TankKind, Weapon } from './constants';
 import type { DailyTwist } from './daily';
 
 // 'daily' (the daily challenge) came with iteration 6: older tabs show it like the coop campaign at worst.
@@ -12,6 +12,7 @@ export interface PlayerInfo {
   host: boolean;
   connected: boolean;
   score: number;
+  weapon?: Weapon; // cannon picked in the lobby (iteration 7)
 }
 
 export interface TankInfo {
@@ -22,6 +23,7 @@ export interface TankInfo {
   name?: string;
   color: number;
   hp?: number; // max hit points, only sent for tanks that take more than one hit (the boss)
+  w?: Weapon; // player tanks: the cannon picked in the lobby (canon when omitted; older clients draw a plain cannon)
 }
 
 export interface Input {
@@ -95,7 +97,7 @@ export interface Results {
 
 export type ServerMsg =
   | { t: 'welcome'; id: string; room: string }
-  | { t: 'lobby'; players: PlayerInfo[]; mode: Mode; phase: Phase }
+  | { t: 'lobby'; players: PlayerInfo[]; mode: Mode; phase: Phase; from?: number } // from: mission the coop campaign starts at
   | {
       t: 'level';
       mode: Mode;
@@ -116,6 +118,8 @@ export type ServerMsg =
 export type ClientMsg =
   | { t: 'hello'; name: string; color: number }
   | { t: 'mode'; mode: Mode }
+  | { t: 'arm'; w: Weapon } // pick a cannon (iteration 7, applies from the next mission)
+  | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
   | { t: 'start' }
   | { t: 'stop' }
   | { t: 'in'; i: Input[] }

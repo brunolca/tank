@@ -5,7 +5,7 @@ import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
-export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean }
+export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; color?: number } // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean }
 
 const PX = 64; // floor texture pixels per tile
@@ -273,7 +273,18 @@ const geo = {
   stud: new THREE.SphereGeometry(0.045, 10, 8),
   sideGun: new THREE.CylinderGeometry(0.03, 0.035, 0.26, 10),
   lamp: new THREE.SphereGeometry(0.055, 12, 8),
+  // arsenal (iteration 7): each cannon has its own silhouette
+  longBarrel: new THREE.CylinderGeometry(0.04, 0.046, 0.6, 12),
+  collar: new THREE.TorusGeometry(0.058, 0.018, 8, 18),
+  tube: new THREE.CylinderGeometry(0.085, 0.09, 0.44, 16),
+  tubeTip: new THREE.ConeGeometry(0.085, 0.12, 16),
+  fin: new THREE.BoxGeometry(0.12, 0.012, 0.09),
+  shortBarrel: new THREE.CylinderGeometry(0.058, 0.064, 0.3, 14),
+  rackMine: new THREE.CylinderGeometry(0.075, 0.085, 0.05, 16),
 };
+const brassMat = new THREE.MeshStandardMaterial({ color: 0xffb43d, roughness: 0.35, metalness: 0.6, emissive: 0x3a2000, emissiveIntensity: 0.3 });
+const rocketTipMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, emissive: 0x7a2a00, emissiveIntensity: 0.5 });
+const rackMineMat = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness: 0.5, metalness: 0.2 });
 const goldMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3, metalness: 0.75, emissive: 0x3a2400, emissiveIntensity: 0.4 });
 
 const treadMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.9 });
@@ -306,6 +317,43 @@ function buildTank(info: TankInfo): TankView {
   const muzzle = new THREE.Mesh(geo.muzzle, barrelMat);
   muzzle.rotation.z = Math.PI / 2;
   muzzle.position.set(0.56, 0.09, 0);
+  const w = info.kind === 'player' ? info.w : undefined;
+  if (w === 'ricochet') {
+    // long thin barrel with two brass collars
+    barrel.geometry = geo.longBarrel;
+    barrel.position.x = 0.38;
+    muzzle.position.x = 0.68;
+    muzzle.scale.set(0.8, 1, 0.8);
+    for (const x of [0.3, 0.48]) {
+      const c = new THREE.Mesh(geo.collar, brassMat);
+      c.rotation.y = Math.PI / 2;
+      c.position.set(x, 0.09, 0);
+      turret.add(c);
+    }
+  } else if (w === 'fusee') {
+    // fat launch tube with an orange warhead peeking out and little fins
+    barrel.geometry = geo.tube;
+    barrel.position.x = 0.3;
+    muzzle.geometry = geo.tubeTip;
+    muzzle.material = rocketTipMat;
+    muzzle.rotation.z = -Math.PI / 2;
+    muzzle.position.x = 0.57;
+    for (const s of [-1, 1]) {
+      const f = new THREE.Mesh(geo.fin, barrelMat);
+      f.position.set(0.14, 0.09, s * 0.1);
+      turret.add(f);
+    }
+  } else if (w === 'sapeur') {
+    // stubby barrel, and a rack of spare mines on the back deck
+    barrel.geometry = geo.shortBarrel;
+    barrel.position.x = 0.26;
+    muzzle.position.x = 0.42;
+    for (const z of [-0.17, 0, 0.17]) {
+      const m = new THREE.Mesh(geo.rackMine, rackMineMat);
+      m.position.set(-0.3, 0.39, z);
+      hull.add(m);
+    }
+  }
   const lampMat = new THREE.MeshBasicMaterial({ color: info.kind === 'player' ? LAMP_PLAYER : LAMP_ENEMY });
   const lamp = new THREE.Mesh(geo.lamp, lampMat);
   lamp.position.set(0.2, 0.1, 0.12);
@@ -951,13 +999,26 @@ export class Renderer {
     if (big) this.shake = Math.max(this.shake, 0.12);
   }
 
+  private shellMats = new Map<string, THREE.MeshStandardMaterial>();
+  /** Player shells wear their shooter's colour (rockets keep a hot orange core). */
+  private shellMat(color: number, rocket: boolean) {
+    const key = `${color}:${rocket ? 1 : 0}`;
+    let m = this.shellMats.get(key);
+    if (!m) {
+      const base = new THREE.Color(0xffffff).lerp(new THREE.Color(color), 0.7);
+      m = new THREE.MeshStandardMaterial({ color: base, emissive: rocket ? new THREE.Color(0xff7a1a).lerp(new THREE.Color(color), 0.4) : new THREE.Color(color), emissiveIntensity: rocket ? 1.1 : 0.75, roughness: 0.3 });
+      this.shellMats.set(key, m);
+    }
+    return m;
+  }
+
   syncBullets(list: RBullet[], dt: number) {
     const seen = new Set<number>();
     for (const b of list) {
       seen.add(b.id);
       let m = this.bullets.get(b.id);
       if (!m) {
-        m = new THREE.Mesh(geo.bullet, b.rocket ? this.rocketMat : this.bulletMat);
+        m = new THREE.Mesh(geo.bullet, b.color === undefined ? (b.rocket ? this.rocketMat : this.bulletMat) : this.shellMat(b.color, b.rocket));
         m.castShadow = true;
         m.rotation.order = 'YXZ';
         this.scene.add(m);
@@ -972,7 +1033,7 @@ export class Renderer {
         this.glow.emit({ x: b.x - b.vx * back, y: 0.45, z: b.y - b.vy * back, life: 0.18, s0: 0.1, s1: 0.02, c0: 0xffb040, c1: 0xff4010 });
         if (Math.random() < 0.8) this.smoke.emit({ x: b.x - b.vx * back, y: 0.45, z: b.y - b.vy * back, vy: 0.2, life: 0.9, s0: 0.08, s1: 0.26, c0: 0xcfcfcf, c1: 0xf2f2f2, drag: 1.5 });
       } else if (Math.random() < 60 * dt) {
-        this.smoke.emit({ x: b.x, y: 0.45, z: b.y, life: 0.35, s0: 0.06, s1: 0.02, c0: 0xffffff, c1: 0xe8e2d8 });
+        this.smoke.emit({ x: b.x, y: 0.45, z: b.y, life: 0.35, s0: 0.06, s1: 0.02, c0: b.color ?? 0xffffff, c1: 0xe8e2d8 });
         if (this.night > 0.3) this.glow.emit({ x: b.x, y: 0.45, z: b.y, life: 0.25, s0: 0.07, s1: 0.01, c0: 0xffe0a0, c1: 0xff7020 });
       }
     }

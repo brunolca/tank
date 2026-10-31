@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, DT, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, CHECKPOINT_EVERY, DT, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
@@ -34,6 +34,10 @@ localStorage.setItem('tanks.pid', pid);
 let myName = localStorage.getItem('tanks.name') ?? `${FUN_NAMES[Math.floor(Math.random() * FUN_NAMES.length)]}${Math.floor(Math.random() * 90 + 10)}`;
 let myColor = Number(localStorage.getItem('tanks.color') ?? PLAYER_COLORS[0]);
 if (!PLAYER_COLORS.includes(myColor)) myColor = PLAYER_COLORS[0];
+const storedWeapon = localStorage.getItem('tanks.weapon');
+let myWeapon: Weapon = isWeapon(storedWeapon) ? storedWeapon : 'canon';
+/** Furthest coop mission reached on this browser: unlocks the campaign checkpoints. */
+let bestMission = Math.max(1, Number(localStorage.getItem('tanks.best')) || 1);
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 /** The coop campaign and the daily challenge share their rules (lives, enemies, results). */
@@ -111,6 +115,7 @@ let reconnectTries = 0;
 let everOpened = false;
 let lobbyPlayers: PlayerInfo[] = [];
 let lobbyMode: Mode = 'coop';
+let lobbyFrom = 1; // coop checkpoint picked by the host
 let wantDaily = false; // « Relever le défi » from the home screen: switch the new room to the daily challenge
 let phase: Phase = 'lobby';
 let ping = 0;
@@ -120,6 +125,7 @@ function send(msg: ClientMsg) {
 }
 function sendHello() {
   send({ t: 'hello', name: myName, color: myColor });
+  send({ t: 'arm', w: myWeapon });
 }
 
 function connect(code: string) {
@@ -188,6 +194,8 @@ let pred = { x: 0, y: 0, body: 0 };
 let offset = { x: 0, y: 0 };
 let aimAng = 0;
 let localFireCd = 0;
+let mySpec: TankSpec = SPECS.player; // our tank's sheet with its cannon (prediction of speed, ammo, fire rate)
+let enemiesLeft = -1; // coop: enemies left according to the last phase message (0: cease-fire)
 let currentMode: Mode = 'coop';
 let lives = 3;
 let scores: Record<string, number> = {};
@@ -209,6 +217,7 @@ function onMessage(msg: ServerMsg) {
     case 'lobby': {
       lobbyPlayers = msg.players;
       lobbyMode = msg.mode;
+      lobbyFrom = msg.from ?? 1;
       phase = msg.phase;
       if (wantDaily && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
         wantDaily = false;
@@ -244,6 +253,12 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   tiles = msg.tiles.slice();
   infos = new Map(msg.tanks.map((t) => [t.id, t]));
   myTankId = msg.tanks.find((t) => t.pid === pid)?.id ?? -1;
+  mySpec = playerSpec(msg.tanks.find((t) => t.id === myTankId)?.w ?? 'canon');
+  enemiesLeft = -1;
+  if (msg.mode === 'coop' && msg.mission > bestMission) {
+    bestMission = msg.mission;
+    try { localStorage.setItem('tanks.best', String(bestMission)); } catch {}
+  }
   snaps = [];
   evq = [];
   pending = [];
@@ -290,6 +305,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   lives = msg.lives;
   if (msg.scores) scores = msg.scores;
   if (msg.daily) { dailyState = msg.daily; dailyK = latestK; }
+  enemiesLeft = msg.enemies;
   renderHud();
   if (prev === msg.phase && msg.phase === 'playing') return;
   switch (msg.phase) {
@@ -357,7 +373,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
 function predictStep(x: number, y: number, body: number, mx: number, my: number, s?: Snap): [number, number, number] {
   const snap = s ?? snaps[snaps.length - 1];
   const turbo = (snap?.T.get(myTankId)?.[5] ?? 0) & BONUS_INFO.turbo.flag;
-  [x, y, body] = driveStep(tiles, x, y, body, mx, my, SPECS.player.speed * (turbo ? TURBO_MULT : 1), DT);
+  [x, y, body] = driveStep(tiles, x, y, body, mx, my, mySpec.speed * (turbo ? TURBO_MULT : 1), DT);
   // treat other tanks as static obstacles
   if (snap) {
     for (const t of snap.T.values()) {
@@ -387,14 +403,15 @@ function clientTick() {
   if (pending.length > 90) pending.shift();
   if (playing) {
     [pred.x, pred.y, pred.body] = predictStep(pred.x, pred.y, pred.body, inp.mx, inp.my);
-    if (inp.f && localFireCd <= 0) {
+    const ceasefire = coopLike(currentMode) && enemiesLeft === 0; // the server no longer lets anyone fire
+    if (inp.f && localFireCd <= 0 && !ceasefire) {
       let own = 0;
       for (const b of last.B.values()) if (b[6] === myTankId) own++;
-      if (own < SPECS.player.maxBullets) {
-        localFireCd = SPECS.player.fireCd;
-        sfx.shot(false);
+      if (own < mySpec.maxBullets) {
+        localFireCd = mySpec.fireCd;
+        sfx.shot(mySpec.rocket);
         const tip = TANK_R + 0.22;
-        renderer.muzzle(px + Math.cos(aimAng) * tip, py + Math.sin(aimAng) * tip, aimAng, false, myTankId);
+        renderer.muzzle(px + Math.cos(aimAng) * tip, py + Math.sin(aimAng) * tip, aimAng, mySpec.rocket, myTankId);
       }
     }
   }
@@ -450,20 +467,25 @@ function onlineFrame(dt: number) {
   updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
   $('#hud-enemies').textContent = coopLike(currentMode) ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
 
+  /** Player shells take their shooter's colour (enemy shells stay white). */
+  function shellColor(owner: number) {
+    const i = infos.get(owner);
+    return i?.kind === 'player' ? i.color : undefined;
+  }
   // bullets: interpolate everyone else's, extrapolate our own from the freshest state
   const bullets: RBullet[] = [];
   const latest = snaps[snaps.length - 1];
   const ahead = Math.min(0.15, (performance.now() - latest.at) / 1000 + ping / 2000);
   for (const bl of latest.B.values()) {
     if (bl[6] !== myTankId) continue;
-    bullets.push({ id: bl[0], x: bl[1] + bl[3] * ahead, y: bl[2] + bl[4] * ahead, vx: bl[3], vy: bl[4], rocket: !!bl[5] });
+    bullets.push({ id: bl[0], x: bl[1] + bl[3] * ahead, y: bl[2] + bl[4] * ahead, vx: bl[3], vy: bl[4], rocket: !!bl[5], color: shellColor(bl[6]) });
   }
   for (const ba of a.B.values()) {
     if (ba[6] === myTankId) continue;
     const bb = b.B.get(ba[0]);
-    if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!ba[5] }); continue; }
+    if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!ba[5], color: shellColor(ba[6]) }); continue; }
     const bw = jumped(ba[1], ba[2], bb[1], bb[2], u);
-    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!ba[5] });
+    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!ba[5], color: shellColor(ba[6]) });
   }
   renderer.syncBullets(bullets, dt);
   lastBullets = bullets;
@@ -666,7 +688,8 @@ function renderLobby() {
   $('#lobby-players').innerHTML = Array.from({ length: 4 }, (_, i) => {
     const p = lobbyPlayers[i];
     if (!p) return `<li class="empty"><i></i><span>En attente d'un joueur…</span></li>`;
-    return `<li style="--c:${hex(p.color)}" class="${p.connected ? '' : 'off'}"><i></i><span>${escapeHtml(p.name)}${p.id === pid ? ' <em>(toi)</em>' : ''}</span>${p.host ? '<b class="host">Hôte</b>' : ''}</li>`;
+    const w = p.id === pid ? myWeapon : p.weapon ?? 'canon';
+    return `<li style="--c:${hex(p.color)}" class="${p.connected ? '' : 'off'}"><i></i><span>${escapeHtml(p.name)}${p.id === pid ? ' <em>(toi)</em>' : ''}</span><b class="wpn">${WEAPON_INFO[w].label}</b>${p.host ? '<b class="host">Hôte</b>' : ''}</li>`;
   }).join('');
   document.querySelectorAll<HTMLButtonElement>('#mode-select button').forEach((b) => {
     b.classList.toggle('on', b.dataset.mode === lobbyMode);
@@ -684,8 +707,59 @@ function renderLobby() {
     : lobbyMode === 'coop'
     ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
+  renderWeapons();
+  renderCheckpoints(isHost);
   renderHud();
 }
+
+/** Top view of a cannon, for the arsenal cards. */
+function weaponIcon(w: Weapon, color: number) {
+  const c = hex(color), dark = '#2a2b33';
+  const hull = `<rect x="4" y="7" width="26" height="16" rx="4" fill="${c}" opacity=".55"/><rect x="3" y="4" width="28" height="4" rx="2" fill="${dark}"/><rect x="3" y="22" width="28" height="4" rx="2" fill="${dark}"/>`;
+  const dome = `<circle cx="16" cy="15" r="6.5" fill="${c}" stroke="${dark}" stroke-width="1.2"/>`;
+  const parts: Record<Weapon, string> = {
+    canon: `<rect x="18" y="13" width="18" height="4" rx="1.5" fill="${dark}"/><rect x="34" y="12" width="4" height="6" rx="1" fill="${dark}"/>`,
+    ricochet: `<rect x="18" y="13.5" width="21" height="3" rx="1.2" fill="${dark}"/><rect x="25" y="12" width="2" height="6" rx="1" fill="#ffb43d"/><rect x="31" y="12" width="2" height="6" rx="1" fill="#ffb43d"/><path d="M38 9 l3 3 -3 3" fill="none" stroke="#ffb43d" stroke-width="1.6" stroke-linecap="round"/>`,
+    fusee: `<rect x="17" y="11.5" width="17" height="7" rx="3" fill="${dark}"/><path d="M34 11.5 l6 3.5 -6 3.5z" fill="#ff7a1a"/>`,
+    sapeur: `<rect x="18" y="13" width="13" height="4" rx="1.5" fill="${dark}"/><circle cx="5" cy="9.5" r="2.6" fill="#f4c542"/><circle cx="5" cy="15" r="2.6" fill="#f4c542"/><circle cx="5" cy="20.5" r="2.6" fill="#f4c542"/>`,
+  };
+  return `<svg viewBox="0 0 44 30" aria-hidden="true">${hull}${parts[w]}${dome}</svg>`;
+}
+
+function renderWeapons() {
+  $('#weapon-select').innerHTML = WEAPONS.map((w) =>
+    `<button data-w="${w}" class="${w === myWeapon ? 'on' : ''}" title="${WEAPON_INFO[w].desc}">${weaponIcon(w, myColor)}<span>${WEAPON_INFO[w].label}</span><small>${WEAPON_INFO[w].desc}</small></button>`).join('');
+}
+$('#weapon-select').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-w]');
+  if (!b || !isWeapon(b.dataset.w)) return;
+  sfx.click();
+  myWeapon = b.dataset.w;
+  try { localStorage.setItem('tanks.weapon', myWeapon); } catch {}
+  send({ t: 'arm', w: myWeapon });
+  renderLobby();
+});
+
+/** Coop checkpoints (mission 1, 6, 11…): the host picks among those reached on their browser. */
+function renderCheckpoints(isHost: boolean) {
+  const box = $('#from-select');
+  box.hidden = lobbyMode !== 'coop';
+  if (box.hidden) return;
+  const last = Math.floor((bestMission - 1) / CHECKPOINT_EVERY) * CHECKPOINT_EVERY + 1;
+  const list: number[] = [];
+  for (let n = 1; n <= Math.max(last, lobbyFrom) + CHECKPOINT_EVERY && list.length < 9; n += CHECKPOINT_EVERY) list.push(n);
+  if (list.length >= 9 && !list.includes(lobbyFrom)) list.push(lobbyFrom);
+  box.querySelector('.chips')!.innerHTML = list.map((n) => {
+    const locked = n > last && n !== lobbyFrom;
+    return `<button data-n="${n}" class="${n === lobbyFrom ? 'on' : ''}" ${!isHost || locked ? 'disabled' : ''} title="${locked ? 'Atteins cette mission pour la débloquer' : `Commencer à la mission ${n}`}">${locked ? '🔒 ' : ''}${n}</button>`;
+  }).join('');
+}
+$('#from-select').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-n]');
+  if (!b || b.disabled) return;
+  sfx.click();
+  send({ t: 'from', n: Number(b.dataset.n) });
+});
 
 // ------------------------------------------------------------------ daily challenge
 
@@ -765,7 +839,7 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; daily?: { day: number; stage: number } }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[] }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -782,7 +856,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
     // player-coloured tanks driven by the AI: used by the gameplay videos
     lvl.spawns.forEach(([x, y], i) => {
       const t = g.addTank('player', 1, x, y, PLAYER_COLORS[i % PLAYER_COLORS.length]);
-      g.enableAI(t, { skill: 2, turretSpeed: 5, fireCd: 0.4 });
+      if (opts.arms?.length) g.arm(t, opts.arms[i % opts.arms.length]);
+      g.enableAI(t, { skill: 2, turretSpeed: 5, fireCd: Math.max(0.4, t.spec.fireCd) });
     });
   } else {
     const left = ['pink', 'violet', 'ash'] as const;
@@ -824,7 +899,10 @@ function attractFrame(dt: number) {
   renderer.syncTanks(tanks, -1, dt);
   lastTanks = tanks;
   updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
-  renderer.syncBullets(g.bullets.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket })), dt);
+  renderer.syncBullets(g.bullets.map((b) => {
+    const o = g.tankById(b.owner);
+    return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, color: o?.kind === 'player' ? o.color : undefined };
+  }), dt);
   renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 })));
   renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
   if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) attractEnd = g.tick + TICK_RATE * 2.5;
@@ -1037,9 +1115,28 @@ if (params.has('demo')) {
   const demo = {
     meta: META,
     /** `night`: force the mission into the dark (true) or daylight (false); its own setting when omitted. */
-    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean) {
+    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean, arms?: Weapon[]) {
       attract = undefined;
-      startAttract({ mission, heroes, rich, bossHp, night });
+      startAttract({ mission, heroes, rich, bossHp, night, arms: arms?.filter(isWeapon) });
+    },
+    /** Show the lobby and its arsenal for a moment, flipping through the cannons (for the videos). */
+    arsenal(ms = 6000) {
+      const keep = { players: lobbyPlayers, weapon: myWeapon, best: bestMission, room: roomCode };
+      const fake = ['canon', 'fusee', 'ricochet', 'sapeur'] as const;
+      lobbyPlayers = fake.map((w, i) => ({ id: i ? `demo${i}` : pid, name: i ? FUN_NAMES[(i * 7) % FUN_NAMES.length] + (20 + i * 13) : myName, color: PLAYER_COLORS[i], host: !i, connected: true, score: 0, weapon: w }));
+      lobbyMode = 'coop';
+      bestMission = 16;
+      roomCode = 'DEMO7';
+      renderLobby();
+      show('lobby');
+      let k = 0;
+      const flip = setInterval(() => { myWeapon = WEAPONS[++k % WEAPONS.length]; renderLobby(); }, Math.max(700, ms / 6));
+      setTimeout(() => {
+        clearInterval(flip);
+        lobbyPlayers = keep.players; myWeapon = keep.weapon; bestMission = keep.best; roomCode = keep.room;
+        show('game');
+        $('#hud').hidden = true;
+      }, ms);
     },
     /** Play a stage of a daily challenge: today's, or the nearest day that has the given twist. */
     daily(stage = 1, twist?: DailyTwist) {

@@ -137,3 +137,28 @@ export const BONUS_INFO: Record<BonusKind, { label: string; color: number; durat
 };
 export const TURBO_MULT = 1.45;
 export const FAN_SPREAD = 0.2;
+
+// ------------------------------------------------------------------ arsenal (iteration 7)
+// Each player picks a cannon in the lobby. The index in WEAPONS is the wire order: append, never reorder.
+export const WEAPONS = ['canon', 'ricochet', 'fusee', 'sapeur'] as const;
+export type Weapon = (typeof WEAPONS)[number];
+export const WEAPON_INFO: Record<Weapon, { label: string; desc: string; spec: Partial<TankSpec> }> = {
+  canon: { label: 'Canon', desc: '5 obus · 1 rebond · 2 mines', spec: {} },
+  ricochet: { label: 'Ricocheur', desc: '3 obus · 2 rebonds · 2 mines', spec: { maxBullets: 3, bounces: 2, fireCd: 0.2 } },
+  fusee: { label: 'Fusée', desc: '3 missiles rapides · sans rebond', spec: { maxBullets: 3, bounces: 0, rocket: true, fireCd: 0.22 } },
+  sapeur: { label: 'Sapeur', desc: '3 obus · 1 rebond · 5 mines', spec: { maxBullets: 3, mines: 5 } },
+};
+export function isWeapon(w: unknown): w is Weapon {
+  return typeof w === 'string' && (WEAPONS as readonly string[]).includes(w);
+}
+/** A player tank's sheet once armed with a given cannon. */
+export function playerSpec(w: Weapon = 'canon'): TankSpec {
+  return { ...SPECS.player, ...WEAPON_INFO[w].spec };
+}
+/** Seconds the room waits for shells still in flight once a mission or a round is decided (nobody may fire meanwhile). */
+export const SETTLE_MAX = 1.5;
+/** Campaign checkpoints: the host may start at mission 1, 6, 11, 16… once someone on that browser got that far. */
+export const CHECKPOINT_EVERY = 5;
+export function isCheckpoint(n: number) {
+  return Number.isInteger(n) && n >= 1 && n <= 201 && (n - 1) % CHECKPOINT_EVERY === 0;
+}
