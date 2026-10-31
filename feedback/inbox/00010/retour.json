@@ -1,0 +1,390 @@
+{
+  "id": 10,
+  "created": "2026-10-30T21:43:55.258Z",
+  "category": "idee",
+  "text": "Rajoute un mode mafia",
+  "context": {
+    "game": {
+      "iteration": 6,
+      "iterationTitle": "Le défi du jour",
+      "screen": "lobby",
+      "online": false,
+      "room": "SRX4G",
+      "mode": "démo",
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "Panzer59",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 2.5,
+        "y": 6.69,
+        "alive": true,
+        "pendingInputs": 3
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "me": true,
+          "x": 2.5,
+          "y": 6.69,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Panzer59",
+          "team": 0,
+          "x": 1.57,
+          "y": 11.01,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "marine",
+          "label": "Turquoise",
+          "team": 2,
+          "x": 14.25,
+          "y": 3.91,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "marine",
+          "label": "Turquoise",
+          "team": 2,
+          "x": 7.51,
+          "y": 12.45,
+          "alive": true
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "recentEvents": [
+        [
+          789,
+          "mboom",
+          7.62,
+          11.07
+        ],
+        [
+          789,
+          "boom",
+          7.62,
+          11.07,
+          3
+        ],
+        [
+          790,
+          "shot",
+          19.18,
+          14.1,
+          1.88,
+          0,
+          2
+        ],
+        [
+          791,
+          "bounce",
+          19.12,
+          14.4
+        ],
+        [
+          791,
+          "pop",
+          19.09,
+          14.61
+        ],
+        [
+          804,
+          "pop",
+          19.94,
+          16.86
+        ],
+        [
+          819,
+          "shot",
+          13.76,
+          13.27,
+          5.45,
+          0,
+          8
+        ],
+        [
+          822,
+          "crate",
+          12.5,
+          2.5,
+          0
+        ],
+        [
+          846,
+          "warp",
+          16.6,
+          13.07,
+          8.5,
+          13.5,
+          5
+        ],
+        [
+          846,
+          "bounce",
+          17.6,
+          9.16
+        ],
+        [
+          849,
+          "pop",
+          21.4,
+          0.13
+        ],
+        [
+          849,
+          "mboom",
+          13.37,
+          13.7
+        ],
+        [
+          849,
+          "boom",
+          13.37,
+          13.7,
+          8
+        ],
+        [
+          866,
+          "mboom",
+          11.1,
+          14.48
+        ],
+        [
+          866,
+          "boom",
+          11.1,
+          14.48,
+          4
+        ],
+        [
+          866,
+          "block",
+          9,
+          15
+        ],
+        [
+          877,
+          "pop",
+          21.85,
+          13.88
+        ],
+        [
+          889,
+          "shot",
+          19.42,
+          13.92,
+          1.46,
+          0,
+          2
+        ],
+        [
+          895,
+          "shot",
+          19.32,
+          13.62,
+          1.65,
+          0,
+          2
+        ],
+        [
+          902,
+          "shot",
+          19.36,
+          13.92,
+          1.58,
+          0,
+          2
+        ],
+        [
+          903,
+          "bounce",
+          19.76,
+          16.9
+        ],
+        [
+          907,
+          "shot",
+          19.32,
+          14.02,
+          1.63,
+          0,
+          2
+        ],
+        [
+          910,
+          "bounce",
+          19.06,
+          16.81
+        ],
+        [
+          916,
+          "bounce",
+          19.34,
+          16.81
+        ],
+        [
+          918,
+          "pop",
+          19.26,
+          16.39
+        ],
+        [
+          919,
+          "pop",
+          18.92,
+          15.16
+        ],
+        [
+          985,
+          "pop",
+          21.58,
+          0.16
+        ],
+        [
+          995,
+          "mineSet",
+          9.49,
+          13.37
+        ],
+        [
+          1025,
+          "mboom",
+          18.25,
+          15.45
+        ],
+        [
+          1234,
+          "shot",
+          16.57,
+          12.54,
+          -0.03,
+          0,
+          2
+        ],
+        [
+          1235,
+          "warp",
+          15.99,
+          12.56,
+          8.5,
+          13.5,
+          2
+        ],
+        [
+          1240,
+          "bounce",
+          17.91,
+          12.5
+        ],
+        [
+          1242,
+          "shot",
+          9.7,
+          13.48,
+          -0.09,
+          0,
+          2
+        ],
+        [
+          1242,
+          "boom",
+          9.64,
+          13.19,
+          5
+        ],
+        [
+          1245,
+          "warp",
+          16.98,
+          12.48,
+          8.5,
+          13.5,
+          0
+        ],
+        [
+          1250,
+          "shot",
+          10.22,
+          13.5,
+          -0.1,
+          0,
+          2
+        ],
+        [
+          1250,
+          "pop",
+          10.22,
+          13.5
+        ],
+        [
+          1251,
+          "mboom",
+          9.49,
+          13.37
+        ],
+        [
+          1251,
+          "boom",
+          9.64,
+          13.56,
+          2
+        ],
+        [
+          1251,
+          "block",
+          10,
+          12
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 55,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 120
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-GB",
+      "viewport": "1728x962",
+      "screen": "1728x1117",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/SRX4G",
+    "time": "2026-10-30T21:43:50.487Z",
+    "regions": []
+  },
+  "hasScreenshot": false
+}
