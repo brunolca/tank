@@ -23,6 +23,7 @@
       <div id="hud-mission"></div>
       <div id="hud-lives"></div>
       <div id="hud-buffs"></div>
+      <div id="hud-role" hidden></div>
     </div>
     <div class="hud-center"><div id="hud-enemies"></div><div id="hud-clock" hidden></div><div id="scoreboard"></div></div>
     <div class="hud-right">
@@ -36,6 +37,16 @@
     <div class="boss-track"><div id="boss-fill"></div></div>
   </div>
   <button id="mine-btn" aria-label="Poser une mine">MINE</button>
+
+  <!-- COUNCIL (mole mode: vote after each mission) -->
+  <div id="council" hidden>
+    <div class="c-kicker"></div>
+    <div class="c-title">Qui est la taupe ?</div>
+    <div class="c-sub"></div>
+    <div class="c-timer"><i></i></div>
+    <div class="c-votes"></div>
+    <div class="c-verdict"></div>
+  </div>
 
   <div id="banner" hidden>
     <div class="b-kicker"></div>
@@ -101,6 +112,7 @@
         <button data-mode="coop">Campagne coop</button>
         <button data-mode="daily">Défi du jour</button>
         <button data-mode="versus">Versus</button>
+        <button data-mode="taupe">La taupe</button>
       </div>
       <p id="mode-desc" class="muted"></p>
       <div id="from-select" class="from" hidden><span class="kicker">Départ</span><div class="chips"></div></div>

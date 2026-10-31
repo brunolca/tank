@@ -35,7 +35,7 @@ export function dayLabel(day: number) {
 }
 
 /** Scramble nearby seeds (day, stage) into unrelated ones: the xorshift stream alone starts too alike. */
-function mix(a: number, b: number) {
+export function mix(a: number, b: number) {
   let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   h = Math.imul(h ^ (h >>> 13), 0x45d9f3b);

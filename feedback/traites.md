@@ -10,3 +10,7 @@
 | 6 | 7 | Retenu sous une forme tout public : un mode « traître » noté dans `DESIGN.md`. |
 | 7 | 7 | Fait : l’arsenal, quatre canons à choisir dans le salon. Les munitions à gagner restent au carnet d’idées. |
 | 8 | 7 | Fait : les obus des joueurs prennent la couleur de leur tireur. |
+| 9 | 8 | Fait, sous une forme tout public : le mode « La taupe » (un saboteur caché en coop, démasqué par un vote). |
+| 10 | 8 | Même demande que le n° 9 : fait avec le mode « La taupe ». |
+| 11 | 8 | Même demande que le n° 9 : fait avec le mode « La taupe ». |
+| 12 | 8 | Même demande que le n° 9 : fait avec le mode « La taupe ». |

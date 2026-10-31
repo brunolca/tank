@@ -1,3 +1,4 @@
+import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { getMission, isBossMission, LEVELS } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
@@ -261,4 +262,26 @@ console.log('total', Date.now() - t0, 'ms');
   }
   if (playerSpec('canon').maxBullets !== SPECS.player.maxBullets) fail('le canon doit garder la fiche du joueur');
   if (process.exitCode !== 1) console.log('arsenal OK');
+}
+
+// mole mode (iteration 8): council verdicts and generated stages
+{
+
+  const fail = (m: string) => { console.error('TAUPE:', m); process.exitCode = 1; };
+  const v3 = ['a', 'b', 'c'], v4 = ['a', 'b', 'c', 'd'];
+  if (councilVerdict(v3, { a: 'b', c: 'b', b: 'a' }) !== 'b') fail('2 voix sur 2 autres devraient accuser b');
+  if (councilVerdict(v3, { a: 'b', b: 'a', c: 'a' }) !== 'a') fail('a devrait être accusé');
+  if (councilVerdict(v3, { a: 'b', b: 'c', c: '' }) !== undefined) fail('une seule voix ne suffit pas à 3');
+  if (councilVerdict(v4, { a: 'b', c: 'b' }) !== 'b') fail('2 voix sur 3 autres devraient suffire à 4');
+  if (councilVerdict(v4, { a: 'b', c: 'd' }) !== undefined) fail('voix dispersées : personne');
+  if (councilVerdict(v3, { a: 'a', b: 'a' }) !== undefined) fail('on ne vote pas pour soi');
+  if (councilVerdict(v3, { a: 'z', b: 'z' }) !== undefined) fail('cible inconnue ignorée');
+  for (let seed = 1; seed < 40; seed++) {
+    for (let stage = 1; stage <= TAUPE_STAGES; stage++) {
+      const lvl = taupeLevel(seed * 977, stage);
+      if (!lvl.spawns.length || lvl.enemies.length < 3 || lvl.night) fail(`graine ${seed} étape ${stage} : ${lvl.spawns.length} départs, ${lvl.enemies.length} ennemis`);
+      if (lvl.tiles.some((t) => t === Tile.PortalA || t === Tile.PortalB)) fail(`graine ${seed} étape ${stage} : portails`);
+    }
+  }
+  console.log('taupe OK', taupeLevel(8, 1).name, taupeLevel(8, 1).enemies.length, taupeLevel(8, 3).enemies.length);
 }

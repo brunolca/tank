@@ -1,9 +1,11 @@
 import type { TankKind, Weapon } from './constants';
 import type { DailyTwist } from './daily';
+import type { CouncilState, TaupeResult } from './taupe';
 
 // 'daily' (the daily challenge) came with iteration 6: older tabs show it like the coop campaign at worst.
-export type Mode = 'coop' | 'versus' | 'daily';
-export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'gameover';
+// 'taupe' (the hidden mole) came with iteration 8, and its 'council' phase: older tabs show a coop game that pauses.
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe';
+export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
   id: string;
@@ -59,7 +61,8 @@ export type GameEvent =
   | ['hurt', number, number, number, number, number] // x y tankId hpLeft hpMax (a tough tank takes a hit)
   | ['volley', number, number, number] // x y tankId (the boss fires a ring of shells)
   | ['rage', number, number, number] // x y tankId (the boss is down to half health)
-  | ['warp', number, number, number, number, number]; // x0 y0 x1 y1 tankId (0 for a shell) went through a portal
+  | ['warp', number, number, number, number, number] // x0 y0 x1 y1 tankId (0 for a shell) went through a portal
+  | ['ff', number, number, number, number]; // x y victimTankId killerTankId: a player destroyed by a player (or by themselves), coop-like modes
 
 /** One finished run on the daily board. */
 export interface BoardEntry {
@@ -91,7 +94,9 @@ export interface Results {
   mode: Mode;
   mission?: number;
   daily?: { state: DailyState; cleared: number; board?: BoardDay };
-  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number }[];
+  taupe?: TaupeResult & { cleared: number; stages: number };
+  // ff: teammates destroyed (coop-like modes, iteration 8)
+  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number }[];
   winner?: string;
 }
 
@@ -110,7 +115,12 @@ export type ServerMsg =
       night?: 1; // night mission (older clients just play it in daylight)
       daily?: DailyState;
     }
-  | { t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState }
+  | {
+      t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState;
+      council?: CouncilState; // mole mode: the vote after each mission
+      stages?: number; // mole mode: number of stages
+    }
+  | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
   | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[] }
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
@@ -120,6 +130,7 @@ export type ClientMsg =
   | { t: 'mode'; mode: Mode }
   | { t: 'arm'; w: Weapon } // pick a cannon (iteration 7, applies from the next mission)
   | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
+  | { t: 'vote'; who: string } // mole mode, during a council: the pid accused ('' = nobody)
   | { t: 'start' }
   | { t: 'stop' }
   | { t: 'in'; i: Input[] }

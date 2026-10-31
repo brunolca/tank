@@ -1,7 +1,7 @@
 {
-  "iteration": 7,
+  "iteration": 8,
   "date": "2026-10-31",
-  "title": "L’arsenal",
+  "title": "La taupe",
   "journal": [
     {
       "iteration": 1,
@@ -87,6 +87,18 @@
         "Le tir en éventail marche vraiment : ses trois obus ne s’annulent plus entre eux au départ.",
         "Une mission ou une manche gagnée se termine toujours : dès le dernier ennemi détruit, plus personne ne tire et la table se vide en une seconde et demie au plus.",
         "En campagne, l’hôte peut repartir d’un palier déjà atteint : mission 1, 6, 11, 16…"
+      ]
+    },
+    {
+      "iteration": 8,
+      "date": "2026-10-31",
+      "title": "La taupe",
+      "notes": [
+        "Nouveau mode « La taupe », de 3 à 4 joueurs : trois missions en coopération… mais l’un de vous, tiré au sort en secret, veut les faire échouer.",
+        "Au début de la partie, chacun découvre son rôle sur son propre écran : loyal, ou taupe. Personne d’autre ne le voit.",
+        "Après chaque mission, le conseil se réunit : chacun accuse un joueur ou personne. Démasquez la taupe pour gagner, mais accuser un innocent coûte une vie !",
+        "La taupe gagne si l’équipe perd ses trois vies. Un ricochet « malheureux » est si vite arrivé…",
+        "Dans tous les modes en équipe, les tirs amis sont annoncés (« Rouge a détruit Bleu ! ») et comptés dans le tableau des résultats."
       ]
     }
   ]

@@ -613,3 +613,74 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 18
 .from .chips button.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .from .chips button:disabled { cursor: default; opacity: 0.45; }
 @media (max-width: 420px) { .weapons button small { display: none; } }
+
+/* mole mode (iteration 8) */
+:root { --mole: #c77dff; }
+#mode-select { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+#hud-role {
+  font-weight: 800; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line);
+  width: fit-content;
+}
+#hud-role.mole { color: #fff; background: linear-gradient(180deg, #8a3fd1, #5a2391); border-color: rgba(199, 125, 255, 0.6); box-shadow: 0 0 14px rgba(199, 125, 255, 0.45); }
+#banner.mole .b-kicker { color: var(--mole); }
+#banner.mole .b-title { color: #e9ccff; text-shadow: 0 0 26px rgba(199, 125, 255, 0.6); }
+#banner.loyal .b-kicker { color: var(--good); }
+#council {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 7;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  text-align: center;
+  padding: 22px 24px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(42, 30, 58, 0.92), rgba(22, 20, 32, 0.92));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(199, 125, 255, 0.35);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 40px rgba(199, 125, 255, 0.15);
+  animation: banner 0.45s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+#council .c-kicker { font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 800; color: var(--mole); }
+#council .c-title { font-size: clamp(26px, 6vw, 38px); font-weight: 900; margin: 4px 0 2px; }
+#council .c-sub { color: var(--muted); font-weight: 600; font-size: 14px; }
+#council .c-timer { height: 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); margin: 14px 0; overflow: hidden; }
+#council .c-timer i { display: block; height: 100%; width: 100%; transition: width 0.25s linear; background: linear-gradient(90deg, #8a3fd1, var(--mole)); border-radius: 999px; }
+#council .c-votes { display: grid; gap: 8px; }
+#council .c-votes button {
+  display: flex; align-items: center; gap: 10px;
+  font: 700 16px Rubik, sans-serif; color: var(--text); text-align: left;
+  background: rgba(255, 255, 255, 0.06); border: 2px solid transparent; border-radius: 14px;
+  padding: 10px 14px; cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+#council .c-votes button:not(:disabled):hover { background: rgba(255, 255, 255, 0.12); }
+#council .c-votes button:not(:disabled):active { transform: scale(0.98); }
+#council .c-votes button:disabled { cursor: default; }
+#council .c-votes button.on { border-color: var(--mole); background: rgba(199, 125, 255, 0.18); }
+#council .c-votes button.accused { border-color: #ff5d4c; background: rgba(255, 93, 76, 0.18); }
+#council .c-votes button.unmasked { border-color: var(--mole); background: rgba(199, 125, 255, 0.35); animation: unmask 0.6s ease-in-out 3 alternate; }
+@keyframes unmask { to { box-shadow: 0 0 26px rgba(199, 125, 255, 0.7); } }
+#council .c-votes .dot { flex: none; margin: 0; width: 16px; height: 16px; }
+#council .c-votes .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#council .c-votes kbd { font-size: 11px; opacity: 0.6; }
+#council .c-votes .tally { font-size: 13px; color: var(--muted); font-weight: 600; }
+#council .c-votes .ok { color: var(--good); font-size: 13px; }
+#council .c-votes .by { display: flex; gap: 3px; }
+#council .c-votes .by .dot { width: 10px; height: 10px; }
+#council .c-verdict { margin-top: 14px; font-weight: 800; font-size: 18px; min-height: 1em; }
+#council .c-verdict.good { color: var(--good); }
+#council .c-verdict.bad { color: #ff7a6e; }
+#council .c-verdict:empty { display: none; }
+.taupe-result { margin-top: 18px; text-align: center; }
+.taupe-result .reveal { display: inline-flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 900; padding: 10px 18px; border-radius: 16px; background: rgba(199, 125, 255, 0.16); border: 1px solid rgba(199, 125, 255, 0.45); }
+.taupe-result .reveal .dot { margin: 0; width: 16px; height: 16px; }
+.taupe-result p { margin: 10px 0 0; }
+.taupe-result .win { font-size: 18px; font-weight: 800; color: var(--accent); }
+@media (max-width: 520px) {
+  #council { padding: 16px; }
+  #council .c-votes button { padding: 9px 12px; font-size: 15px; }
+}

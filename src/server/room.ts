@@ -4,6 +4,7 @@ import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumbe
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
+import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
 interface Attachment {
   pid: string;
@@ -21,6 +22,7 @@ interface Player extends Attachment {
   score: number;
   kills: Partial<Record<TankKind, number>>;
   deaths: number;
+  ff: number; // teammates destroyed (coop-like modes)
   inGame: boolean;
 }
 
@@ -46,6 +48,11 @@ export class Room extends DurableObject<Env> {
   private day = 0; // daily challenge: the day the run started (it keeps it past midnight)
   private runTicks = 0; // daily challenge: ticks spent fighting
   private board?: BoardDay; // daily challenge: the board once the run is over
+  private mole?: string; // mole mode: pid of the hidden saboteur
+  private taupeSeed = 0; // mole mode: seed of the stages
+  private council?: CouncilState; // mole mode: the vote in progress (or its verdict)
+  private votes: Record<string, string> = {}; // mole mode: secret ballots of the council in progress
+  private taupeEnd?: TaupeResult; // mole mode: outcome, once the game is over
   private loop?: ReturnType<typeof setInterval>;
   private roomCode = '';
 
@@ -63,7 +70,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private makePlayer(att: Attachment, ws?: WebSocket): Player {
-    return { ...att, ws, queue: [], last: { ...EMPTY_INPUT }, ack: 0, score: 0, kills: {}, deaths: 0, inGame: false };
+    return { ...att, ws, queue: [], last: { ...EMPTY_INPUT }, ack: 0, score: 0, kills: {}, deaths: 0, ff: 0, inGame: false };
   }
 
   async fetch(req: Request): Promise<Response> {
@@ -161,11 +168,14 @@ export class Room extends DurableObject<Env> {
         }
         break;
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe')) {
           this.mode = msg.mode;
           await this.ctx.storage.put('mode', this.mode);
           this.broadcastLobby();
         }
+        break;
+      case 'vote':
+        this.onVote(p, String(msg.who ?? ''));
         break;
       case 'start':
         if (p.pid === this.hostId() && this.phase === 'lobby') this.startGame();
@@ -230,11 +240,19 @@ export class Room extends DurableObject<Env> {
       for (const p of active) this.send(p.ws!, { t: 'error', msg: 'Il faut au moins 2 joueurs pour le mode versus.' });
       return;
     }
+    if (this.mode === 'taupe' && active.length < TAUPE_MIN_PLAYERS) {
+      for (const p of active) this.send(p.ws!, { t: 'error', msg: `Il faut au moins ${TAUPE_MIN_PLAYERS} joueurs pour démasquer une taupe.` });
+      return;
+    }
     for (const p of this.players.values()) {
-      p.score = 0; p.kills = {}; p.deaths = 0; p.inGame = !!p.ws;
+      p.score = 0; p.kills = {}; p.deaths = 0; p.ff = 0; p.inGame = !!p.ws;
     }
     this.mission = this.mode === 'coop' ? this.from : 1;
-    this.lives = this.mode === 'daily' ? DAILY_LIVES : 3;
+    this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : 3;
+    this.mole = this.mode === 'taupe' ? active[Math.floor(Math.random() * active.length)].pid : undefined;
+    this.taupeSeed = (Math.random() * 2 ** 31) >>> 0;
+    this.council = undefined;
+    this.taupeEnd = undefined;
     this.round = 0;
     this.day = dayNumber();
     this.runTicks = 0;
@@ -248,7 +266,11 @@ export class Room extends DurableObject<Env> {
   private loadStage() {
     const participants = [...this.players.values()].filter((p) => p.ws).sort((a, b) => a.joined - b.joined);
     for (const p of participants) p.inGame = true;
-    this.level = this.mode === 'coop' ? getMission(this.mission) : this.mode === 'daily' ? dailyLevel(this.day, this.mission) : versusArena(this.round);
+    this.level = this.mode === 'coop' ? getMission(this.mission)
+      : this.mode === 'daily' ? dailyLevel(this.day, this.mission)
+      : this.mode === 'taupe' ? taupeLevel(this.taupeSeed, this.mission)
+      : versusArena(this.round);
+    this.council = undefined;
     const game = new Game(this.level.tiles);
     const spawns = this.level.spawns.slice();
     const used: [number, number][] = [];
@@ -305,13 +327,23 @@ export class Room extends DurableObject<Env> {
       night: this.level.night ? 1 : undefined,
       daily: this.dailyState(),
     });
+    if (this.mode === 'taupe') {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      this.send(ws, { t: 'role', mole: !!att && att.pid === this.mole });
+    }
     this.send(ws, this.phaseMsg());
   }
 
-  private onKill(victim: { pid?: string; kind: TankKind; id: number; team: number }, killer?: { pid?: string; team: number }) {
+  private onKill(victim: { pid?: string; kind: TankKind; id: number; team: number; x: number; y: number }, killer?: { pid?: string; team: number; id: number }) {
     if (victim.pid) {
       const vp = this.players.get(victim.pid);
       if (vp) vp.deaths++;
+      if (killer?.pid && this.mode !== 'versus') {
+        // friendly fire is public: everyone sees who hit whom (the mole has to make it look like an accident)
+        this.game?.events.push(['ff', +victim.x.toFixed(2), +victim.y.toFixed(2), victim.id, killer.id]);
+        const kp = this.players.get(killer.pid);
+        if (kp && killer.pid !== victim.pid) kp.ff++;
+      }
     } else {
       const idx = this.enemyIndexByTank.get(victim.id);
       if (idx !== undefined) this.killedEnemies.add(idx);
@@ -345,6 +377,8 @@ export class Room extends DurableObject<Env> {
       scores,
       results: this.phase === 'gameover' ? this.results() : undefined,
       daily: this.dailyState(),
+      council: this.council && this.phase === 'council' ? { ...this.council, left: Math.max(0, +this.phaseTimer.toFixed(1)) } : undefined,
+      stages: this.mode === 'taupe' ? TAUPE_STAGES : undefined,
     };
   }
 
@@ -383,10 +417,13 @@ export class Room extends DurableObject<Env> {
   private results(): Results {
     const players = [...this.players.values()]
       .filter((p) => p.inGame)
-      .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score }))
+      .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score, ff: this.mode === 'versus' ? undefined : p.ff }))
       .sort((a, b) => b.score - a.score);
     const daily = this.mode === 'daily' ? { state: this.dailyState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
-    return { mode: this.mode, mission: this.mission, players, winner: this.mode === 'versus' ? players[0]?.id : undefined, daily };
+    const taupe = this.mode === 'taupe' && this.taupeEnd
+      ? { ...this.taupeEnd, cleared: this.taupeEnd.why === 'missions' ? TAUPE_STAGES : this.mission - 1, stages: TAUPE_STAGES }
+      : undefined;
+    return { mode: this.mode, mission: this.mission, players, winner: this.mode === 'versus' ? players[0]?.id : undefined, daily, taupe };
   }
 
   private tick() {
@@ -436,6 +473,11 @@ export class Room extends DurableObject<Env> {
         this.checkEnd(game);
         break;
       case 'cleared':
+        if (this.phaseTimer <= 0 && this.mode === 'taupe') {
+          if (this.mission >= TAUPE_STAGES) this.finishTaupe('loyaux', 'missions');
+          else this.startCouncil('cleared');
+          break;
+        }
         if (this.phaseTimer <= 0) {
           if (this.mode === 'daily' && this.mission >= DAILY_STAGES) { void this.finishDaily(); break; }
           this.mission++;
@@ -447,7 +489,10 @@ export class Room extends DurableObject<Env> {
         break;
       case 'failed':
         if (this.phaseTimer <= 0) {
-          if (this.lives <= 0 && this.mode === 'daily') void this.finishDaily();
+          if (this.mode === 'taupe') {
+            if (this.lives <= 0) this.finishTaupe('taupe', 'vies');
+            else this.startCouncil('failed');
+          } else if (this.lives <= 0 && this.mode === 'daily') void this.finishDaily();
           else if (this.lives <= 0) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else this.loadStage();
         }
@@ -459,10 +504,65 @@ export class Room extends DurableObject<Env> {
           else { this.round++; this.loadStage(); }
         }
         break;
+      case 'council':
+        this.councilTick();
+        break;
       case 'gameover':
         if (this.phaseTimer <= 0) this.endToLobby();
         break;
     }
+  }
+
+  // ---------------------------------------------------------------- mole mode: councils
+
+  private startCouncil(why: 'cleared' | 'failed') {
+    const voters = [...this.players.values()].filter((p) => p.inGame && p.ws).sort((a, b) => a.joined - b.joined).map((p) => p.pid);
+    this.votes = {};
+    this.council = { why, left: COUNCIL_SECONDS, voters, voted: [] };
+    this.setPhase('council', COUNCIL_SECONDS);
+    this.broadcastPhase();
+  }
+
+  private onVote(p: Player, who: string) {
+    const c = this.council;
+    if (this.phase !== 'council' || !c || c.done || !c.voters.includes(p.pid)) return;
+    if (who !== '' && (who === p.pid || !c.voters.includes(who))) return;
+    this.votes[p.pid] = who;
+    c.voted = c.voters.filter((v) => v in this.votes);
+    if (c.voted.length >= c.voters.filter((v) => this.players.get(v)?.ws).length) this.phaseTimer = Math.min(this.phaseTimer, 0.6);
+    this.broadcastPhase();
+  }
+
+  private councilTick() {
+    const c = this.council;
+    if (!c) { this.loadStage(); return; }
+    if (this.phaseTimer > 0) return;
+    if (!c.done) {
+      // reveal the ballots and the verdict
+      c.done = true;
+      c.votes = { ...this.votes };
+      c.accused = councilVerdict(c.voters, this.votes);
+      c.wasMole = c.accused !== undefined && c.accused === this.mole;
+      if (c.accused && !c.wasMole) this.lives--; // a loyal player wrongly accused: the team pays for its suspicion
+      this.phaseTimer = VERDICT_SECONDS;
+      this.broadcastPhase();
+      return;
+    }
+    if (c.wasMole) { this.finishTaupe('loyaux', 'demasquee'); return; }
+    if (this.lives <= 0) { this.finishTaupe('taupe', 'vies'); return; }
+    if (c.why === 'cleared') {
+      this.mission++;
+      this.killedEnemies.clear();
+      this.enemyHp.clear();
+    }
+    this.loadStage();
+  }
+
+  private finishTaupe(winner: TaupeResult['winner'], why: TaupeResult['why']) {
+    this.taupeEnd = { mole: this.mole, winner, why };
+    this.council = undefined;
+    this.setPhase('gameover', 14);
+    this.broadcastPhase();
   }
 
   private checkEnd(game: Game) {

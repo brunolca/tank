@@ -5,6 +5,7 @@ import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
 import type { BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
+import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
 import { initAudio, isMusicOn, setMusicIntensity, sfx, startMusic, toggleMusic } from './audio';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
@@ -81,7 +82,7 @@ function show(s: Screen) {
   $('#results').hidden = s !== 'results';
   $('#hud').hidden = s !== 'game';
   document.body.dataset.screen = s;
-  if (s !== 'game') $('#menu').hidden = true;
+  if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -207,6 +208,10 @@ let currentMission = 0;
 let currentLevelName = '';
 let dailyState: DailyState | undefined; // daily challenge in progress (stage, fighting time)
 let dailyK = 0; // server tick when dailyState arrived, to run the clock between messages
+let myRole: boolean | undefined; // mole mode: true when this player is the mole
+let council: CouncilState | undefined; // mole mode: the vote in progress
+let councilAt = 0; // performance.now() when the council state arrived (its timer runs locally)
+let myVote: string | undefined; // our ballot in the council in progress
 
 function onMessage(msg: ServerMsg) {
   switch (msg.t) {
@@ -243,6 +248,11 @@ function onMessage(msg: ServerMsg) {
     case 'error':
       toast(msg.msg);
       break;
+    case 'role':
+      myRole = msg.mole;
+      renderRole();
+      if (currentMission <= 1 && phase !== 'playing') showRoleBanner(msg.mole);
+      break;
   }
 }
 
@@ -250,6 +260,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   stopAttract();
   online = true;
   currentMode = msg.mode;
+  if (msg.mode !== 'taupe') myRole = undefined;
   tiles = msg.tiles.slice();
   infos = new Map(msg.tanks.map((t) => [t.id, t]));
   myTankId = msg.tanks.find((t) => t.pid === pid)?.id ?? -1;
@@ -275,6 +286,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   dailyK = msg.tick;
   $('#hud-mission').innerHTML = msg.daily
     ? `<b>Défi · étape ${msg.daily.stage}/${msg.daily.stages}</b><span>${escapeHtml(msg.name)}</span>`
+    : msg.mode === 'taupe'
+    ? `<b>La taupe · étape ${msg.mission}/${TAUPE_STAGES}</b><span>${escapeHtml(msg.name)}</span>`
     : msg.mode === 'coop'
     ? `<b>Mission ${msg.mission}</b><span>${escapeHtml(msg.name)}</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
@@ -287,6 +300,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       const tw = TWIST_INFO[msg.daily.twist];
       banner(`Défi du jour · étape ${msg.daily.stage}/${msg.daily.stages}${msg.night ? ' · Nuit' : ''}`, msg.name,
         `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${msg.night ? ' night' : ''}${bossFight ? ' boss' : ''}`);
+    } else if (msg.mode === 'taupe') {
+      banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
     } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
     else banner(`Mission ${msg.mission}${msg.night ? ' · Nuit' : ''}`, msg.name, `Tanks ennemis : ${enemies.length}`, msg.night ? 'intro night' : 'intro');
     const sub = $('#banner .b-sub');
@@ -307,6 +322,17 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   if (msg.daily) { dailyState = msg.daily; dailyK = latestK; }
   enemiesLeft = msg.enemies;
   renderHud();
+  if (msg.phase === 'council' && msg.council) {
+    if (!council || prev !== 'council') myVote = undefined;
+    const wasDone = prev === 'council' && !!council?.done;
+    council = msg.council;
+    councilAt = performance.now();
+    renderCouncil(council, lobbyPlayers, pid, myVote);
+    if (prev !== 'council') { hideBanner(); sfx.jingle('start'); }
+    if (msg.council.done && !wasDone) councilVerdictSfx(msg.council);
+    return;
+  }
+  if (council) { council = undefined; $('#council').hidden = true; }
   if (prev === msg.phase && msg.phase === 'playing') return;
   switch (msg.phase) {
     case 'intro':
@@ -531,6 +557,12 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'mineSet':
       if (audible) sfx.mineSet();
       break;
+    case 'ff': {
+      const victim = tankName(e[3]), killer = tankName(e[4]);
+      floater(e[1], e[2], e[3] === e[4] ? 'Oups !' : 'Tir ami !', 0xc77dff);
+      if (online && victim && killer) toast(e[3] === e[4] ? `${victim} s’est fait sauter tout seul…` : `${killer} a détruit ${victim} !`, 2600);
+      break;
+    }
     case 'mboom':
       renderer.explosion(e[1], e[2], true);
       if (audible) sfx.boom(true);
@@ -666,9 +698,97 @@ function updateNameTags(tanks: RTank[]) {
 
 // ------------------------------------------------------------------ HUD / lobby / results
 
+/** Player name of a tank (online: from the level infos; demo: from the local game). */
+function tankName(id: number) {
+  return infos.get(id)?.name ?? attract?.tankById(id)?.name;
+}
+
+// ------------------------------------------------------------------ mole mode (iteration 8)
+
+function renderRole() {
+  const el = $('#hud-role');
+  el.hidden = myRole === undefined || !online || currentMode !== 'taupe';
+  el.className = myRole ? 'mole' : 'loyal';
+  el.textContent = myRole ? '🎭 Tu es la taupe' : '🛡 Loyal';
+}
+
+function showRoleBanner(mole: boolean) {
+  if (mole) banner('Rôle secret', 'Tu es la taupe !', 'Fais échouer les missions sans te faire démasquer. Un ricochet « malheureux » est vite arrivé…', 'intro mole');
+  else banner('Rôle secret', 'Tu es loyal', 'Une taupe se cache parmi vous : finissez les 3 missions ou démasquez-la au conseil.', 'intro loyal');
+}
+
+/** The council card: vote buttons while it runs, then the ballots and the verdict. Also used by the demo with made-up players. */
+function renderCouncil(c: CouncilState, players: PlayerInfo[], me: string, vote: string | undefined) {
+  const el = $('#council');
+  el.hidden = false;
+  el.dataset.done = c.done ? '1' : '';
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const canVote = !c.done && c.voters.includes(me);
+  el.querySelector('.c-kicker')!.textContent = `Conseil · ${c.why === 'cleared' ? 'mission réussie' : 'mission échouée'}`;
+  el.querySelector('.c-title')!.textContent = c.done ? 'Le conseil a tranché' : 'Qui est la taupe ?';
+  el.querySelector('.c-sub')!.textContent = c.done
+    ? ''
+    : canVote ? 'Accuse un joueur (touches 1 à 4) ou personne (0). Une erreur coûte une vie !' : 'Les joueurs votent…';
+  const tally = new Map<string, string[]>();
+  if (c.done && c.votes) for (const [v, t] of Object.entries(c.votes)) if (t) tally.set(t, [...(tally.get(t) ?? []), v]);
+  const row = (id: string, i: number) => {
+    const p = byId.get(id);
+    const name = p ? escapeHtml(p.name) : '?';
+    const cls = [vote === id && !c.done ? 'on' : '', c.done && c.accused === id ? (c.wasMole ? 'unmasked' : 'accused') : ''].join(' ');
+    const by = (tally.get(id) ?? []).map((v) => `<i class="dot" style="--c:${hex(byId.get(v)?.color ?? 0x888888)}"></i>`).join('');
+    const right = c.done ? `<span class="by">${by}</span>` : c.voted.includes(id) ? '<span class="ok">✓ a voté</span>' : '<span class="tally">réfléchit…</span>';
+    return `<button data-v="${escapeHtml(id)}" class="${cls}" ${!canVote || id === me ? 'disabled' : ''}><i class="dot" style="--c:${hex(p?.color ?? 0x888888)}"></i><span class="nm">${name}${id === me ? ' <em>(toi)</em>' : ''}</span>${canVote && id !== me ? `<kbd>${i + 1}</kbd>` : ''}${right}</button>`;
+  };
+  const nobody = c.done ? '' : `<button data-v="" class="${vote === '' ? 'on' : ''}" ${canVote ? '' : 'disabled'}><span class="nm">Personne</span>${canVote ? '<kbd>0</kbd>' : ''}</button>`;
+  el.querySelector('.c-votes')!.innerHTML = c.voters.map(row).join('') + nobody;
+  $<HTMLElement>('#council .c-timer i').style.width = `${(100 * c.left) / (c.done ? VERDICT_SECONDS : COUNCIL_SECONDS)}%`;
+  const v = el.querySelector('.c-verdict')!;
+  if (!c.done) { v.textContent = ''; v.className = 'c-verdict'; return; }
+  const acc = c.accused ? byId.get(c.accused)?.name ?? '?' : '';
+  v.className = `c-verdict ${c.accused ? (c.wasMole ? 'good' : 'bad') : ''}`;
+  v.textContent = !c.accused
+    ? 'Pas de majorité : personne n’est accusé.'
+    : c.wasMole ? `${acc} était la taupe ! Démasquée !` : `${acc} était loyal… Vous perdez une vie.`;
+}
+
+function councilVerdictSfx(c: CouncilState) {
+  if (!c.accused) sfx.click();
+  else if (c.wasMole) sfx.jingle('clear');
+  else sfx.jingle('fail');
+}
+
+/** Council timer bar, run locally between messages. */
+function updateCouncilTimer() {
+  if (!council || $('#council').hidden) return;
+  const total = council.done ? VERDICT_SECONDS : COUNCIL_SECONDS;
+  const left = Math.max(0, council.left - (performance.now() - councilAt) / 1000);
+  $<HTMLElement>('#council .c-timer i').style.width = `${(100 * left) / total}%`;
+}
+
+function castVote(who: string) {
+  if (!council || council.done || !council.voters.includes(pid) || who === pid) return;
+  myVote = who;
+  sfx.click();
+  send({ t: 'vote', who });
+  renderCouncil(council, lobbyPlayers, pid, myVote);
+}
+$('#council').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-v]');
+  if (b && !b.disabled && online) castVote(b.dataset.v ?? '');
+});
+addEventListener('keydown', (e) => {
+  if (!council || !online || (e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+  const m = e.code.match(/^(?:Digit|Numpad)([0-4])$/);
+  if (!m) return;
+  const n = Number(m[1]);
+  if (n === 0) castVote('');
+  else if (council.voters[n - 1]) castVote(council.voters[n - 1]);
+});
+
 function renderHud() {
   const livesEl = $('#hud-lives');
   livesEl.innerHTML = coopLike(currentMode) ? `<span class="tank-ico"></span> × ${lives}` : '';
+  renderRole();
   const sb = $('#scoreboard');
   if (currentMode === 'versus') {
     sb.innerHTML = lobbyPlayers
@@ -699,11 +819,14 @@ function renderLobby() {
   start.hidden = !isHost;
   $('#lobby-wait').hidden = isHost;
   const n = lobbyPlayers.filter((p) => p.connected).length;
-  start.disabled = lobbyMode === 'versus' && n < 2;
-  start.textContent = lobbyMode === 'versus' && n < 2 ? 'Il faut 2 joueurs' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
+  const need = lobbyMode === 'versus' ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
+  start.disabled = n < need;
+  start.textContent = n < need ? `Il faut ${need} joueurs` : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   const today = dayNumber();
   $('#mode-desc').textContent = lobbyMode === 'daily'
     ? `Défi du jour (${dayLabel(today)}) : ${DAILY_STAGES} missions générées, les mêmes pour tout le monde aujourd’hui, avec 3 vies et sans vie bonus. Consigne du jour : ${TWIST_INFO[dailyTwist(today)].label.toLowerCase()}. ${TWIST_INFO[dailyTwist(today)].desc} Le chrono décide du classement.`
+    : lobbyMode === 'taupe'
+    ? `La taupe (${TAUPE_MIN_PLAYERS} ou 4 joueurs) : ${TAUPE_STAGES} missions en coop… mais l’un de vous, tiré au sort en secret, veut les faire échouer. Après chaque mission, le conseil vote : démasquez la taupe pour gagner, mais accuser un innocent coûte une vie. La taupe gagne si vous perdez vos 3 vies.`
     : lobbyMode === 'coop'
     ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
@@ -811,25 +934,42 @@ async function loadDaily() {
   }
 }
 
+function taupeResultHtml(t: NonNullable<Results['taupe']>, players: Results['players']) {
+  const mole = players.find((p) => p.id === t.mole);
+  const why = t.why === 'demasquee' ? 'Le conseil l’a démasquée !'
+    : t.why === 'missions' ? `Les ${t.stages} missions sont accomplies malgré elle.`
+    : `Plus de vies : le sabotage a réussi (${t.cleared}/${t.stages} missions).`;
+  const mine = t.mole === pid;
+  const verdict = (t.winner === 'taupe') === mine ? 'Victoire !' : 'Défaite…';
+  return `<div class="taupe-result">
+    <div class="kicker">La taupe était</div>
+    <div class="reveal"><i class="dot" style="--c:${hex(mole?.color ?? 0x888888)}"></i>${escapeHtml(mole?.name ?? '?')}${mine ? ' (toi)' : ''}</div>
+    <p class="muted">${why}</p>
+    ${online || mole ? `<p class="win">${verdict}</p>` : ''}
+  </div>`;
+}
+
 function showResults(r: Results) {
   const kinds = Object.keys(SPECS).filter((k) => k !== 'player') as (keyof typeof SPECS)[];
   const title = r.daily
     ? (r.daily.cleared >= r.daily.state.stages ? 'Défi du jour relevé !' : `Défi du jour · ${r.daily.cleared}/${r.daily.state.stages} étapes`)
+    : r.taupe ? (r.taupe.winner === 'taupe' ? 'La taupe l’emporte !' : 'Les loyaux l’emportent !')
     : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
   const coop = coopLike(r.mode);
+  const ff = coop && r.players.some((p) => p.ff !== undefined);
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${SPECS[k].label}"><i class="dot" style="--c:${hex(ENEMY_COLORS[k])}"></i></th>`).join('') : '<th>Kills</th>'}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${SPECS[k].label}"><i class="dot" style="--c:${hex(ENEMY_COLORS[k])}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
           return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}</td>${
             coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
-          }<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
+          }${ff ? `<td>${p.ff || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
-    </table>${r.daily ? dailyResultHtml(r.daily) : ''}`;
+    </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
   show('results');
 }
 
@@ -839,13 +979,13 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[] }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
-  const lvl: ParsedLevel = opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
+  const lvl: ParsedLevel = opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
   const g = new Game(lvl.tiles);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
@@ -867,6 +1007,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
     const t = g.addTank(e.kind === 'white' && !opts.heroes ? 'ash' : e.kind, 2, e.x, e.y, 0);
     if (opts.bossHp && t.maxHp > 1) g.setHp(t, opts.bossHp, t.maxHp);
   });
+  // friendly fire between heroes: the same « Tir ami ! » as online
+  g.onKill = (v, k) => { if (v.kind === 'player' && k?.kind === 'player') g.events.push(['ff', v.x, v.y, v.id, k.id]); };
   g.frozen = false;
   attract = g;
   attractEnd = 0;
@@ -925,6 +1067,7 @@ function frame(now: number) {
     if (acc > DT) acc = 0;
     onlineFrame(dt);
     updateClock();
+    updateCouncilTimer();
   } else if (attract) {
     attractFrame(dt);
     updateNameTags([]);
@@ -1107,7 +1250,7 @@ const screen_ = window.screen;
 const params = new URLSearchParams(location.search);
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council };
   },
 };
 if (params.has('demo')) {
@@ -1148,6 +1291,50 @@ if (params.has('demo')) {
       banner(`Défi du jour · étape ${stage}/${DAILY_STAGES}`, lvl.name, TWIST_INFO[dailyTwist(day)].label, `intro daily${lvl.night ? ' night' : ''}`);
       setTimeout(hideBanner, 2600);
       return day;
+    },
+    /** Mole mode: play a stage of a mole game (heroes driven by the AI, arsenal optional). */
+    taupe(stage = 1, seed = 8, arms?: Weapon[]) {
+      attract = undefined;
+      startAttract({ heroes: true, taupe: { seed, stage }, arms: arms?.filter(isWeapon) });
+      return taupeLevel(seed, stage).name;
+    },
+    /** Mole mode: the secret role card (as the mole, or as a loyal player). */
+    role(mole = true, ms = 3500) {
+      showRoleBanner(mole);
+      setTimeout(hideBanner, ms);
+    },
+    /**
+     * Mole mode: a made-up council over the demo. The ballots come in one by one, then the verdict:
+     * `accused` (index of the player put aside, -1 for nobody), `wasMole` whether they were the mole.
+     */
+    council(ms = 9000, accused = 2, wasMole = true, why: 'cleared' | 'failed' = 'failed') {
+      const names = ['Chenille42', 'Obus27', 'Mortier61', 'Tourelle88'];
+      const players: PlayerInfo[] = names.map((name, i) => ({ id: `demo${i}`, name, color: PLAYER_COLORS[i], host: !i, connected: true, score: 0 }));
+      const voters = players.map((p) => p.id);
+      // ballots: everyone points at the accused (who points elsewhere), or a split vote
+      const target = (i: number) => accused < 0 ? voters[(i + 1) % 4] : i === accused ? voters[(i + 1) % 4] : voters[accused];
+      const c: CouncilState = { why, left: COUNCIL_SECONDS, voters, voted: [] };
+      const me = 'demo0';
+      hideBanner();
+      renderCouncil(c, players, me, undefined);
+      const voteAt = (ms * 0.62) / 4;
+      const order = [3, 1, 0, 2];
+      order.forEach((i, k) => setTimeout(() => {
+        c.voted = [...c.voted, voters[i]];
+        c.left = COUNCIL_SECONDS * (1 - (k + 1) / 5);
+        renderCouncil(c, players, me, i === 0 ? target(0) : undefined);
+        sfx.click();
+      }, voteAt * (k + 1)));
+      setTimeout(() => {
+        c.done = true;
+        c.left = VERDICT_SECONDS * 0.7;
+        c.votes = Object.fromEntries(voters.map((v, i) => [v, target(i)]));
+        c.accused = accused >= 0 ? voters[accused] : undefined;
+        c.wasMole = c.accused !== undefined && wasMole;
+        renderCouncil(c, players, me, undefined);
+        councilVerdictSfx(c);
+      }, ms * 0.7);
+      setTimeout(() => ($('#council').hidden = true), ms);
     },
     /** Show the home screen (and its daily challenge card) over the demo for a moment. */
     home(ms = 4000) {

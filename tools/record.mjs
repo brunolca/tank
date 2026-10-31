@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { arsenal: 7.5, seconds: 8, caption: '' },
-  { mission: 2, arms: ['ricochet'], seconds: 12, caption: 'Nouveau : l’arsenal · le Ricocheur', sub: 'Trois obus seulement, mais deux rebonds' },
-  { mission: 9, arms: ['fusee'], seconds: 11, caption: 'La Fusée', sub: 'Trois missiles rapides, sans rebond' },
-  { mission: 5, arms: ['sapeur'], seconds: 11, caption: 'Le Sapeur', sub: 'Cinq mines à semer derrière soi' },
-  { mission: 12, arms: ['canon', 'fusee'], rich: true, buffs: ['fan'], seconds: 12, caption: 'Le tir en éventail est réparé', sub: 'Et chaque obus prend la couleur de son tireur' },
-  { mission: 14, arms: ['ricochet', 'sapeur'], seconds: 10, caption: 'Un canon chacun', sub: 'À combiner entre amis, jusqu’à quatre' },
+  { taupe: 1, arms: ['canon', 'ricochet', 'fusee', 'sapeur'], role: true, seconds: 8, caption: 'Nouveau mode : la taupe', sub: 'L’un de vous sabote la mission en secret' },
+  { taupe: 1, keep: true, seconds: 11, caption: 'Trois missions en coop… ou presque', sub: 'Un ricochet « malheureux » est vite arrivé' },
+  { taupe: 1, keep: true, council: [10, 1, false, 'cleared'], seconds: 10.5, caption: 'Après chaque mission, le conseil vote', sub: 'Accuser un innocent coûte une vie' },
+  { taupe: 2, arms: ['ricochet', 'sapeur'], seconds: 10, caption: 'Les tirs amis sont annoncés', sub: 'Tout le monde voit qui a touché qui' },
+  { taupe: 2, keep: true, council: [10, 2, true, 'failed'], seconds: 10.5, caption: 'Démasquée !', sub: 'Trouvez la taupe avant de perdre vos trois vies' },
+  { taupe: 3, arms: ['fusee', 'canon', 'ricochet'], seconds: 11, caption: 'De 3 à 4 joueurs', sub: 'Dans le salon : mode « La taupe »' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -56,7 +56,10 @@ try {
       if (shot.home) d.home(shot.home * 1000);
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
+      else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
       else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms);
+      if (shot.role) setTimeout(() => d.role(true, 4000), 400); // after the title banner has gone
+      if (shot.council) d.council(shot.council[0] * 1000, shot.council[1], shot.council[2], shot.council[3]);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);
