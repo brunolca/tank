@@ -8,7 +8,7 @@ export const DAILY_STAGES = 5;
 export const DAILY_LIVES = 3;
 
 // The index in DAILY_TWISTS is derived from the day: append new twists, never reorder (yesterday's board must keep its twist).
-export const DAILY_TWISTS = ['nuit', 'portails', 'caisses', 'ricochets', 'colosse', 'orage'] as const;
+export const DAILY_TWISTS = ['nuit', 'portails', 'caisses', 'ricochets', 'colosse', 'orage', 'blindes'] as const;
 export type DailyTwist = (typeof DAILY_TWISTS)[number];
 export const TWIST_INFO: Record<DailyTwist, { label: string; desc: string }> = {
   nuit: { label: 'Nuit noire', desc: 'Les cinq étapes se jouent de nuit.' },
@@ -17,6 +17,7 @@ export const TWIST_INFO: Record<DailyTwist, { label: string; desc: string }> = {
   ricochets: { label: 'Ricochets fous', desc: 'Les obus des joueurs rebondissent une fois de plus.' },
   colosse: { label: 'Le Colosse attend', desc: 'La dernière étape est un combat contre le Colosse.' },
   orage: { label: 'Jour d’orage', desc: 'La foudre tombe sur les cinq étapes.' },
+  blindes: { label: 'Blindés', desc: 'La moitié des ennemis sont des tanks d’acier, qu’il faut toucher deux fois.' },
 };
 
 /** Days since 1970-01-01, in UTC: the challenge changes at midnight UTC. */
@@ -27,10 +28,14 @@ export function dayNumber(ms = Date.now()) {
 /** First day of the six-twist rotation (2026-11-02, « Jour d’orage »): the days before keep their five-twist rotation. */
 export const SIX_TWISTS_FROM = 20759;
 
+/** First day of the seven-twist rotation (2026-11-03, « Blindés »): the days before keep their rotation. */
+export const SEVEN_TWISTS_FROM = 20760;
+
 export function dailyTwist(day: number): DailyTwist {
   const wrap = (v: number, n: number) => ((v % n) + n) % n;
   if (day < SIX_TWISTS_FROM) return DAILY_TWISTS[wrap(day, 5)];
-  return DAILY_TWISTS[wrap(day - SIX_TWISTS_FROM + 5, DAILY_TWISTS.length)];
+  if (day < SEVEN_TWISTS_FROM) return DAILY_TWISTS[wrap(day - SIX_TWISTS_FROM + 5, 6)];
+  return DAILY_TWISTS[wrap(day - SEVEN_TWISTS_FROM + 6, 7)];
 }
 
 /** « vendredi 30 octobre », « dimanche 1er novembre » */
@@ -90,6 +95,7 @@ export function dailyLevel(day: number, stage: number): ParsedLevel {
     night: twist === 'nuit',
     storm: twist === 'orage',
     portals: twist === 'portails' ? true : undefined,
+    armored: twist === 'blindes' ? 0.5 : 0,
     name: stageName(day, stage),
   });
 }

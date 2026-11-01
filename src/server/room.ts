@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import META from '../shared/meta.json';
 import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, isCheckpoint, isWeapon } from '../shared/constants';
 import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -12,6 +13,7 @@ interface Attachment {
   color: number;
   joined: number;
   weapon?: Weapon;
+  v?: number; // the client's iteration (sent in the socket URL from iteration 10; absent for older tabs)
 }
 
 interface Player extends Attachment {
@@ -89,24 +91,28 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server);
+    const v = Math.floor(Number(url.searchParams.get('v'))) || undefined;
     const att: Attachment = existing
-      ? { pid, name: existing.name, color: existing.color, joined: existing.joined, weapon: existing.weapon }
-      : { pid, name: 'Joueur', color: this.freeColor(), joined: Date.now() };
+      ? { pid, name: existing.name, color: existing.color, joined: existing.joined, weapon: existing.weapon, v }
+      : { pid, name: 'Joueur', color: this.freeColor(), joined: Date.now(), v };
     server.serializeAttachment(att);
     if (existing) {
       try { existing.ws?.close(4000, 'replaced'); } catch {}
       existing.ws = server;
+      existing.v = v;
     } else {
       this.players.set(pid, this.makePlayer(att, server));
     }
-    this.send(server, { t: 'welcome', id: pid, room: this.roomCode });
+    this.send(server, { t: 'welcome', id: pid, room: this.roomCode, v: META.iteration });
+    // a tab opened before iteration 10 does not say its version: tell it to reload (it shows errors as a message)
+    if (!v) this.send(server, { t: 'error', msg: 'Une nouvelle version de Tanks! est en ligne : recharge la page.' });
     this.broadcastLobby();
     if (this.game && this.level) this.sendLevel(server);
     return new Response(null, { status: 101, webSocket: client });
   }
 
   private saveAttachment(p: Player, ws: WebSocket) {
-    ws.serializeAttachment({ pid: p.pid, name: p.name, color: p.color, joined: p.joined, weapon: p.weapon } satisfies Attachment);
+    ws.serializeAttachment({ pid: p.pid, name: p.name, color: p.color, joined: p.joined, weapon: p.weapon, v: p.v } satisfies Attachment);
   }
 
   private connectedCount() {
@@ -296,7 +302,8 @@ export class Room extends DurableObject<Env> {
       if (this.killedEnemies.has(idx)) return;
       const t = game.addTank(e.kind, 99, e.x, e.y, 0);
       if (t.maxHp > 1) {
-        const max = t.maxHp + BOSS_HP_PER_PLAYER * Math.max(0, participants.length - 1);
+        // only the boss grows tougher with a crowd; steel tanks always have their two hits
+        const max = t.boss ? t.maxHp + BOSS_HP_PER_PLAYER * Math.max(0, participants.length - 1) : t.maxHp;
         game.setHp(t, this.enemyHp.get(idx) ?? max, max);
       }
       this.enemyIndexByTank.set(t.id, idx);
@@ -316,13 +323,17 @@ export class Room extends DurableObject<Env> {
 
   private sendLevel(ws: WebSocket) {
     if (!this.game || !this.level) return;
+    const att = ws.deserializeAttachment() as Attachment | null;
+    let tanks = this.game.tankInfos();
+    // tabs older than iteration 10 don't know the steel tank: they draw a grey one instead of crashing
+    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,
       mission: this.mode === 'versus' ? this.round + 1 : this.mission,
       name: this.mode === 'versus' ? `Manche ${this.round + 1}` : this.level.name,
       tiles: this.game.tiles,
-      tanks: this.game.tankInfos(),
+      tanks,
       lives: this.lives,
       tick: this.game.tick,
       night: this.level.night ? 1 : undefined,
@@ -330,7 +341,6 @@ export class Room extends DurableObject<Env> {
       daily: this.dailyState(),
     });
     if (this.mode === 'taupe') {
-      const att = ws.deserializeAttachment() as Attachment | null;
       this.send(ws, { t: 'role', mole: !!att && att.pid === this.mole });
     }
     this.send(ws, this.phaseMsg());

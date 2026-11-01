@@ -3,9 +3,9 @@ import { H, W, Tile, TankKind } from './constants';
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  X boss
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss
 const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', X: 'boss',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss',
 };
 
 export interface LevelDef {
@@ -271,7 +271,7 @@ export const LEVELS: LevelDef[] = [
       '...o........##o.o##...',
       '...o..................',
       '...ooo..........p.....',
-      '..........y...........',
+      '..........s...........',
       '......................',
       '....#####.......p.....',
       '......................',
@@ -489,7 +489,11 @@ const ROSTER_BY_TIER: TankKind[][] = [
 ];
 
 /** Options for generated missions: the daily challenge picks its own layout seed, portals, night and name. */
-export interface GenOptions { seed?: number; portals?: boolean; night?: boolean; storm?: boolean; name?: string }
+export interface GenOptions {
+  seed?: number; portals?: boolean; night?: boolean; storm?: boolean; name?: string;
+  /** Share of the enemies swapped for steel tanks (iteration 10). Campaign missions from the 21st: 0.22; the daily challenge: 0 unless its twist says so. */
+  armored?: number;
+}
 
 export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLevel {
   const r = rng(opt.seed ?? mission * 7919 + 13);
@@ -546,6 +550,14 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
         enemies.push({ kind: roster[Math.floor(r() * roster.length)], x: x + 0.5, y: y + 0.5 });
         break;
       }
+    }
+    // steel tanks (iteration 10) replace some of the enemies: own random stream, so walls, places and the other kinds stay put
+    const armored = opt.armored ?? (opt.seed === undefined && mission > 20 ? 0.22 : 0);
+    if (armored > 0) {
+      const ra = rng((opt.seed ?? mission) * 6151 + 29);
+      for (const e of enemies) if (ra() < armored) e.kind = 'steel';
+      // a steel-tank mission always has at least one of them (and the daily twist even more)
+      if (!enemies.some((e) => e.kind === 'steel') && (opt.armored ?? 0) > 0 && enemies.length) enemies[Math.floor(ra() * enemies.length)].kind = 'steel';
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

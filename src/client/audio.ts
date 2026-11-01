@@ -139,6 +139,15 @@ export const sfx = {
     noise(t, 0.35, 5000, 1.5, 0.35, 'highpass');
     tone(t, 0.3, 1400, 350, 0.12, 'square');
   },
+  /** A steel tank's armour flies off: a bright, inharmonic ring with a rattle of plates. */
+  clang() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const [f, g] of [[523, 0.14], [1187, 0.09], [1913, 0.06], [2731, 0.04]] as const) tone(t, 0.7, f, f * 0.985, g, 'sine');
+    tone(t, 0.12, 900, 200, 0.12, 'square');
+    noise(t, 0.18, 6000, 1.2, 0.3, 'bandpass', 2500);
+    [0.09, 0.17, 0.27].forEach((d) => noise(t + d, 0.06, 3500 + d * 4000, 3, 0.16, 'bandpass'));
+  },
   /** The boss takes a hit: a heavy metal clang. */
   bossHit() {
     if (!ctx) return;

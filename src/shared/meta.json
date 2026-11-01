@@ -1,7 +1,7 @@
 {
-  "iteration": 9,
+  "iteration": 10,
   "date": "2026-11-01",
-  "title": "L’orage",
+  "title": "Le tank d’acier",
   "journal": [
     {
       "iteration": 1,
@@ -111,6 +111,18 @@
         "De nuit, chaque éclair illumine toute la table : pendant un instant, les ennemis voient tout le monde… et les tanks blancs invisibles se dévoilent.",
         "La mission 16, « Tempête », se joue désormais sous l’orage, comme environ un quart des missions générées après la 20ᵉ et une manche de versus sur cinq.",
         "Le défi du jour gagne une sixième consigne, « Jour d’orage », qui ouvre la nouvelle rotation dès le 2 novembre."
+      ]
+    },
+    {
+      "iteration": 10,
+      "date": "2026-11-01",
+      "title": "Le tank d’acier",
+      "notes": [
+        "Un nouvel ennemi entre en scène : le tank d’acier, bleu-gris et couvert de plaques rivetées. Son blindage encaisse le premier coup, obus, mine ou foudre.",
+        "Au premier impact, clang ! Les plaques s’envolent dans une gerbe d’étincelles, et le tank, allégé et fumant, fonce sur vous en tirant plus vite. Il faut le toucher une deuxième fois.",
+        "On le croise d’abord dans « Forteresse » (mission 12), puis dans les missions générées à partir de la 21ᵉ, où environ un ennemi sur cinq est blindé.",
+        "Le défi du jour gagne une septième consigne, « Blindés » : la moitié des ennemis sont en acier. Première édition le 3 novembre.",
+        "Le tonnerre s’écrit désormais à l’écran (« Craac ! ») pour celles et ceux qui jouent sans le son, et un onglet resté ouvert longtemps vous prévient désormais quand une nouvelle version du jeu est en ligne."
       ]
     }
   ]

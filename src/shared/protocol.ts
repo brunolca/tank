@@ -103,7 +103,7 @@ export interface Results {
 }
 
 export type ServerMsg =
-  | { t: 'welcome'; id: string; room: string }
+  | { t: 'welcome'; id: string; room: string; v?: number } // v: the server's iteration (iteration 10), so an old tab knows to reload
   | { t: 'lobby'; players: PlayerInfo[]; mode: Mode; phase: Phase; from?: number } // from: mission the coop campaign starts at
   | {
       t: 'level';

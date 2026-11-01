@@ -35,7 +35,8 @@ export type TankKind =
   | 'violet'
   | 'white'
   | 'black'
-  | 'boss';
+  | 'boss'
+  | 'steel';
 
 export interface TankSpec {
   speed: number;
@@ -66,7 +67,21 @@ export const SPECS: Record<TankKind, TankSpec> = {
   white: { speed: 1.8, maxBullets: 5, bounces: 1, rocket: false, fireCd: 0.8, turretSpeed: 2.6, mines: 2, skill: 2, invisible: true, reaction: 0.4, aimError: 0.06, label: 'Blanc' },
   black: { speed: 3.3, maxBullets: 3, bounces: 0, rocket: true, fireCd: 0.9, turretSpeed: 3.8, mines: 2, skill: 3, reaction: 0.3, aimError: 0.04, label: 'Noir' },
   boss: { speed: 1.05, maxBullets: 4, bounces: 1, rocket: false, fireCd: 0.75, turretSpeed: 2.2, mines: 3, skill: 2, reaction: 0.4, aimError: 0.05, hp: 8, size: BOSS_R, label: 'Colosse' },
+  // iteration 10: armour plates soak up the first hit, then it sheds its weight (see STEEL_STRIPPED)
+  steel: { speed: 0.95, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2.2, mines: 0, skill: 2, hp: 2, reaction: 0.5, aimError: 0.06, label: 'Acier' },
 };
+
+/** The steel tank once its armour is blown off: lighter, faster, angrier. */
+export const STEEL_STRIPPED: Partial<TankSpec> = { speed: 2.4, fireCd: 0.8, turretSpeed: 3.4, reaction: 0.35 };
+
+/** Sheet of an enemy kind, with a harmless fallback for kinds this build does not know (a newer server). */
+export function specOf(kind: string): TankSpec {
+  return SPECS[kind as TankKind] ?? SPECS.ash;
+}
+/** Colour of a tank kind (enemies), with a fallback for unknown kinds. */
+export function enemyColor(kind: string): number {
+  return ENEMY_COLORS[kind as TankKind] ?? 0x8f979e;
+}
 
 export const ENEMY_COLORS: Record<TankKind, number> = {
   player: 0x3d7bff,
@@ -80,6 +95,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   white: 0xeeeeee,
   black: 0x2a2a30,
   boss: 0xb8323a,
+  steel: 0x56708f,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */

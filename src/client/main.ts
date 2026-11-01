@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, CHECKPOINT_EVERY, DT, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
@@ -139,7 +139,7 @@ function connect(code: string) {
 
 function openSocket() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const sock = new WebSocket(`${proto}://${location.host}/api/room/${roomCode}/ws?pid=${encodeURIComponent(pid)}`);
+  const sock = new WebSocket(`${proto}://${location.host}/api/room/${roomCode}/ws?pid=${encodeURIComponent(pid)}&v=${META.iteration}`);
   ws = sock;
   sock.onopen = () => {
     everOpened = true;
@@ -218,6 +218,8 @@ function onMessage(msg: ServerMsg) {
     case 'welcome':
       roomCode = msg.room || roomCode;
       $('#room-code').textContent = roomCode;
+      // the server is newer (or older) than this tab: ask for a reload instead of playing with mismatched rules
+      if (msg.v && msg.v !== META.iteration) toast(`Une nouvelle version de Tanks! est en ligne (itération ${msg.v}) : recharge la page pour en profiter.`, 15000);
       break;
     case 'lobby': {
       lobbyPlayers = msg.players;
@@ -309,7 +311,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
-    sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(ENEMY_COLORS[k])}">${SPECS[k].label}</span>`).join('')}</div>`;
+    sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
   } else {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
@@ -491,7 +493,7 @@ function onlineFrame(dt: number) {
       continue;
     }
     const tw = jumped(ta[1], ta[2], tb[1], tb[2], u); // through a portal: no sliding across the map
-    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], tw), y: lerp(ta[2], tb[2], tw), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5] });
+    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], tw), y: lerp(ta[2], tb[2], tw), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5], hp: ta[6] });
   }
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
@@ -594,6 +596,12 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (audible) sfx.shieldBreak();
       break;
     case 'hurt':
+      if (renderer.tankKind(e[3]) === 'steel') {
+        // a steel tank loses its armour (the plates fly off when the snapshot says so)
+        floater(e[1], e[2], 'Clang ! Blindage arraché', 0x3f6fae);
+        if (audible) sfx.clang();
+        break;
+      }
       renderer.hurt(e[3], e[1], e[2]);
       floater(e[1], e[2], `${e[4]} / ${e[5]}`, ENEMY_COLORS.boss);
       if (audible) sfx.bossHit();
@@ -612,6 +620,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
       break;
     case 'bolt':
       renderer.bolt(e[1], e[2]);
+      floater(e[1], e[2], 'Craac !', 0xcfe0ff); // the thunder, written: readable without the sound
       if (audible) sfx.thunder();
       break;
     case 'rage':
@@ -659,7 +668,7 @@ let lastAlert = 0;
 /** Health bar of the toughest enemy on the table, and the warning whine when the boss charges a volley. */
 function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: number) => number) {
   let boss: RTank | undefined;
-  for (const t of tanks) if (t.alive && maxOf(t.id) > 1) { boss = t; break; }
+  for (const t of tanks) if (t.alive && maxOf(t.id) > 1 && renderer.tankKind(t.id) === 'boss') { boss = t; break; }
   const bar = $('#boss-bar');
   for (const t of tanks) {
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
@@ -973,7 +982,7 @@ function showResults(r: Results) {
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${SPECS[k].label}"><i class="dot" style="--c:${hex(ENEMY_COLORS[k])}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
@@ -1052,7 +1061,7 @@ function attractFrame(dt: number) {
   const tanks: RTank[] = g.tanks.map((t) => {
     const p = attractPrev.get(t.id) ?? t;
     const w = jumped(p.x, p.y, t.x, t.y, u);
-    return { id: t.id, x: lerp(p.x, t.x, w), y: lerp(p.y, t.y, w), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t) };
+    return { id: t.id, x: lerp(p.x, t.x, w), y: lerp(p.y, t.y, w), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t), hp: t.maxHp > 1 ? t.hp : undefined };
   });
   renderer.syncTanks(tanks, -1, dt);
   lastTanks = tanks;
@@ -1183,7 +1192,7 @@ function tankLabel(id: number) {
   const info = infos.get(id) ?? attract?.tanks.find((t) => t.id === id);
   if (!info) return { id };
   const kind = info.kind;
-  return { id, kind, label: kind === 'player' ? (info.name ?? 'joueur') : SPECS[kind].label, team: info.team, me: id === myTankId || undefined };
+  return { id, kind, label: kind === 'player' ? (info.name ?? 'joueur') : specOf(kind).label, team: info.team, me: id === myTankId || undefined };
 }
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -1367,6 +1376,12 @@ if (params.has('demo')) {
     /** Land a hit on the boss (to show its health bar and its anger on camera). */
     hitBoss() {
       for (const t of attract?.tanks ?? []) if (t.alive && t.boss) { t.buffs.invuln = 0; attract!.killTank(t, undefined); }
+    },
+    /** Blow the armour off the steel tanks still wearing it (to show it on camera). */
+    armor() {
+      let n = 0;
+      for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'steel' && t.hp > 1) { t.buffs.invuln = 0; attract!.killTank(t, undefined); n++; }
+      return n;
     },
     /** Make the boss charge its ring of shells right now (to catch it on camera). */
     volley() {

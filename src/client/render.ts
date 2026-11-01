@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BOLT_R, BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BOLT_R, BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
-export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
+export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; color?: number } // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean }
@@ -162,6 +162,8 @@ interface TankView {
   lampMat: THREE.MeshBasicMaterial;
   alert?: THREE.Sprite; // « ! » above an enemy that has spotted someone (night)
   alertT: number;
+  armor?: THREE.Group; // steel tanks (iteration 10): plates that fly off at the first hit
+  armorSeen?: boolean; // the plates' state has been synced once (no burst for a tank that starts the mission bare)
 }
 
 /** Red « ! » bubble shown above enemies that have spotted a foe at night. */
@@ -283,7 +285,14 @@ const geo = {
   fin: new THREE.BoxGeometry(0.12, 0.012, 0.09),
   shortBarrel: new THREE.CylinderGeometry(0.058, 0.064, 0.3, 14),
   rackMine: new THREE.CylinderGeometry(0.075, 0.085, 0.05, 16),
+  // steel tank (iteration 10): bolted armour plates
+  glacis: new RoundedBoxGeometry(0.14, 0.22, 0.66, 2, 0.03),
+  skirt: new RoundedBoxGeometry(0.9, 0.17, 0.05, 2, 0.02),
+  mantlet: new THREE.CylinderGeometry(0.27, 0.29, 0.1, 8),
+  rivet: new THREE.SphereGeometry(0.025, 8, 6),
 };
+const plateMat = new THREE.MeshStandardMaterial({ color: 0x9fb2c8, roughness: 0.28, metalness: 0.85, emissive: 0x101820, emissiveIntensity: 0.4 });
+const rivetMat = new THREE.MeshStandardMaterial({ color: 0x3c4552, roughness: 0.4, metalness: 0.7 });
 const brassMat = new THREE.MeshStandardMaterial({ color: 0xffb43d, roughness: 0.35, metalness: 0.6, emissive: 0x3a2000, emissiveIntensity: 0.3 });
 const rocketTipMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.4, emissive: 0x7a2a00, emissiveIntensity: 0.5 });
 const rackMineMat = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness: 0.5, metalness: 0.2 });
@@ -292,7 +301,7 @@ const goldMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3
 const treadMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.9 });
 
 function buildTank(info: TankInfo): TankView {
-  const color = info.kind === 'player' ? info.color : ENEMY_COLORS[info.kind];
+  const color = info.kind === 'player' ? info.color : enemyColor(info.kind);
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.08 });
   const topMat = new THREE.MeshStandardMaterial({ color: shade(color, 0.18), roughness: 0.4, metalness: 0.08 });
   const barrelMat = new THREE.MeshStandardMaterial({ color: shade(color, -0.35), roughness: 0.5, metalness: 0.3 });
@@ -356,6 +365,7 @@ function buildTank(info: TankInfo): TankView {
       hull.add(m);
     }
   }
+  let armorGroup: THREE.Group | undefined;
   const lampMat = new THREE.MeshBasicMaterial({ color: info.kind === 'player' ? LAMP_PLAYER : LAMP_ENEMY });
   const lamp = new THREE.Mesh(geo.lamp, lampMat);
   lamp.position.set(0.2, 0.1, 0.12);
@@ -374,6 +384,36 @@ function buildTank(info: TankInfo): TankView {
     alert.renderOrder = 5;
     root.add(alert);
     view.alert = alert;
+  }
+  if (info.kind === 'steel') {
+    // a toy ironclad: a sloped front plate, side skirts and an octagonal collar, all riveted
+    const armor = new THREE.Group();
+    const front = new THREE.Mesh(geo.glacis, plateMat);
+    front.position.set(0.42, 0.26, 0);
+    front.rotation.z = -0.35;
+    armor.add(front);
+    for (const z of [-0.41, 0.41]) {
+      const sk = new THREE.Mesh(geo.skirt, plateMat);
+      sk.position.set(0, 0.2, z);
+      armor.add(sk);
+      for (const x of [-0.32, -0.1, 0.12, 0.34]) {
+        const rv = new THREE.Mesh(geo.rivet, rivetMat);
+        rv.position.set(x, 0.24, z + Math.sign(z) * 0.03);
+        armor.add(rv);
+      }
+    }
+    for (const z of [-0.22, 0, 0.22]) {
+      const rv = new THREE.Mesh(geo.rivet, rivetMat);
+      rv.position.set(0.5, 0.31, z);
+      armor.add(rv);
+    }
+    hull.add(armor);
+    const collar = new THREE.Mesh(geo.mantlet, plateMat);
+    collar.position.y = 0.03;
+    collar.name = 'collar';
+    turret.add(collar);
+    armorGroup = armor;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (info.kind === 'boss') {
     // a big toy general: golden crown on the turret, studs and two little side guns on the hull
@@ -399,6 +439,11 @@ function buildTank(info: TankInfo): TankView {
       hull.add(g);
     }
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (armorGroup) {
+    view.armor = armorGroup;
+    const collar = turret.getObjectByName('collar');
+    if (collar) armorGroup.userData.collar = collar;
   }
   hull.scale.setScalar(scale);
   turret.scale.setScalar(scale);
@@ -1002,6 +1047,7 @@ export class Renderer {
       }
       this.tankBuffs(v, t, visible, dt);
       this.tankAlert(v, t, dt);
+      if (v.armor) this.tankArmor(v, t, visible, dt);
       // tread marks
       if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
       const d = Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY);
@@ -1117,6 +1163,39 @@ export class Renderer {
       const a = this.time * 3 + (kind === 'fan' ? Math.PI : 0);
       this.glow.emit({ x: t.x + Math.cos(a) * 0.5, y: 0.55, z: t.y + Math.sin(a) * 0.5, vy: 0.5, life: 0.45, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO[kind].color });
     }
+  }
+
+  /** Steel tanks: the plates stay on while they have two hit points, fly off at the first hit, then the bare tank smokes. */
+  private tankArmor(v: TankView, t: RTank, visible: boolean, dt: number) {
+    const on = (t.hp ?? 2) > 1;
+    const armor = v.armor!;
+    const collar = armor.userData.collar as THREE.Object3D | undefined;
+    if (armor.visible !== on) {
+      armor.visible = on;
+      if (collar) collar.visible = on;
+      if (!on && v.armorSeen) this.shedArmor(t.x, t.y, t.body);
+    }
+    v.armorSeen = true;
+    if (!on && visible && Math.random() < 9 * dt) {
+      this.smoke.emit({ x: t.x + (Math.random() - 0.5) * 0.3, y: 0.5, z: t.y + (Math.random() - 0.5) * 0.3, vy: 0.7, life: 0.9, s0: 0.06, s1: 0.2, c0: 0x6b6f78, c1: 0xa9adb5, drag: 1.2 });
+    }
+  }
+
+  /** The armour of a steel tank flies off: shiny plates, rivets and sparks. */
+  shedArmor(x: number, y: number, body: number) {
+    for (let i = 0; i < 22; i++) {
+      const a = body + (Math.random() - 0.5) * Math.PI * 2;
+      const sp = 1.5 + Math.random() * 2.8;
+      this.debris.emit({
+        x, y: 0.35, z: y, vx: Math.cos(a) * sp, vy: 2.5 + Math.random() * 3.5, vz: Math.sin(a) * sp,
+        life: 1.2 + Math.random() * 0.6, s0: 0.07 + Math.random() * 0.07, s1: 0.04, c0: Math.random() < 0.25 ? 0x3c4552 : 0xb9c8da, c1: 0x6d7a8a, grav: 11, drag: 0.3,
+      });
+    }
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 4;
+      this.glow.emit({ x, y: 0.4, z: y, vx: Math.cos(a) * sp, vy: 1 + Math.random() * 3, vz: Math.sin(a) * sp, life: 0.25 + Math.random() * 0.3, s0: 0.06, s1: 0.01, c0: 0xffffff, c1: 0xffc060, grav: 9, drag: 1.2 });
+    }
+    this.shake = Math.max(this.shake, 0.2);
   }
 
   syncBonuses(list: RBonus[]) {
@@ -1346,7 +1425,7 @@ export class Renderer {
   }
 
   private deathMark(x: number, y: number, info: TankInfo) {
-    const color = '#' + new THREE.Color(info.kind === 'player' ? info.color : ENEMY_COLORS[info.kind]).getHexString();
+    const color = '#' + new THREE.Color(info.kind === 'player' ? info.color : enemyColor(info.kind)).getHexString();
     const big = tankRadius(info.kind) / TANK_R;
     this.floorMark((g) => {
       g.save();
@@ -1458,6 +1537,6 @@ export class Renderer {
   tankColor(id: number) {
     const v = this.tanks.get(id);
     if (!v) return 0xffffff;
-    return v.info.kind === 'player' ? v.info.color : ENEMY_COLORS[v.info.kind];
+    return v.info.kind === 'player' ? v.info.color : enemyColor(v.info.kind);
   }
 }

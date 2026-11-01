@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 16, arms: ['canon', 'ricochet'], bolts: [2.5, 6.5, 9.5], seconds: 12, caption: 'Nouveau : l’orage', sub: 'Quand le sol crépite, la foudre va tomber' },
-  { mission: 22, arms: ['canon', 'fusee'], bolts: [2, 5.5, 9], seconds: 12, caption: 'Orage de nuit', sub: 'Chaque éclair illumine toute la table' },
-  { daily: [2, 'orage'], bolts: [3, 7], seconds: 11, caption: 'Défi du jour : « Jour d’orage »', sub: 'Une sixième consigne dans la rotation' },
-  { mission: 24, arms: ['sapeur', 'ricochet'], bolts: [3, 7.5], seconds: 11, caption: 'La foudre ne choisit pas son camp', sub: 'Elle frappe les ennemis, fait sauter le liège et les mines' },
-  { mission: 10, storm: true, bossHp: 6, arms: ['fusee', 'canon'], bolts: [3, 6.5], seconds: 12, caption: 'Même le Colosse craint l’orage', sub: 'Mission 16, missions générées et versus' },
+  { mission: 12, arms: ['canon', 'ricochet'], armor: [4.5], seconds: 13, caption: 'Nouveau : le tank d’acier', sub: 'Son blindage encaisse le premier coup' },
+  { mission: 21, arms: ['fusee', 'canon'], armor: [2.5], seconds: 12, caption: 'Clang ! Le blindage s’envole', sub: 'Dénudé, il devient bien plus rapide' },
+  { daily: [2, 'blindes'], armor: [5], seconds: 11, caption: 'Défi du jour : « Blindés »', sub: 'Une septième consigne, dès le 3 novembre' },
+  { mission: 26, arms: ['sapeur', 'ricochet'], rich: true, seconds: 11, caption: 'Missions générées', sub: 'Dès la 21ᵉ, un ennemi sur cinq porte l’acier' },
+  { mission: 22, arms: ['canon', 'fusee'], bolts: [2, 5.5, 9], seconds: 12, caption: 'Craac !', sub: 'Le tonnerre s’écrit aussi, pour jouer sans le son' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -63,6 +63,7 @@ try {
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);
       for (const s of shot.bolts ?? []) setTimeout(() => d.bolt?.(), s * 1000);
+      for (const s of shot.armor ?? []) setTimeout(() => d.armor?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

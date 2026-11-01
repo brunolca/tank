@@ -1,8 +1,8 @@
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
-import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
+import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
-import { BOLT_R, BOLT_WARN, DT, H, SPECS, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
+import { BOLT_R, BOLT_WARN, DT, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
 import { castRicochet } from '../src/shared/physics';
 
 for (let i = 0; i < LEVELS.length; i++) {
@@ -370,4 +370,65 @@ console.log('total', Date.now() - t0, 'ms');
   if (s.bolts.some((b) => b.t >= BOLT_WARN)) fail('éclair resté en attente');
   void BOLT_R;
   if (process.exitCode !== 1) console.log(`orage OK (${zaps} éclairs en 40 s, ${per.toFixed(3)} ms/tick, missions d’orage : ${storms.join(', ')})`);
+}
+
+// steel tanks (iteration 10): two hits, the first one blows the armour off and makes them faster
+{
+  const fail = (m: string) => { console.error('ACIER:', m); process.exitCode = 1; };
+  if (!getMission(12).enemies.some((e) => e.kind === 'steel')) fail('« Forteresse » (12) devrait avoir un tank d’acier');
+  const steelMissions: number[] = [];
+  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'steel')) steelMissions.push(mission);
+  if (steelMissions.some((m) => m !== 12 && m < 21)) fail('tank d’acier avant la 21ᵉ mission (hors Forteresse)');
+  if (steelMissions.length < 15) fail(`trop peu de missions avec des tanks d’acier (${steelMissions.length})`);
+  // the days already played keep their twist and their stages
+  for (let day = SIX_TWISTS_FROM - 10; day < SEVEN_TWISTS_FROM; day++) {
+    if (dailyTwist(day) === 'blindes') fail(`le jour ${day} est devenu « Blindés »`);
+    for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'steel')) fail(`jour passé ${day} : un tank d’acier est apparu`);
+  }
+  if (dailyTwist(SIX_TWISTS_FROM) !== 'orage') fail('le 2 novembre doit rester un jour d’orage');
+  if (dailyTwist(SEVEN_TWISTS_FROM) !== 'blindes') fail('le premier jour à sept consignes devrait être « Blindés »');
+  for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 21; day++) {
+    const tw = dailyTwist(day);
+    for (let st = 1; st <= DAILY_STAGES; st++) {
+      const n = dailyLevel(day, st).enemies.filter((e) => e.kind === 'steel').length;
+      if (tw === 'blindes' && n === 0) fail(`jour ${day} « Blindés » : étape ${st} sans tank d’acier`);
+      if (tw !== 'blindes' && n > 0) fail(`jour ${day} : tank d’acier sans la consigne`);
+    }
+  }
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'steel')) fail('tank d’acier dans la taupe');
+  // two hits; the first one strips it (faster), with a short grace so one blast counts once
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  g.addTank('player', 0, 2.5, 2.5, 0x3d7bff, 'p1', 'P');
+  const t = g.addTank('steel', 99, 15.5, 8.5, 0);
+  g.frozen = false;
+  if (t.hp !== 2 || t.maxHp !== 2) fail(`PV ${t.hp}/${t.maxHp} au lieu de 2/2`);
+  if (!g.tankInfos().find((i) => i.id === t.id)?.hp) fail('les PV max ne sont pas annoncés');
+  g.killTank(t, undefined);
+  if (!t.alive || t.hp !== 1) fail('le premier coup devrait seulement arracher le blindage');
+  if (t.spec.speed !== STEEL_STRIPPED.speed) fail('le tank dénudé ne va pas plus vite');
+  if (!g.events.some((e) => e[0] === 'hurt')) fail('pas d’événement hurt');
+  if (g.netTanks().find((n) => n[0] === t.id)?.[6] !== 1) fail('les PV ne voyagent pas dans l’instantané');
+  g.killTank(t, undefined);
+  if (!t.alive) fail('pas de répit juste après le premier coup');
+  for (let i = 0; i < 10; i++) g.step(new Map());
+  g.killTank(t, undefined);
+  if (t.alive) fail('le deuxième coup devrait le détruire');
+  if (SPECS.steel.speed >= (STEEL_STRIPPED.speed ?? 0)) fail('le blindé devrait être lent tant qu’il porte son armure');
+  // a retried mission keeps it bare (the room remembers the hit points)
+  const h = new Game(new Array(W * H).fill(Tile.Empty));
+  const u = h.addTank('steel', 99, 15.5, 8.5, 0);
+  h.setHp(u, 1, 2);
+  if (u.hp !== 1 || u.spec.speed !== STEEL_STRIPPED.speed) fail('setHp ne dénude pas un blindé déjà touché');
+  // a real mission with steel tanks runs and stays cheap
+  const lvl = getMission(12);
+  const s = new Game(lvl.tiles);
+  for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+  for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
+  s.frozen = false;
+  let hurt = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 60; i++) { s.step(new Map()); hurt += s.events.filter((e) => e[0] === 'hurt').length; s.events = []; }
+  const per = (performance.now() - t1) / (30 * 60);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`acier OK (${hurt} blindage(s) arraché(s) en 60 s, ${per.toFixed(3)} ms/tick, missions : ${steelMissions.join(', ')})`);
 }

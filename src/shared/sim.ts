@@ -1,6 +1,6 @@
 import {
   BOLT_EVERY, BOLT_FLASH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
-  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
+  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, TURBO_MULT,
   TankKind, TankSpec, Tile, W, Weapon, isPortal, isSolidTank, playerSpec,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -119,7 +119,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -221,6 +221,13 @@ export class Game {
     t.maxHp = Math.max(1, Math.round(maxHp));
     t.hp = Math.max(1, Math.min(t.maxHp, Math.round(hp)));
     if (t.boss && t.hp <= t.maxHp / 2) this.enrage(t, false);
+    if (t.kind === 'steel' && t.hp < t.maxHp) this.strip(t);
+  }
+
+  /** A steel tank loses its armour: lighter and faster from now on. */
+  strip(t: Tank) {
+    t.spec = { ...SPECS.steel, ...STEEL_STRIPPED };
+    if (t.ai) t.ai.prefDist = 3.5; // and it closes in
   }
 
   step(inputs: Map<string, Input>) {
@@ -627,6 +634,7 @@ export class Game {
       t.buffs.invuln = 0.25;
       this.events.push(['hurt', r2(t.x), r2(t.y), t.id, t.hp, t.maxHp]);
       if (t.boss && t.hp <= t.maxHp / 2) this.enrage(t);
+      if (t.kind === 'steel') this.strip(t);
       return;
     }
     if (t.buffs.shield) {
