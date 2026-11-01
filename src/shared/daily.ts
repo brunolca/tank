@@ -8,7 +8,7 @@ export const DAILY_STAGES = 5;
 export const DAILY_LIVES = 3;
 
 // The index in DAILY_TWISTS is derived from the day: append new twists, never reorder (yesterday's board must keep its twist).
-export const DAILY_TWISTS = ['nuit', 'portails', 'caisses', 'ricochets', 'colosse'] as const;
+export const DAILY_TWISTS = ['nuit', 'portails', 'caisses', 'ricochets', 'colosse', 'orage'] as const;
 export type DailyTwist = (typeof DAILY_TWISTS)[number];
 export const TWIST_INFO: Record<DailyTwist, { label: string; desc: string }> = {
   nuit: { label: 'Nuit noire', desc: 'Les cinq étapes se jouent de nuit.' },
@@ -16,6 +16,7 @@ export const TWIST_INFO: Record<DailyTwist, { label: string; desc: string }> = {
   caisses: { label: 'Pluie de caisses', desc: 'Les caisses bonus tombent trois fois plus souvent.' },
   ricochets: { label: 'Ricochets fous', desc: 'Les obus des joueurs rebondissent une fois de plus.' },
   colosse: { label: 'Le Colosse attend', desc: 'La dernière étape est un combat contre le Colosse.' },
+  orage: { label: 'Jour d’orage', desc: 'La foudre tombe sur les cinq étapes.' },
 };
 
 /** Days since 1970-01-01, in UTC: the challenge changes at midnight UTC. */
@@ -23,8 +24,13 @@ export function dayNumber(ms = Date.now()) {
   return Math.floor(ms / 86_400_000);
 }
 
+/** First day of the six-twist rotation (2026-11-02, « Jour d’orage »): the days before keep their five-twist rotation. */
+export const SIX_TWISTS_FROM = 20759;
+
 export function dailyTwist(day: number): DailyTwist {
-  return DAILY_TWISTS[((day % DAILY_TWISTS.length) + DAILY_TWISTS.length) % DAILY_TWISTS.length];
+  const wrap = (v: number, n: number) => ((v % n) + n) % n;
+  if (day < SIX_TWISTS_FROM) return DAILY_TWISTS[wrap(day, 5)];
+  return DAILY_TWISTS[wrap(day - SIX_TWISTS_FROM + 5, DAILY_TWISTS.length)];
 }
 
 /** « vendredi 30 octobre », « dimanche 1er novembre » */
@@ -75,12 +81,14 @@ export function dailyLevel(day: number, stage: number): ParsedLevel {
     const lvl = bossLevel(20);
     lvl.name = 'Le Colosse du jour';
     lvl.night = false;
+    lvl.storm = false;
     return lvl;
   }
   // difficulty of the endless missions 17, 20, 23, 26, 29: from 3 to 7 enemies, rosters that toughen up
   return proceduralLevel(14 + stage * 3, {
     seed: mix(day, stage),
     night: twist === 'nuit',
+    storm: twist === 'orage',
     portals: twist === 'portails' ? true : undefined,
     name: stageName(day, stage),
   });

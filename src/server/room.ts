@@ -303,6 +303,7 @@ export class Room extends DurableObject<Env> {
     });
     game.bonusOn = true;
     game.night = !!this.level.night;
+    game.storm = !!this.level.storm;
     if (this.mode === 'versus') { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
@@ -325,6 +326,7 @@ export class Room extends DurableObject<Env> {
       lives: this.lives,
       tick: this.game.tick,
       night: this.level.night ? 1 : undefined,
+      storm: this.level.storm ? 1 : undefined,
       daily: this.dailyState(),
     });
     if (this.mode === 'taupe') {
@@ -573,6 +575,7 @@ export class Room extends DurableObject<Env> {
         // wait for the last shells (nobody may fire any more), but never forever
         if (this.settle < 0) this.settle = 0;
         this.settle += DT;
+        game.storm = false; // the sky calms down once the mission is won (strikes already announced still fall)
         if (game.bullets.length === 0 || this.settle >= SETTLE_MAX) {
           this.setPhase('cleared', 3.5);
           this.broadcastPhase();
@@ -594,6 +597,8 @@ export class Room extends DurableObject<Env> {
       if (alive.length <= 1) {
         if (this.settle < 0) this.settle = 0;
         this.settle += DT;
+        game.storm = false;
+        game.bolts = []; // the last tank standing won't be struck after the fact
       }
       if (alive.length <= 1 && (game.bullets.length === 0 || this.settle >= SETTLE_MAX)) {
         const w = alive[0]?.pid ? this.players.get(alive[0].pid) : undefined;

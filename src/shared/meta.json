@@ -1,7 +1,7 @@
 {
-  "iteration": 8,
-  "date": "2026-10-31",
-  "title": "La taupe",
+  "iteration": 9,
+  "date": "2026-11-01",
+  "title": "L’orage",
   "journal": [
     {
       "iteration": 1,
@@ -99,6 +99,18 @@
         "Après chaque mission, le conseil se réunit : chacun accuse un joueur ou personne. Démasquez la taupe pour gagner, mais accuser un innocent coûte une vie !",
         "La taupe gagne si l’équipe perd ses trois vies. Un ricochet « malheureux » est si vite arrivé…",
         "Dans tous les modes en équipe, les tirs amis sont annoncés (« Rouge a détruit Bleu ! ») et comptés dans le tableau des résultats."
+      ]
+    },
+    {
+      "iteration": 9,
+      "date": "2026-11-01",
+      "title": "L’orage",
+      "notes": [
+        "L’orage gronde sur la table : la pluie tombe, le ciel s’assombrit et, toutes les trois ou quatre secondes, la foudre frappe.",
+        "Avant chaque éclair, le sol crépite dans un anneau bleuté qui se resserre : on a un peu plus d’une seconde pour s’écarter. La foudre détruit tout ce qui reste dedans, alliés comme ennemis, fait sauter le liège et déclenche les mines.",
+        "De nuit, chaque éclair illumine toute la table : pendant un instant, les ennemis voient tout le monde… et les tanks blancs invisibles se dévoilent.",
+        "La mission 16, « Tempête », se joue désormais sous l’orage, comme environ un quart des missions générées après la 20ᵉ et une manche de versus sur cinq.",
+        "Le défi du jour gagne une sixième consigne, « Jour d’orage », qui ouvre la nouvelle rotation dès le 2 novembre."
       ]
     }
   ]

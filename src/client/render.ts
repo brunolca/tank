@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BOLT_R, BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number }
@@ -9,6 +9,7 @@ export interface RBullet { id: number; x: number; y: number; vx: number; vy: num
 export interface RMine { id: number; x: number; y: number; blink: boolean }
 
 const PX = 64; // floor texture pixels per tile
+const RAIN_DROPS = 700;
 const WALL_H = 0.8;
 const TALL_H = 1.5;
 
@@ -264,6 +265,7 @@ const geo = {
   mineTop: new THREE.SphereGeometry(0.15, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
   mineLed: new THREE.SphereGeometry(0.045, 10, 8),
   shock: new THREE.RingGeometry(0.85, 1, 48),
+  disc: new THREE.CircleGeometry(1, 40),
   crate: new RoundedBoxGeometry(0.58, 0.58, 0.58, 2, 0.06),
   beam: new THREE.CylinderGeometry(0.3, 0.36, 1.8, 24, 1, true),
   halo: new THREE.CircleGeometry(0.5, 36),
@@ -465,6 +467,20 @@ export class Renderer {
   private nightApplied = -1;
   private nightStart = 0;
   private tmpColor = new THREE.Color();
+  // storm (iteration 9): rain, a darker sky, announced strikes and lightning that lights up the whole table
+  private storm = 0;
+  private stormTarget = 0;
+  private rain: THREE.LineSegments;
+  private rainPos: Float32Array;
+  private rainSpeed: Float32Array;
+  private zaps: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
+  private bolts: { meshes: THREE.Mesh[]; t: number; max: number }[] = [];
+  private boltMat = new THREE.MeshBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
+  private boltGlowMat = new THREE.MeshBasicMaterial({ color: 0x7fa8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+  /** 1 right when the lightning falls, then fades: the sky lights up and invisible tanks show for an instant. */
+  lightning = 0;
+  private baseHemi = 1.1;
+  private baseSun = 2.4;
   time = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -552,8 +568,169 @@ export class Renderer {
     this.smoke = new ParticleSystem(this.scene, 1400, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.32, depthWrite: false }));
     this.debris = new ParticleSystem(this.scene, 300, new THREE.MeshStandardMaterial({ roughness: 0.6 }), true);
 
+    // rain: a pool of streaks falling over the table (hidden unless it storms)
+    const N = RAIN_DROPS;
+    this.rainPos = new Float32Array(N * 6);
+    this.rainSpeed = new Float32Array(N);
+    for (let i = 0; i < N; i++) this.resetDrop(i, Math.random() * 9);
+    const rg = new THREE.BufferGeometry();
+    rg.setAttribute('position', new THREE.BufferAttribute(this.rainPos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xb8cdf5, transparent: true, opacity: 0.42, depthWrite: false }));
+    this.rain.frustumCulled = false;
+    this.rain.visible = false;
+    this.scene.add(this.rain);
+
     this.resize();
     addEventListener('resize', () => this.resize());
+  }
+
+  private resetDrop(i: number, h: number) {
+    const x = -1 + Math.random() * (W + 2), z = -1 + Math.random() * (H + 2);
+    const p = this.rainPos, o = i * 6;
+    p[o] = x; p[o + 1] = h; p[o + 2] = z;
+    p[o + 3] = x - 0.06; p[o + 4] = h - 0.45; p[o + 5] = z + 0.1;
+    this.rainSpeed[i] = 11 + Math.random() * 5;
+  }
+
+  /** Storm: rain and a heavier sky come in, like the night does. */
+  setStorm(on: boolean) {
+    this.stormTarget = on ? 1 : 0;
+    if (!on) { this.storm = 0; this.lightning = 0; }
+    this.rain.visible = on;
+    this.nightApplied = -1;
+    for (const z of this.zaps) { this.scene.remove(z.mesh, z.core); (z.mesh.material as THREE.Material).dispose(); (z.core.material as THREE.Material).dispose(); }
+    this.zaps = [];
+  }
+  get isStorm() { return this.stormTarget > 0; }
+
+  /** A strike is announced: a crackling ring that tightens on the spot until the lightning falls. */
+  zap(x: number, y: number, warn: number) {
+    const mesh = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xbcd4ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.04, y);
+    mesh.scale.setScalar(BOLT_R);
+    const core = new THREE.Mesh(geo.disc, new THREE.MeshBasicMaterial({ color: 0x9fbfff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    core.rotation.x = -Math.PI / 2;
+    core.position.set(x, 0.03, y);
+    core.scale.setScalar(BOLT_R);
+    this.scene.add(mesh, core);
+    this.zaps.push({ mesh, core, x, y, t: 0, max: warn });
+  }
+
+  /** The lightning falls: a jagged bolt from the sky, a white flash over everything, a blast and a star-shaped scorch. */
+  bolt(x: number, y: number) {
+    for (let i = this.zaps.length - 1; i >= 0; i--) {
+      const z = this.zaps[i];
+      if (Math.hypot(z.x - x, z.y - y) > 0.3) continue;
+      this.scene.remove(z.mesh, z.core);
+      (z.mesh.material as THREE.Material).dispose(); (z.core.material as THREE.Material).dispose();
+      this.zaps.splice(i, 1);
+    }
+    const meshes: THREE.Mesh[] = [];
+    const branch = (x0: number, h0: number, z0: number, x1: number, z1: number, h1: number, n: number, rad: number) => {
+      const pts: THREE.Vector3[] = [];
+      for (let k = 0; k <= n; k++) {
+        const u = k / n, j = k === 0 || k === n ? 0 : 0.45 * (1 - u * 0.5);
+        pts.push(new THREE.Vector3(x0 + (x1 - x0) * u + (Math.random() - 0.5) * j, h0 + (h1 - h0) * u, z0 + (z1 - z0) * u + (Math.random() - 0.5) * j));
+      }
+      const path = new THREE.CurvePath<THREE.Vector3>();
+      for (let k = 0; k < n; k++) path.add(new THREE.LineCurve3(pts[k], pts[k + 1]));
+      meshes.push(new THREE.Mesh(new THREE.TubeGeometry(path, n * 2, rad, 4, false), this.boltMat));
+      meshes.push(new THREE.Mesh(new THREE.TubeGeometry(path, n * 2, rad * 3.2, 5, false), this.boltGlowMat));
+      return pts;
+    };
+    const top = branch(x + (Math.random() - 0.5) * 3, 16, y - 4 - Math.random() * 2, x, y, 0, 12, 0.05);
+    for (let b = 0; b < 2; b++) {
+      const p = top[3 + Math.floor(Math.random() * 6)];
+      branch(p.x, p.y, p.z, p.x + (Math.random() - 0.5) * 3, p.z + (Math.random() - 0.5) * 3, p.y * (0.2 + Math.random() * 0.4), 5, 0.025);
+    }
+    for (const m of meshes) this.scene.add(m);
+    this.bolts.push({ meshes, t: 0, max: 0.32 });
+    this.lightning = 1;
+    this.explosion(x, y, false);
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 4;
+      this.glow.emit({ x, y: 0.15, z: y, vx: Math.cos(a) * sp, vy: 1 + Math.random() * 4, vz: Math.sin(a) * sp, life: 0.3 + Math.random() * 0.3, s0: 0.08, s1: 0.01, c0: 0xffffff, c1: 0x6f9dff, grav: 8, drag: 1.5 });
+    }
+    this.flash.color.setHex(0xcfe0ff);
+    this.flash.position.set(x, 2, y);
+    this.flash.intensity = 70;
+    this.flashT = 0.3;
+    this.shake = Math.max(this.shake, 0.4);
+    this.floorMark((g) => {
+      g.save();
+      g.translate(x * PX, y * PX);
+      g.strokeStyle = 'rgba(20,24,40,0.5)';
+      g.lineCap = 'round';
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * Math.PI * 2 + Math.random() * 0.4, l = PX * (0.5 + Math.random() * 0.6);
+        g.lineWidth = 2 + Math.random() * 4;
+        g.beginPath(); g.moveTo(0, 0);
+        g.lineTo(Math.cos(a) * l * 0.5 + (Math.random() - 0.5) * 8, Math.sin(a) * l * 0.5 + (Math.random() - 0.5) * 8);
+        g.lineTo(Math.cos(a) * l, Math.sin(a) * l);
+        g.stroke();
+      }
+      g.restore();
+    });
+  }
+
+  private animateStorm(dt: number) {
+    if (this.storm !== this.stormTarget) { this.storm = Math.min(this.stormTarget, this.storm + dt / 1.2); this.nightApplied = -1; }
+    if (this.lightning > 0) this.lightning = Math.max(0, this.lightning - dt * 2.2);
+    if (this.flashT <= 0 && this.flash.color.getHex() !== 0xffa040) this.flash.color.setHex(0xffa040);
+    // the sky: a far-off flicker now and then (no strike), and the big flash of a real one
+    if (this.storm > 0.5 && Math.random() < dt * 0.12) this.lightning = Math.max(this.lightning, 0.35);
+    const fl = this.lightning > 0 ? this.lightning * (0.7 + 0.3 * Math.sin(this.time * 70)) : 0;
+    this.hemi.intensity = this.baseHemi + fl * 3.2;
+    this.sun.intensity = this.baseSun + fl * 2;
+    if (this.rain.visible) {
+      const p = this.rainPos, N = RAIN_DROPS;
+      const k = this.storm;
+      for (let i = 0; i < N; i++) {
+        const o = i * 6, d = this.rainSpeed[i] * dt;
+        p[o + 1] -= d; p[o + 4] -= d;
+        p[o] -= d * 0.13; p[o + 3] -= d * 0.13;
+        p[o + 2] += d * 0.22; p[o + 5] += d * 0.22;
+        if (p[o + 4] <= 0) {
+          if (Math.random() < 0.08 * k && p[o] > 0 && p[o] < W && p[o + 2] > 0 && p[o + 2] < H) {
+            this.glow.emit({ x: p[o], y: 0.05, z: p[o + 2], vy: 0.6, life: 0.16, s0: 0.05, s1: 0.01, c0: 0xdbe7ff, c1: 0x8fb0ff, grav: 6 });
+          }
+          this.resetDrop(i, 7 + Math.random() * 2);
+        }
+      }
+      (this.rain.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+      (this.rain.material as THREE.LineBasicMaterial).opacity = 0.42 * k;
+    }
+    for (let i = this.zaps.length - 1; i >= 0; i--) {
+      const z = this.zaps[i];
+      z.t += dt;
+      const u = Math.min(1, z.t / z.max);
+      if (z.t > z.max + 0.4) {
+        this.scene.remove(z.mesh, z.core);
+        (z.mesh.material as THREE.Material).dispose(); (z.core.material as THREE.Material).dispose();
+        this.zaps.splice(i, 1);
+        continue;
+      }
+      // flickers faster and faster, and the ring breathes in as the strike gets close
+      const flick = 0.5 + 0.5 * Math.sin(this.time * (10 + u * 40));
+      (z.mesh.material as THREE.MeshBasicMaterial).opacity = (0.35 + 0.55 * u) * (0.6 + 0.4 * flick);
+      z.mesh.scale.setScalar(BOLT_R * (1.25 - 0.25 * u + 0.04 * flick));
+      (z.core.material as THREE.MeshBasicMaterial).opacity = 0.08 + 0.22 * u * flick;
+      if (Math.random() < dt * (6 + u * 30)) {
+        const a = Math.random() * Math.PI * 2, r = BOLT_R * Math.random();
+        this.glow.emit({ x: z.x + Math.cos(a) * r, y: 0.05, z: z.y + Math.sin(a) * r, vy: 1.5 + Math.random() * 2, life: 0.25, s0: 0.06, s1: 0.01, c0: 0xffffff, c1: 0x7fa8ff });
+      }
+    }
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const b = this.bolts[i];
+      b.t += dt;
+      const vis = b.t < b.max && (b.t < 0.08 || Math.sin(b.t * 90) > -0.3);
+      for (const m of b.meshes) m.visible = vis;
+      if (b.t >= b.max) {
+        for (const m of b.meshes) { this.scene.remove(m); m.geometry.dispose(); }
+        this.bolts.splice(i, 1);
+      }
+    }
   }
 
   resize() {
@@ -585,15 +762,17 @@ export class Renderer {
   get isNight() { return this.nightTarget > 0; }
 
   private applyNight() {
-    const k = this.night;
+    const k = this.night, st = this.storm;
     if (Math.abs(k - this.nightApplied) < 0.002) return;
     this.nightApplied = k;
     const mix = (a: number, b: number) => new THREE.Color(a).lerp(new THREE.Color(b), k);
-    this.hemi.intensity = 1.1 + (0.18 - 1.1) * k;
-    this.hemi.color.copy(mix(0xfff3e0, 0x6f86c8));
+    // a storm greys the light (less so at night, which is already dark)
+    const dim = 1 - st * (0.45 - 0.25 * k);
+    this.baseHemi = (1.1 + (0.18 - 1.1) * k) * dim;
+    this.hemi.color.copy(mix(0xfff3e0, 0x6f86c8)).lerp(this.tmpColor.setHex(0xa9b6cf), st * 0.6);
     this.hemi.groundColor.copy(mix(0x5a4a3c, 0x16142a));
-    this.sun.intensity = 2.4 + (0.32 - 2.4) * k;
-    this.sun.color.copy(mix(0xfff0d8, 0x8aa4ff));
+    this.baseSun = (2.4 + (0.32 - 2.4) * k) * (1 - st * (0.6 - 0.3 * k));
+    this.sun.color.copy(mix(0xfff0d8, 0x8aa4ff)).lerp(this.tmpColor.setHex(0x9fb0d0), st * 0.5);
     this.rim.intensity = 0.5 + (0.28 - 0.5) * k;
     for (const v of this.tanks.values()) v.lamp.visible = k > 0.05;
   }
@@ -801,7 +980,8 @@ export class Renderer {
     for (const t of list) {
       const v = this.tanks.get(t.id);
       if (!v) continue;
-      const visible = t.alive && !(t.invisible && t.id !== myId);
+      // a lightning flash shows invisible tanks for an instant
+      const visible = t.alive && !(t.invisible && t.id !== myId && this.lightning < 0.45);
       v.root.visible = visible;
       if (!t.alive) {
         if (v.wasAlive) this.deathMark(t.x, t.y, v.info);
@@ -1195,6 +1375,7 @@ export class Renderer {
     this.animatePortals(dt);
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
+    this.animateStorm(dt);
     if (this.night > 0.5 && Math.random() < 5 * dt) {
       // fireflies drifting over the table
       this.glow.emit({

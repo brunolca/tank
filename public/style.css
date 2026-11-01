@@ -325,6 +325,14 @@ body.demo #boss-bar { top: 18px; }
 #banner.night .b-kicker { color: #9db4ff; }
 #banner.night .b-kicker::before { content: '☾ '; }
 #banner.night .b-title { color: #e8eeff; text-shadow: 0 0 24px rgba(140, 170, 255, 0.55); }
+#banner.storm .b-kicker { color: #c9dcff; }
+#banner.storm .b-kicker::before { content: '⚡ '; }
+#banner.storm.night .b-kicker::before { content: '☾ ⚡ '; }
+#banner.storm .b-title { animation: storm-title 3.2s infinite; }
+@keyframes storm-title {
+  0%, 86%, 92%, 100% { text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+  88%, 94% { text-shadow: 0 0 30px rgba(210, 225, 255, 0.95), 0 0 6px #fff; }
+}
 
 /* banner */
 #banner {

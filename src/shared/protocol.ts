@@ -62,7 +62,9 @@ export type GameEvent =
   | ['volley', number, number, number] // x y tankId (the boss fires a ring of shells)
   | ['rage', number, number, number] // x y tankId (the boss is down to half health)
   | ['warp', number, number, number, number, number] // x0 y0 x1 y1 tankId (0 for a shell) went through a portal
-  | ['ff', number, number, number, number]; // x y victimTankId killerTankId: a player destroyed by a player (or by themselves), coop-like modes
+  | ['ff', number, number, number, number] // x y victimTankId killerTankId: a player destroyed by a player (or by themselves), coop-like modes
+  | ['zap', number, number, number] // x y seconds: a lightning strike is announced there (storm, iteration 9)
+  | ['bolt', number, number]; // x y: the lightning falls (older clients ignore both and just see the damage)
 
 /** One finished run on the daily board. */
 export interface BoardEntry {
@@ -113,6 +115,7 @@ export type ServerMsg =
       lives: number;
       tick: number;
       night?: 1; // night mission (older clients just play it in daylight)
+      storm?: 1; // storm: lightning strikes (iteration 9; older clients see tanks blow up without the lightning)
       daily?: DailyState;
     }
   | {

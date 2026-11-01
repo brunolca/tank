@@ -179,7 +179,54 @@ export const sfx = {
     if (!ctx) return;
     tone(ctx.currentTime, 0.04, 1200, 1000, 0.08, 'triangle');
   },
+  /** Storm: a strike is announced (a static crackle that builds up). */
+  zap() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 6; i++) noise(t + i * 0.2, 0.06, 5000 + i * 600, 4, 0.05 + i * 0.03, 'bandpass');
+    tone(t, 1.3, 90, 260, 0.05, 'sawtooth');
+  },
+  /** The lightning falls: a sharp crack, then the thunder rolls. */
+  thunder() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.15, 6000, 0.5, 0.9, 'highpass');
+    noise(t, 0.5, 2500, 0.7, 0.8, 'lowpass', 300);
+    noise(t + 0.08, 2.2, 400, 0.8, 0.9, 'lowpass', 60);
+    noise(t + 0.4, 1.6, 220, 1, 0.5, 'lowpass', 50);
+    tone(t, 0.8, 70, 32, 0.5, 'sine');
+  },
 };
+
+// ------------------------------------------------------------------ rain (storm missions)
+
+let rainSrc: AudioBufferSourceNode | undefined;
+let rainGain: GainNode | undefined;
+
+/** A soft bed of rain under the storm missions (fades in and out). */
+export function setRain(on: boolean) {
+  if (!ctx) return;
+  if (on && !rainSrc) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 900;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 5200;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.07, ctx.currentTime + 1.5);
+    src.connect(hp).connect(lp).connect(g).connect(sfxBus);
+    src.start();
+    rainSrc = src; rainGain = g;
+  } else if (!on && rainSrc) {
+    const src = rainSrc, g = rainGain!;
+    g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.3);
+    src.stop(ctx.currentTime + 1.5);
+    rainSrc = rainGain = undefined;
+  }
+}
 
 // ------------------------------------------------------------------ music
 

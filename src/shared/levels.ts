@@ -12,6 +12,7 @@ export interface LevelDef {
   name: string;
   map: string[];
   night?: boolean; // dark table: the AI only sees up close (or a muzzle flash), players drive with headlights
+  storm?: boolean; // lightning strikes fall on the table, announced by a crackling ring (iteration 9)
 }
 
 export const LEVELS: LevelDef[] = [
@@ -347,6 +348,7 @@ export const LEVELS: LevelDef[] = [
   },
   {
     name: 'Tempête',
+    storm: true,
     map: [
       '......................',
       '.1....................',
@@ -442,6 +444,7 @@ export interface ParsedLevel {
   spawns: [number, number][];
   enemies: { kind: TankKind; x: number; y: number }[];
   night?: boolean;
+  storm?: boolean;
 }
 
 export function parseLevel(def: LevelDef): ParsedLevel {
@@ -463,7 +466,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night };
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
@@ -486,7 +489,7 @@ const ROSTER_BY_TIER: TankKind[][] = [
 ];
 
 /** Options for generated missions: the daily challenge picks its own layout seed, portals, night and name. */
-export interface GenOptions { seed?: number; portals?: boolean; night?: boolean; name?: string }
+export interface GenOptions { seed?: number; portals?: boolean; night?: boolean; storm?: boolean; name?: string }
 
 export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLevel {
   const r = rng(opt.seed ?? mission * 7919 + 13);
@@ -546,7 +549,10 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);
-    return { name: opt.name ?? (night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`), tiles, spawns, enemies, night };
+    // and about a quarter of them under a storm (yet another stream, so walls, portals and night stay put)
+    const storm = opt.storm ?? (mission > 20 && rng(mission * 7717 + 3)() < 0.27);
+    const name = storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`;
+    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm };
   }
   return parseLevel(LEVELS[0]);
 }
@@ -649,6 +655,7 @@ export function versusArena(round: number): ParsedLevel {
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];
   base.spawns = corners.map(([cx, cy]) => nearestFree(base.tiles, cx, cy));
   base.night = round % 4 === 3; // every fourth round is fought in the dark
+  base.storm = round % 5 === 2; // and one in five under a storm (from the third round)
   return base;
 }
 

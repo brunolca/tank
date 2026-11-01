@@ -16,7 +16,7 @@ const NAMES = ['Le Terrier', 'La Galerie', 'Le Grand Tunnel', 'La Taupinière', 
 /** Stage 1..TAUPE_STAGES of a mole game (seed drawn when the game starts): 4 to 6 enemies. */
 export function taupeLevel(seed: number, stage: number): ParsedLevel {
   const name = NAMES[(mix(seed, 77) + stage) % NAMES.length];
-  return proceduralLevel(17 + stage * 3, { seed: mix(seed, stage), portals: false, night: false, name });
+  return proceduralLevel(17 + stage * 3, { seed: mix(seed, stage), portals: false, night: false, storm: false, name });
 }
 
 /** A council in progress (or just decided, when `done`). */

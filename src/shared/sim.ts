@@ -1,5 +1,5 @@
 import {
-  BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BOLT_EVERY, BOLT_FLASH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, SUBSTEPS, TANK_R, TURBO_MULT,
   TankKind, TankSpec, Tile, W, Weapon, isPortal, isSolidTank, playerSpec,
 } from './constants';
@@ -69,6 +69,13 @@ export interface Bullet {
   rocket: boolean;
   dead: boolean;
   volley?: number; // shells fired together (fan shot) never collide with one another
+}
+
+/** A lightning strike announced on the floor (storm missions): it falls when t reaches BOLT_WARN. */
+export interface Bolt {
+  x: number;
+  y: number;
+  t: number;
 }
 
 export interface Mine {
@@ -155,6 +162,12 @@ export class Game {
   night = false;
   /** Extra bounces for every player shell (the « Ricochets fous » daily twist). */
   playerBounces = 0;
+  /** Storm: lightning strikes fall on the table every few seconds (announced first). The room stops new ones once a mission is decided. */
+  storm = false;
+  stormNext = 3.5 + Math.random() * 1.5;
+  bolts: Bolt[] = [];
+  /** Seconds left of the last lightning flash: the whole table is lit (the AI sees everyone, even at night). */
+  flash = 0;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -235,7 +248,76 @@ export class Game {
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
     this.stepMines(DT);
+    if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
     if (this.bonusOn) this.stepBonuses(DT);
+  }
+
+  // -------------------------------------------------------------- storm
+
+  stepStorm(dt: number) {
+    if (this.flash > 0) this.flash -= dt;
+    if (this.storm) {
+      this.stormNext -= dt;
+      if (this.stormNext <= 0) {
+        const [a, b] = BOLT_EVERY;
+        this.stormNext = a + Math.random() * (b - a);
+        this.spawnBolt();
+      }
+    }
+    for (const bo of this.bolts) {
+      bo.t += dt;
+      if (bo.t >= BOLT_WARN) this.strike(bo);
+    }
+    this.bolts = this.bolts.filter((bo) => bo.t < BOLT_WARN);
+  }
+
+  /** Announce a strike: usually close to a tank (anyone's, so it can help as well as hurt), sometimes anywhere. */
+  spawnBolt(at?: { x: number; y: number }): Bolt | undefined {
+    const alive = this.tanks.filter((t) => t.alive);
+    for (let tries = 0; tries < 40; tries++) {
+      let x: number, y: number;
+      if (at && tries === 0) { x = at.x; y = at.y; }
+      else if (alive.length && Math.random() < 0.7) {
+        const t = alive[Math.floor(Math.random() * alive.length)];
+        const a = Math.random() * Math.PI * 2, d = 0.5 + Math.random() * 1.9;
+        x = t.x + Math.cos(a) * d; y = t.y + Math.sin(a) * d;
+      } else {
+        x = 1 + Math.random() * (W - 2); y = 1 + Math.random() * (H - 2);
+      }
+      x = Math.max(0.6, Math.min(W - 0.6, x)); y = Math.max(0.6, Math.min(H - 0.6, y));
+      const tile = tileAt(this.tiles, Math.floor(x), Math.floor(y));
+      if (tile === Tile.Wall || tile === Tile.Tall) continue;
+      if (this.bolts.some((o) => Math.hypot(o.x - x, o.y - y) < BOLT_R * 2)) continue;
+      const bo: Bolt = { x: r2(x), y: r2(y), t: 0 };
+      this.bolts.push(bo);
+      this.events.push(['zap', bo.x, bo.y, BOLT_WARN]);
+      return bo;
+    }
+    return undefined;
+  }
+
+  /** The lightning falls: tanks, shells and cork in reach are gone, mines go off, and the whole table lights up. */
+  strike(bo: Bolt) {
+    this.events.push(['bolt', bo.x, bo.y]);
+    this.flash = BOLT_FLASH;
+    for (const t of this.tanks) {
+      if (t.alive && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined);
+    }
+    for (const b of this.bullets) {
+      if (!b.dead && Math.hypot(b.x - bo.x, b.y - bo.y) < BOLT_R) b.dead = true;
+    }
+    for (const m of this.mines) {
+      if (!m.dead && Math.hypot(m.x - bo.x, m.y - bo.y) < BOLT_R + 0.3 && (m.fuse < 0 || m.fuse > 0.12)) m.fuse = 0.12;
+    }
+    for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++) {
+      for (let cx = Math.floor(bo.x - 2); cx <= Math.floor(bo.x + 2); cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (Math.hypot(cx + 0.5 - bo.x, cy + 0.5 - bo.y) < BOLT_R + 0.35) {
+          this.tiles[cy * W + cx] = Tile.Empty;
+          this.events.push(['block', cx, cy]);
+        }
+      }
+    }
   }
 
   // -------------------------------------------------------------- bonus crates
@@ -617,7 +699,7 @@ export class Game {
 
   /** Can tank t make out tank o? Always by day; at night only up close, or right after o fired. */
   canSee(t: Tank, o: Tank) {
-    if (!this.night || o.team === t.team || o.reveal > 0) return true;
+    if (!this.night || o.team === t.team || o.reveal > 0 || this.flash > 0) return true;
     const d = NIGHT_SIGHT + o.r;
     return (o.x - t.x) ** 2 + (o.y - t.y) ** 2 < d * d;
   }
@@ -785,6 +867,12 @@ export class Game {
       const d = Math.hypot(dx, dy);
       if (d < MINE_BLAST + 0.7) { threat = true; ax += dx / (d + 0.01) * 1.5; ay += dy / (d + 0.01) * 1.5; }
     }
+    // announced lightning strikes: get out of the ring (everyone notices the crackling, even simple tanks)
+    for (const bo of this.bolts) {
+      const dx = t.x - bo.x, dy = t.y - bo.y;
+      const d = Math.hypot(dx, dy);
+      if (d < BOLT_R + t.r + 0.45) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }
+    }
     if (threat) {
       const l = Math.hypot(ax, ay) || 1;
       ai.dodgeX = ax / l; ai.dodgeY = ay / l; ai.dodgeT = 0.25;
@@ -837,6 +925,11 @@ export class Game {
       for (let cy = Math.floor(m.y - 2); cy <= Math.floor(m.y + 2); cy++)
         for (let cx = Math.floor(m.x - 2); cx <= Math.floor(m.x + 2); cx++)
           if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < MINE_BLAST + 0.4) blocked[cy * W + cx] = 1;
+    }
+    for (const bo of this.bolts) {
+      for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++)
+        for (let cx = Math.floor(bo.x - 2); cx <= Math.floor(bo.x + 2); cx++)
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - bo.x, cy + 0.5 - bo.y) < BOLT_R + 0.5) blocked[cy * W + cx] = 1;
     }
     const prev = new Int32Array(W * H).fill(-2);
     const dist = new Int32Array(W * H);

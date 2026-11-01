@@ -1,8 +1,8 @@
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
-import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
-import { getMission, isBossMission, LEVELS } from '../src/shared/levels';
+import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
+import { getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
-import { DT, H, SPECS, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
+import { BOLT_R, BOLT_WARN, DT, H, SPECS, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
 import { castRicochet } from '../src/shared/physics';
 
 for (let i = 0; i < LEVELS.length; i++) {
@@ -20,6 +20,7 @@ for (let mission = 1; mission <= LEVELS.length + 13; mission++) {
   g.bonusOn = true;
   g.bonusNext = 1;
   g.bonusEvery = [3, 5];
+  g.storm = !!lvl.storm;
   let kills = 0, shots = 0, ticks = 0;
   g.onKill = () => kills++;
   const inputs = new Map();
@@ -284,4 +285,89 @@ console.log('total', Date.now() - t0, 'ms');
     }
   }
   console.log('taupe OK', taupeLevel(8, 1).name, taupeLevel(8, 1).enemies.length, taupeLevel(8, 3).enemies.length);
+}
+
+// storm (iteration 9): announced strikes, a blast that spares nobody, the AI gets out of the way, missions and twists
+{
+  const fail = (m: string) => { console.error('ORAGE:', m); process.exitCode = 1; };
+  if (!getMission(16).storm) fail('« Tempête » (16) devrait se jouer sous l’orage');
+  const storms: number[] = [];
+  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).storm) storms.push(mission);
+  if (storms.length < 8) fail(`trop peu de missions d’orage (${storms.length})`);
+  if (storms.some((m) => m < 21 && m !== 16)) fail('orage avant la 21ᵉ mission');
+  if (![0, 1, 2, 3, 4, 5, 6, 7].some((r) => versusArena(r).storm)) fail('aucune manche versus sous l’orage');
+  // the twists of the days already played don't move; the six-twist rotation starts with the storm
+  for (let day = SIX_TWISTS_FROM - 40; day < SIX_TWISTS_FROM; day++) if (dailyTwist(day) !== DAILY_TWISTS[day % 5]) fail(`le jour ${day} a changé de consigne`);
+  if (dailyTwist(SIX_TWISTS_FROM) !== 'orage') fail('le premier jour à six consignes devrait être un jour d’orage');
+  const seen = new Set<string>();
+  for (let day = SIX_TWISTS_FROM; day < SIX_TWISTS_FROM + 12; day++) {
+    seen.add(dailyTwist(day));
+    for (let st = 1; st <= DAILY_STAGES; st++) if (!!dailyLevel(day, st).storm !== (dailyTwist(day) === 'orage')) fail(`jour ${day} étape ${st} : orage mal réglé`);
+  }
+  if (seen.size !== DAILY_TWISTS.length) fail('une consigne manque à la rotation');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).storm) fail('orage dans la taupe');
+  // a strike: announced first, nobody hurt during the warning, then everything in reach goes
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  tiles[8 * W + 11] = Tile.Cork;
+  const g = new Game(tiles);
+  g.night = true;
+  const p = g.addTank('player', 0, 10.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const far = g.addTank('player', 0, 3.5, 3.5, 0x3d7bff, 'p2', 'Q');
+  const e = g.addTank('brown', 99, 18.5, 14.5, 0);
+  g.frozen = false;
+  g.mines.push({ id: 900, owner: far.id, team: 0, x: 11.2, y: 9.3, t: 0, fuse: -1, dead: false });
+  let killer: unknown = 'none';
+  g.onKill = (_v, k) => { killer = k; };
+  const bo = g.spawnBolt({ x: 10.6, y: 8.6 });
+  if (!bo || !g.events.some((ev) => ev[0] === 'zap')) fail('la foudre n’est pas annoncée');
+  if (g.canSee(e, p)) fail('de nuit, l’ennemi voit le joueur de loin avant l’éclair');
+  const idle = new Map([['p1', { s: 0, mx: 0, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+  for (let i = 0; i < Math.floor(BOLT_WARN / DT) - 2; i++) { p.x = 10.5; p.y = 8.5; g.step(idle); }
+  if (!p.alive) fail('la foudre tombe avant la fin de l’annonce');
+  for (let i = 0; i < 6; i++) { p.x = 10.5; p.y = 8.5; g.step(idle); }
+  if (p.alive) fail('la foudre épargne un tank sous l’éclair');
+  if (killer !== undefined) fail('la foudre ne devrait être attribuée à personne');
+  if (!far.alive) fail('la foudre touche un tank loin d’elle');
+  if (g.tiles[8 * W + 11] !== Tile.Empty) fail('le liège résiste à la foudre');
+  if (!g.events.some((ev) => ev[0] === 'bolt')) fail('pas d’événement bolt');
+  if (!g.canSee(e, far)) fail('l’éclair n’illumine pas la table');
+  for (let i = 0; i < 10; i++) g.step(new Map());
+  if (g.mines.length) fail('la mine sous la foudre n’a pas sauté');
+  for (let i = 0; i < 40; i++) g.step(new Map());
+  if (g.canSee(e, far)) fail('l’éclair dure trop longtemps');
+  // the AI drives out of an announced strike
+  let fled = 0;
+  for (let k = 0; k < 6; k++) {
+    const h = new Game(new Array(W * H).fill(Tile.Empty));
+    h.addTank('player', 0, 2.5, 2.5, 0x3d7bff, 'p1', 'P');
+    const a = h.addTank('ash', 99, 12.5, 8.5, 0);
+    h.frozen = false;
+    h.spawnBolt({ x: a.x + 0.2, y: a.y + 0.1 });
+    for (let i = 0; i < Math.floor(BOLT_WARN / DT) + 2; i++) h.step(new Map());
+    if (a.alive) fled++;
+  }
+  if (fled < 5) fail(`l’IA ne fuit pas la foudre (${fled}/6)`);
+  // a storm keeps striking on its own, never on walls, and stays cheap
+  const lvl = getMission(16);
+  const s = new Game(lvl.tiles);
+  s.storm = true;
+  s.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P').ai = undefined;
+  for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
+  s.frozen = false;
+  let zaps = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 40; i++) {
+    s.step(new Map());
+    for (const ev of s.events) if (ev[0] === 'zap') {
+      zaps++;
+      const tl = s.tiles[Math.floor(ev[2]) * W + Math.floor(ev[1])];
+      if (tl === Tile.Wall || tl === Tile.Tall) fail('foudre annoncée sur un mur');
+    }
+    s.events = [];
+  }
+  const per = (performance.now() - t1) / (30 * 40);
+  if (zaps < 7 || zaps > 18) fail(`${zaps} éclairs en 40 s`);
+  if (s.bolts.some((b) => b.t >= BOLT_WARN)) fail('éclair resté en attente');
+  void BOLT_R;
+  if (process.exitCode !== 1) console.log(`orage OK (${zaps} éclairs en 40 s, ${per.toFixed(3)} ms/tick, missions d’orage : ${storms.join(', ')})`);
 }

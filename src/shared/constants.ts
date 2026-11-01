@@ -162,3 +162,13 @@ export const CHECKPOINT_EVERY = 5;
 export function isCheckpoint(n: number) {
   return Number.isInteger(n) && n >= 1 && n <= 201 && (n - 1) % CHECKPOINT_EVERY === 0;
 }
+
+// ------------------------------------------------------------------ storm (iteration 9)
+/** Seconds a lightning strike is announced (a crackling ring on the floor) before it falls. */
+export const BOLT_WARN = 1.4;
+/** Radius of a lightning strike: it destroys tanks, shells and cork, and sets mines off. */
+export const BOLT_R = 1.05;
+/** Seconds between two strikes (min, max). */
+export const BOLT_EVERY: [number, number] = [2.6, 4.6];
+/** Seconds the whole table stays lit after a strike: at night the AI sees everyone meanwhile. */
+export const BOLT_FLASH = 0.9;

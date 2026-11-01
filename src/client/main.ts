@@ -6,7 +6,7 @@ import { angDiff } from '../shared/physics';
 import type { BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
-import { initAudio, isMusicOn, setMusicIntensity, sfx, startMusic, toggleMusic } from './audio';
+import { initAudio, isMusicOn, setMusicIntensity, setRain, sfx, startMusic, toggleMusic } from './audio';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
 import { Renderer, type RBonus, type RBullet, type RMine, type RTank } from './render';
@@ -82,7 +82,7 @@ function show(s: Screen) {
   $('#results').hidden = s !== 'results';
   $('#hud').hidden = s !== 'game';
   document.body.dataset.screen = s;
-  if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; }
+  if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; setRain(false); }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -280,7 +280,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   currentLevelName = msg.name;
   renderer.setLevel(tiles, msg.tanks);
   renderer.setNight(!!msg.night);
+  renderer.setStorm(!!msg.storm);
   show('game');
+  setRain(!!msg.storm);
   setMusicIntensity(0);
   dailyState = msg.daily;
   dailyK = msg.tick;
@@ -293,23 +295,26 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}`;
+  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}`;
   bossFight = enemies.some((e) => e.kind === 'boss');
   if (coopLike(msg.mode)) {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
     if (msg.daily) {
       const tw = TWIST_INFO[msg.daily.twist];
-      banner(`Défi du jour · étape ${msg.daily.stage}/${msg.daily.stages}${msg.night ? ' · Nuit' : ''}`, msg.name,
-        `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${msg.night ? ' night' : ''}${bossFight ? ' boss' : ''}`);
+      banner(`Défi du jour · étape ${msg.daily.stage}/${msg.daily.stages}${wx}`, msg.name,
+        `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${wxCls}${bossFight ? ' boss' : ''}`);
     } else if (msg.mode === 'taupe') {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
     } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
-    else banner(`Mission ${msg.mission}${msg.night ? ' · Nuit' : ''}`, msg.name, `Tanks ennemis : ${enemies.length}`, msg.night ? 'intro night' : 'intro');
+    else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(ENEMY_COLORS[k])}">${SPECS[k].label}</span>`).join('')}</div>`;
   } else {
-    banner(`Manche ${msg.mission}${msg.night ? ' · Nuit' : ''}`, 'Versus', 'Le dernier tank debout gagne la manche', msg.night ? 'intro night' : 'intro');
+    banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
+  else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
@@ -600,6 +605,14 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'warp':
       renderer.warp(e[1], e[2], e[3], e[4], e[5] > 0);
       if (audible) sfx.warp(e[5] > 0);
+      break;
+    case 'zap':
+      renderer.zap(e[1], e[2], e[3]);
+      if (audible) sfx.zap();
+      break;
+    case 'bolt':
+      renderer.bolt(e[1], e[2]);
+      if (audible) sfx.thunder();
       break;
     case 'rage':
       renderer.hurt(e[3], e[1], e[2]);
@@ -979,7 +992,7 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
+interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
 let attractOpts: AttractOpts = {};
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -990,6 +1003,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
   g.night = opts.night ?? (!!lvl.night || (!opts.heroes && opts.mission === undefined && Math.random() < 0.25));
+  // and sometimes under a storm
+  g.storm = opts.storm ?? (!!lvl.storm || (!opts.heroes && opts.mission === undefined && Math.random() < 0.18));
   if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
   if (opts.daily) applyTwist(g, dailyTwist(opts.daily.day));
   if (opts.heroes) {
@@ -1015,6 +1030,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   attractPrev.clear();
   renderer.setLevel(g.tiles, g.tankInfos());
   renderer.setNight(g.night);
+  renderer.setStorm(g.storm);
 }
 function stopAttract() {
   attract = undefined;
@@ -1257,10 +1273,17 @@ if (params.has('demo')) {
   document.body.classList.add('demo');
   const demo = {
     meta: META,
-    /** `night`: force the mission into the dark (true) or daylight (false); its own setting when omitted. */
-    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean, arms?: Weapon[]) {
+    /** `night`: force the mission into the dark (true) or daylight (false); its own setting when omitted. Same for `storm`. */
+    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean, arms?: Weapon[], storm?: boolean) {
       attract = undefined;
-      startAttract({ mission, heroes, rich, bossHp, night, arms: arms?.filter(isWeapon) });
+      startAttract({ mission, heroes, rich, bossHp, night, arms: arms?.filter(isWeapon), storm });
+    },
+    /** Storm: announce a lightning strike right next to the first enemy still standing (or any tank). */
+    bolt() {
+      const g = attract;
+      if (!g) return false;
+      const t = g.tanks.find((o) => o.alive && o.kind !== 'player') ?? g.tanks.find((o) => o.alive);
+      return !!g.spawnBolt(t ? { x: t.x + 0.6, y: t.y } : undefined);
     },
     /** Show the lobby and its arsenal for a moment, flipping through the cannons (for the videos). */
     arsenal(ms = 6000) {
