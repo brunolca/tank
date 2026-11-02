@@ -67,7 +67,8 @@ export type GameEvent =
   | ['bolt', number, number] // x y: the lightning falls (older clients ignore both and just see the damage)
   | ['dig', number, number, number] // x y tankId: the Foreur goes under the table (iteration 11)
   | ['quake', number, number, number, number] // x y seconds tankId: the ground shakes where the Foreur is about to burst out
-  | ['erupt', number, number, number]; // x y tankId: it bursts out (older clients ignore all three and just see the damage)
+  | ['erupt', number, number, number] // x y tankId: it bursts out (older clients ignore all three and just see the damage)
+  | ['build', number, number, number]; // cx cy tankId: the Maçon lays a cork block on that cell (iteration 12; older tabs are told to reload)
 
 /** One finished run on the daily board. */
 export interface BoardEntry {

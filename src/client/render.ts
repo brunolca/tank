@@ -166,6 +166,7 @@ interface TankView {
   armorSeen?: boolean; // the plates' state has been synced once (no burst for a tank that starts the mission bare)
   bit?: THREE.Group; // the Foreur (iteration 11): its spinning drill bit
   mound?: THREE.Group; // the Foreur under the table: a moving bump of earth
+  crane?: THREE.Group; // the Maçon (iteration 12): its crane swings when it lays a block
   under?: boolean;
 }
 
@@ -299,7 +300,16 @@ const geo = {
   stack: new THREE.CylinderGeometry(0.045, 0.055, 0.26, 10),
   mound: new THREE.SphereGeometry(0.62, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2),
   clod: new THREE.DodecahedronGeometry(0.09, 0),
+  // the Maçon (iteration 12): a little crane on the back deck, a hod of cork bricks, a trowel
+  post: new THREE.CylinderGeometry(0.03, 0.035, 0.42, 8),
+  boom: new THREE.BoxGeometry(0.5, 0.035, 0.035),
+  brick: new RoundedBoxGeometry(0.15, 0.09, 0.11, 2, 0.015),
+  hookBlock: new RoundedBoxGeometry(0.13, 0.13, 0.13, 2, 0.02),
+  cable: new THREE.CylinderGeometry(0.006, 0.006, 0.16, 4),
+  trowel: new THREE.BoxGeometry(0.2, 0.012, 0.11),
 };
+const masonCorkMat = new THREE.MeshStandardMaterial({ color: 0xc98f55, roughness: 0.95 });
+const craneMat = new THREE.MeshStandardMaterial({ color: 0xf2c230, roughness: 0.5, metalness: 0.2 });
 const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
 const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 1, flatShading: true });
 const dirtDarkMat = new THREE.MeshStandardMaterial({ color: 0x5e3b20, roughness: 1, flatShading: true });
@@ -494,6 +504,33 @@ function buildTank(info: TankInfo): TankView {
     view.mound = mound;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'mason') {
+    // a toy builder: bricks of cork stacked on the back deck, a yellow crane with a block on its hook, a trowel up front
+    for (const [x, y, z] of [[-0.3, 0.42, -0.13], [-0.3, 0.42, 0.03], [-0.3, 0.51, -0.05]]) {
+      const b = new THREE.Mesh(geo.brick, masonCorkMat);
+      b.position.set(x, y, z);
+      hull.add(b);
+    }
+    const crane = new THREE.Group();
+    crane.position.set(-0.2, 0.37, 0.2);
+    const post = new THREE.Mesh(geo.post, craneMat);
+    post.position.y = 0.21;
+    const boom = new THREE.Mesh(geo.boom, craneMat);
+    boom.position.set(0.18, 0.41, 0);
+    const cable = new THREE.Mesh(geo.cable, barrelMat);
+    cable.position.set(0.4, 0.33, 0);
+    const hook = new THREE.Mesh(geo.hookBlock, masonCorkMat);
+    hook.position.set(0.4, 0.2, 0);
+    hook.name = 'hook';
+    crane.add(post, boom, cable, hook);
+    hull.add(crane);
+    const trowel = new THREE.Mesh(geo.trowel, steelBitMat);
+    trowel.position.set(0.5, 0.2, 0);
+    trowel.rotation.z = -0.3;
+    hull.add(trowel);
+    view.crane = crane;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
   if (armorGroup) {
     view.armor = armorGroup;
     const collar = turret.getObjectByName('collar');
@@ -573,6 +610,7 @@ export class Renderer {
   private rainPos: Float32Array;
   private rainSpeed: Float32Array;
   private zaps: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
+  private rising: { mesh: THREE.Mesh; t: number }[] = [];
   private quakes: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
   private bolts: { meshes: THREE.Mesh[]; t: number; max: number }[] = [];
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -900,6 +938,7 @@ export class Renderer {
     this.nightApplied = -1; // the new tanks' lamps follow the current light
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
+    this.rising = [];
     for (const t of this.tanks.values()) this.scene.remove(t.root);
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
@@ -1052,6 +1091,48 @@ export class Renderer {
       }
     }
     this.floorTex.needsUpdate = true;
+  }
+
+  /** The Maçon lays a cork block (iteration 12): it pops out of the floor with a puff of sawdust. */
+  addBlock(cx: number, cy: number, by?: number) {
+    const key = cy * W + cx;
+    if (this.blocks.has(key)) return;
+    const m = new THREE.Mesh(this.wallGeo, this.corkMat);
+    m.position.set(cx + 0.5, 0, cy + 0.5);
+    m.scale.set(0.96, 0.01, 0.96);
+    m.castShadow = m.receiveShadow = true;
+    this.levelGroup.add(m);
+    this.blocks.set(key, m);
+    this.rising.push({ mesh: m, t: 0 });
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.smoke.emit({ x: cx + 0.5 + Math.cos(a) * 0.45, y: 0.1, z: cy + 0.5 + Math.sin(a) * 0.45, vx: Math.cos(a) * 1.4, vy: 0.4 + Math.random() * 0.4, vz: Math.sin(a) * 1.4, life: 0.7, s0: 0.12, s1: 0.32, c0: 0xd9b48a, c1: 0xefdcb8, drag: 3 });
+      this.debris.emit({ x: cx + 0.5, y: 0.3, z: cy + 0.5, vx: Math.cos(a) * (0.8 + Math.random()), vy: 2 + Math.random() * 2, vz: Math.sin(a) * (0.8 + Math.random()), life: 0.8, s0: 0.05, s1: 0.02, c0: 0xc98f55, c1: 0x8a5a2b, grav: 9, drag: 0.5 });
+    }
+    const v = by !== undefined ? this.tanks.get(by) : undefined;
+    if (v?.crane) v.crane.userData.swing = 1;
+  }
+
+  private animateRising(dt: number) {
+    for (let i = this.rising.length - 1; i >= 0; i--) {
+      const r = this.rising[i];
+      r.t += dt;
+      const u = Math.min(1, r.t / 0.32);
+      // a little overshoot, like a toy block snapping in place
+      const k = u < 1 ? 1 - (1 - u) ** 3 + Math.sin(u * Math.PI) * 0.12 : 1;
+      r.mesh.scale.y = Math.max(0.01, 0.92 * k);
+      r.mesh.position.y = (WALL_H * r.mesh.scale.y) / 2;
+      if (u >= 1) this.rising.splice(i, 1);
+    }
+    for (const v of this.tanks.values()) {
+      const c = v.crane;
+      if (!c) continue;
+      const sw = (c.userData.swing as number | undefined) ?? 0;
+      c.rotation.y = Math.sin(this.time * 1.3 + v.info.id) * 0.25 + Math.sin(sw * Math.PI * 3) * sw * 0.9;
+      const hook = c.getObjectByName('hook');
+      if (hook) hook.visible = sw < 0.4; // the block leaves the hook, a new one comes back
+      if (sw > 0) c.userData.swing = Math.max(0, sw - dt * 1.4);
+    }
   }
 
   removeBlock(cx: number, cy: number) {
@@ -1655,6 +1736,7 @@ export class Renderer {
     this.applyNight();
     this.animateStorm(dt);
     this.animateQuakes(dt);
+    this.animateRising(dt);
     if (this.night > 0.5 && Math.random() < 5 * dt) {
       // fireflies drifting over the table
       this.glow.emit({

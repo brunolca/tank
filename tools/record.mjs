@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 20, arms: ['canon', 'ricochet'], digs: [1.2, 8.5], seconds: 15, caption: 'Nouveau boss : le Foreur', sub: 'Il creuse sous la table et jaillit sous vos chenilles' },
-  { mission: 20, arms: ['fusee', 'sapeur'], bossHp: 4, digs: [1.5, 7], seconds: 12, caption: 'Quand le sol tremble, filez !', sub: 'En colère, il ressort en crachant une couronne d’obus' },
-  { mission: 40, arms: ['canon', 'fusee'], digs: [4], seconds: 12, caption: 'Il ronge le liège', sub: 'Intouchable sous terre : frappez-le en surface' },
-  { mission: 10, arms: ['ricochet', 'canon'], volley: true, seconds: 9, caption: 'Deux boss en alternance', sub: 'Le Colosse aux missions 10, 30, 50… le Foreur aux 20, 40, 60…' },
+  { mission: 21, arms: ['canon', 'ricochet'], builds: [1.2, 3.5, 6], seconds: 16, caption: 'Nouvel ennemi : le Maçon', sub: 'Il bâtit des murs de liège pour s’abriter' },
+  { mission: 21, arms: ['sapeur', 'fusee'], builds: [0.8, 2.6], seconds: 13, caption: 'Une mine, et tout s’écroule', sub: 'Ses murs sont en liège : mines et éclairs les font sauter' },
+  { mission: 24, arms: ['ricochet', 'canon'], builds: [1.5, 4], seconds: 12, caption: 'Dans les missions sans fin', sub: 'Dès la 22ᵉ mission, il se glisse parmi les autres' },
+  { mission: 20, arms: ['canon', 'fusee'], digs: [1.5], seconds: 10, caption: 'Le Foreur vous attend toujours', sub: 'Mission 20, 40, 60…' },
   { mission: 26, arms: ['sapeur', 'ricochet'], rich: true, seconds: 9, caption: 'Et toujours la campagne sans fin', sub: 'Jusqu’à quatre en ligne' },
 ];// ------------------------------------------------------------------
 
@@ -65,6 +65,7 @@ try {
       for (const s of shot.bolts ?? []) setTimeout(() => d.bolt?.(), s * 1000);
       for (const s of shot.armor ?? []) setTimeout(() => d.armor?.(), s * 1000);
       for (const s of shot.digs ?? []) setTimeout(() => d.dig?.(), s * 1000);
+      for (const s of shot.builds ?? []) setTimeout(() => d.build?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

@@ -1,5 +1,5 @@
 import {
-  BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, TURBO_MULT,
   TankKind, TankSpec, Tile, W, Weapon, isPortal, isSolidTank, playerSpec,
 } from './constants';
@@ -30,6 +30,13 @@ export interface Tank {
   reveal: number; // night: seconds left during which the last muzzle flash gives this tank away
   alert: boolean; // AI: a foe is in sight right now
   weapon?: Weapon; // player tanks: the cannon picked in the lobby (canon when omitted)
+  build?: MasonState; // the Maçon (iteration 12)
+}
+
+/** The Maçon: when it lays its next block, and the cells of the blocks it laid. */
+export interface MasonState {
+  t: number;
+  cells: number[];
 }
 
 /** The boss: a radial volley every few seconds (announced by a glow), and a rage mode at half health. */
@@ -124,7 +131,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -195,6 +202,7 @@ export class Game {
       r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false,
     };
     if (kind === 'boss' || kind === 'drill') t.boss = { volleyT: 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
+    if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
     return t;
@@ -254,6 +262,7 @@ export class Game {
       if (t.boss && t.kind === 'drill') {
         if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
       } else if (t.boss) this.updateBoss(t);
+      if (t.build) this.updateMason(t);
       if (t.ai) {
         this.updateAI(t);
       } else if (t.pid) {
@@ -572,6 +581,92 @@ export class Game {
         }
       }
     }
+  }
+
+  // -------------------------------------------------------------- the Maçon (iteration 12)
+
+  /** Every few seconds the Maçon lays a cork block on its side of the line to its nearest foe: instant cover. */
+  updateMason(t: Tank) {
+    const st = t.build!;
+    st.t -= DT;
+    if (st.t > 0) return;
+    st.t = 0.6; // nothing to do right now: look again shortly
+    st.cells = st.cells.filter((c) => this.tiles[c] === Tile.Cork);
+    if (st.cells.length >= MASON_MAX) return;
+    const foe = this.nearestFoe(t);
+    if (!foe) return;
+    const cell = this.masonSpot(t, foe);
+    if (cell < 0) return;
+    this.tiles[cell] = Tile.Cork;
+    st.cells.push(cell);
+    const [a, b] = MASON_EVERY;
+    st.t = a + Math.random() * (b - a);
+    this.events.push(['build', cell % W, (cell / W) | 0, t.id]);
+    if (t.ai) { t.ai.path = []; t.ai.pathT = 0; }
+  }
+
+  /** Best free cell for a cover block between the Maçon and a foe (-1 when none fits). */
+  masonSpot(t: Tank, foe: Pt): number {
+    let ux = foe.x - t.x, uy = foe.y - t.y;
+    const ud = Math.hypot(ux, uy);
+    if (ud < 1.6) return -1; // too close: no time for masonry
+    ux /= ud; uy /= ud;
+    const cand: [number, number][] = [];
+    const R = Math.ceil(MASON_REACH);
+    for (let cy = Math.floor(t.y) - R; cy <= Math.floor(t.y) + R; cy++) {
+      for (let cx = Math.floor(t.x) - R; cx <= Math.floor(t.x) + R; cx++) {
+        if (cx < 0 || cy < 0 || cx >= W || cy >= H || this.tiles[cy * W + cx] !== Tile.Empty) continue;
+        const px = cx + 0.5 - t.x, py = cy + 0.5 - t.y;
+        const along = px * ux + py * uy, perp = Math.abs(px * uy - py * ux);
+        if (along < 0.7 || along > MASON_REACH || along > ud - 1.2 || perp > 1.6) continue;
+        cand.push([cy * W + cx, -perp * 1.4 - Math.abs(along - 1.4) + Math.random() * 0.35]);
+      }
+    }
+    cand.sort((p, q) => q[1] - p[1]);
+    for (let i = 0; i < cand.length && i < 8; i++) if (this.canBuild(cand[i][0])) return cand[i][0];
+    return -1;
+  }
+
+  /** A cell can take a block if nothing stands on it and closing it does not cut the table in two. */
+  canBuild(cell: number): boolean {
+    const cx = cell % W, cy = (cell / W) | 0;
+    for (const o of this.tanks) {
+      if (!o.alive || under(o)) continue;
+      const nx = Math.max(cx, Math.min(cx + 1, o.x)), ny = Math.max(cy, Math.min(cy + 1, o.y));
+      const rr = o.r + 0.2;
+      if ((nx - o.x) ** 2 + (ny - o.y) ** 2 < rr * rr) return false;
+    }
+    const near = (x: number, y: number, d: number) => Math.abs(x - cx - 0.5) < d && Math.abs(y - cy - 0.5) < d;
+    for (const b of this.bullets) if (!b.dead && near(b.x, b.y, 0.75)) return false;
+    for (const m of this.mines) if (!m.dead && near(m.x, m.y, 0.9)) return false;
+    for (const c of this.bonuses) if (!c.dead && near(c.x, c.y, 0.95)) return false;
+    for (const bo of this.bolts) if (near(bo.x, bo.y, 0.6)) return false;
+    // every open neighbour must still reach every other one once the cell is closed
+    const open = (i: number) => this.tiles[i] === Tile.Empty || isPortal(this.tiles[i]);
+    const nb: number[] = [];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x = cx + dx, y = cy + dy;
+      if (x >= 0 && y >= 0 && x < W && y < H && open(y * W + x)) nb.push(y * W + x);
+    }
+    if (nb.length <= 1) return nb.length === 1;
+    const seen = new Uint8Array(W * H);
+    seen[cell] = 1;
+    seen[nb[0]] = 1;
+    const q = [nb[0]];
+    let found = 1;
+    for (let qi = 0; qi < q.length && found < nb.length; qi++) {
+      const c = q[qi], x = c % W, y = (c / W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const n = ny * W + nx;
+        if (seen[n] || !open(n)) continue;
+        seen[n] = 1;
+        if (nb.includes(n)) found++;
+        q.push(n);
+      }
+    }
+    return found === nb.length;
   }
 
   applyInput(t: Tank, inp: Input) {

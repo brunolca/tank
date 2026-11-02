@@ -38,7 +38,8 @@ export type TankKind =
   | 'black'
   | 'boss'
   | 'steel'
-  | 'drill';
+  | 'drill'
+  | 'mason';
 
 export interface TankSpec {
   speed: number;
@@ -73,6 +74,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   steel: { speed: 0.95, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2.2, mines: 0, skill: 2, hp: 2, reaction: 0.5, aimError: 0.06, label: 'Acier' },
   // iteration 11: the second boss, it digs under the table and bursts out beneath its prey (see DRILL_*)
   drill: { speed: 1.35, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.1, turretSpeed: 2.4, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: DRILL_R, label: 'Foreur' },
+  // iteration 12: it lays cork blocks between itself and its prey (see MASON_*)
+  mason: { speed: 1.6, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.7, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.55, aimError: 0.08, label: 'Maçon' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -101,6 +104,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   boss: 0xb8323a,
   steel: 0x56708f,
   drill: 0xd9822b,
+  mason: 0x7b7430,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -137,6 +141,15 @@ export const DRILL_RING_SHOTS = 8;
 export const FLAG_BURROW = 512;
 /** The two bosses that take turns every ten missions. */
 export const isBossKind = (k: string) => k === 'boss' || k === 'drill';
+
+// ------------------------------------------------------------------ the Maçon (iteration 12): the tank that builds cork walls
+/** Seconds between two blocks (min, max); the first one comes MASON_FIRST seconds into the mission. */
+export const MASON_EVERY: [number, number] = [3.6, 5.6];
+export const MASON_FIRST = 2.5;
+/** Most of its blocks standing at once: once some are blown away, it builds again. */
+export const MASON_MAX = 6;
+/** It builds within this distance of its own centre (tiles). */
+export const MASON_REACH = 2.6;
 
 // ------------------------------------------------------------------ portals
 /** Colour of each portal pair (Tile.PortalA, Tile.PortalB). */

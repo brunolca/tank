@@ -326,7 +326,7 @@ export class Room extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment | null;
     let tanks = this.game.tankInfos();
     // tabs older than iteration 10 don't know the steel tank: they draw a grey one instead of crashing
-    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' ? { ...t, kind: 'ash' } : t.kind === 'drill' ? { ...t, kind: 'boss' } : t));
+    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' || t.kind === 'mason' ? { ...t, kind: 'ash' } : t.kind === 'drill' ? { ...t, kind: 'boss' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,

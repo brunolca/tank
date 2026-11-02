@@ -103,6 +103,14 @@ export const sfx = {
     tone(t, 0.08, 660, 660, 0.15, 'square');
     tone(t + 0.1, 0.1, 880, 880, 0.15, 'square');
   },
+  /** The Maçon lays a block: two hollow knocks of wood and a little scrape of the trowel. */
+  build() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.06, 420, 300, 0.22, 'triangle');
+    tone(t + 0.11, 0.07, 520, 360, 0.2, 'triangle');
+    noise(t + 0.2, 0.14, 2800, 1.4, 0.12, 'bandpass', 1800);
+  },
   block() {
     if (!ctx) return;
     noise(ctx.currentTime, 0.4, 900, 0.6, 0.6, 'lowpass', 200);

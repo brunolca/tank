@@ -1,10 +1,14 @@
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
-import { getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
+import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
-import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
+import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
 import { castRicochet } from '../src/shared/physics';
 
+for (const def of Object.values(EXTRA_LEVELS)) {
+  const bad = def.map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
+  if (def.map.length !== H || bad.length) { console.error('BAD MAP', def.name, def.map.length, bad); process.exitCode = 1; }
+}
 for (let i = 0; i < LEVELS.length; i++) {
   const bad = LEVELS[i].map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
   if (LEVELS[i].map.length !== H || bad.length) { console.error('BAD MAP', i + 1, LEVELS[i].map.length, bad); process.exitCode = 1; }
@@ -508,4 +512,70 @@ console.log('total', Date.now() - t0, 'ms');
   const per = (performance.now() - t1) / (30 * 60);
   if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`Foreur OK (${erupts} sortie(s) en 60 s, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the Maçon (iteration 12): it lays cork blocks between itself and its prey, never on anyone, never cutting the table in two
+{
+  const fail = (m: string) => { console.error('MAÇON:', m); process.exitCode = 1; };
+  if (getMission(21).name !== 'Le chantier' || getMission(21).enemies.filter((e) => e.kind === 'mason').length < 2) fail('« Le chantier » (21) devrait avoir des maçons');
+  if (!getMission(20).enemies.some((e) => e.kind === 'drill') || !getMission(30).enemies.some((e) => e.kind === 'boss')) fail('les boss ont bougé');
+  const masonMissions: number[] = [];
+  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'mason')) masonMissions.push(mission);
+  if (masonMissions.some((m) => m < 21)) fail('maçon avant la 21ᵉ mission');
+  if (masonMissions.length < 12) fail(`trop peu de missions avec des maçons (${masonMissions.length})`);
+  for (let day = SEVEN_TWISTS_FROM - 3; day < SEVEN_TWISTS_FROM + 20; day++) {
+    for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'mason')) fail(`défi du jour ${day} : un maçon est apparu (les classements changeraient)`);
+  }
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'mason')) fail('maçon dans la taupe');
+  // open table: it builds between itself and the player, on its own side
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const m = g.addTank('mason', 99, 14.5, 8.5, 0);
+  g.frozen = false;
+  const built: number[] = [];
+  for (let i = 0; i < 30 * 40; i++) {
+    p.buffs.invuln = 1; // the player stands there and takes it: we only watch the masonry
+    g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+    for (const e of g.events) if (e[0] === 'build') {
+      built.push(e[2] * W + e[1]);
+      if (g.tiles[e[2] * W + e[1]] !== Tile.Cork) fail('événement sans bloc');
+    }
+    g.events = [];
+    if (!m.alive) break;
+  }
+  if (built.length < 3) fail(`trop peu de blocs en 40 s (${built.length})`);
+  const standing = g.tiles.filter((t) => t === Tile.Cork).length;
+  if (standing > MASON_MAX) fail(`trop de blocs debout (${standing})`);
+  for (const c of built) {
+    const x = c % W + 0.5, y = Math.floor(c / W) + 0.5;
+    if (Math.hypot(x - p.x, y - p.y) < 0.8) fail('bloc posé sur le joueur');
+  }
+  // never seals a corridor: a one-tile-wide passage stays open
+  const tiles = new Array(W * H).fill(Tile.Wall);
+  for (let x = 1; x < W - 1; x++) tiles[8 * W + x] = Tile.Empty;
+  const h = new Game(tiles);
+  const q = h.addTank('player', 0, 2.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const n = h.addTank('mason', 99, 12.5, 8.5, 0);
+  h.frozen = false;
+  let sealed = 0;
+  for (let i = 0; i < 30 * 20; i++) {
+    q.buffs.invuln = 1;
+    h.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+    sealed += h.events.filter((e) => e[0] === 'build').length;
+    h.events = [];
+  }
+  if (sealed) fail(`il a muré un couloir (${sealed} bloc(s))`);
+  if (!q.alive && !n.alive) fail('test du couloir incohérent');
+  // a real building site stays cheap
+  const lvl = getMission(21);
+  const s = new Game(lvl.tiles);
+  for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+  for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
+  s.frozen = false;
+  let builds = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 60; i++) { s.step(new Map()); builds += s.events.filter((x) => x[0] === 'build').length; s.events = []; }
+  const per = (performance.now() - t1) / (30 * 60);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`Maçon OK (${built.length} bloc(s) en tête-à-tête, ${builds} sur le chantier en 60 s, ${per.toFixed(3)} ms/tick, missions : ${masonMissions.join(', ')})`);
 }

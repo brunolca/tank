@@ -319,6 +319,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
@@ -390,6 +391,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
   for (const e of msg.E) {
     evq.push({ k: msg.k, e });
     if (e[0] === 'block') tiles[e[2] * W + e[1]] = Tile.Empty; // prediction sees the freshest map
+    else if (e[0] === 'build') tiles[e[2] * W + e[1]] = Tile.Cork; // the Maçon's new block stops my tank right away
   }
   // reconcile own tank
   const me = s.T.get(myTankId);
@@ -580,6 +582,11 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'block':
       renderer.removeBlock(e[1], e[2]);
       if (audible) sfx.block();
+      break;
+    case 'build':
+      renderer.addBlock(e[1], e[2], e[3]);
+      floater(e[1] + 0.5, e[2] + 0.5, 'Hop, un mur !', 0xc98f55); // the knock, written: readable without the sound
+      if (audible) sfx.build();
       break;
     case 'crate':
       if (audible) sfx.crate();
@@ -1027,7 +1034,7 @@ let attractOpts: AttractOpts = {};
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
-  const lvl: ParsedLevel = opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? 2 + Math.floor(Math.random() * 14));
+  const lvl: ParsedLevel = opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? (Math.random() < 0.15 ? 21 : 2 + Math.floor(Math.random() * 14))); // now and then, the Maçon's building site
   const g = new Game(lvl.tiles);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
@@ -1401,6 +1408,12 @@ if (params.has('demo')) {
     armor() {
       let n = 0;
       for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'steel' && t.hp > 1) { t.buffs.invuln = 0; attract!.killTank(t, undefined); n++; }
+      return n;
+    },
+    /** Make every Maçon lay its next block right now (to catch the masonry on camera). */
+    build() {
+      let n = 0;
+      for (const t of attract?.tanks ?? []) if (t.alive && t.build) { t.build.t = 0; n++; }
       return n;
     },
     /** Make the Foreur dig in right now (to catch its trip under the table on camera). */

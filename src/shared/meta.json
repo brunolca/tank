@@ -1,7 +1,7 @@
 {
-  "iteration": 11,
+  "iteration": 12,
   "date": "2026-11-02",
-  "title": "Le Foreur",
+  "title": "Le Maçon",
   "journal": [
     {
       "iteration": 1,
@@ -135,6 +135,18 @@
         "Quand le sol tremble et qu’un anneau orange se resserre, il va jaillir à cet endroit : tout ce qui s’y trouve saute. Filez ! En colère, il ressort en crachant une couronne d’obus.",
         "Sous terre, il est intouchable : visez-le quand il est en surface. Il ronge le liège en roulant, alors ne comptez pas sur une cachette en liège.",
         "La barre de vie du boss change d’allure selon l’adversaire, et le tremblement s’écrit à l’écran (« Le sol tremble ! », « Broum ! ») pour jouer sans le son."
+      ]
+    },
+    {
+      "iteration": 12,
+      "date": "2026-11-02",
+      "title": "Le Maçon",
+      "notes": [
+        "Un nouvel ennemi entre en scène : le Maçon, un tank kaki avec une petite grue jaune et des briques de liège sur le dos.",
+        "Toutes les quelques secondes, il pose un bloc de liège entre lui et toi pour s’abriter. Il ne mure jamais un couloir et ne bâtit jamais sur un tank.",
+        "Ses murs sont en liège : une mine, un éclair ou le Foreur les font sauter… et il en rebâtit aussitôt, six au plus à la fois.",
+        "Nouvelle mission faite main : « Le chantier » (mission 21). Ensuite, le Maçon se glisse parmi les ennemis des missions sans fin.",
+        "Chaque bloc posé s’annonce par un toc-toc de bois et un « Hop, un mur ! » au-dessus de la table, pour jouer sans le son. Le fond animé de l’accueil visite parfois le chantier."
       ]
     }
   ]

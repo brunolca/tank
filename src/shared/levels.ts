@@ -3,9 +3,9 @@ import { H, W, Tile, TankKind } from './constants';
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)
 const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason',
 };
 
 export interface LevelDef {
@@ -438,6 +438,36 @@ export const LEVELS: LevelDef[] = [
   },
 ];
 
+/**
+ * Handmade missions placed after the campaign's opening run (mission number → map). They keep the generated
+ * missions around them where they are, and the boss missions stay boss missions.
+ */
+export const EXTRA_LEVELS: Record<number, LevelDef> = {
+  // iteration 12: the Maçon's first building site, open ground for it to wall up
+  21: {
+    name: 'Le chantier',
+    map: [
+      '......................',
+      '......................',
+      '..........o.....c.....',
+      '..1.......o...........',
+      '..........o.......a...',
+      '..2...................',
+      '.......##......##.....',
+      '.......#........#.....',
+      '...........c..........',
+      '.......#........#.....',
+      '.......##......##.....',
+      '......................',
+      '..........o.......p...',
+      '..........o...........',
+      '..........o.....c.....',
+      '......................',
+      '......................',
+    ],
+  },
+};
+
 export interface ParsedLevel {
   name: string;
   tiles: number[];
@@ -558,6 +588,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
       for (const e of enemies) if (ra() < armored) e.kind = 'steel';
       // a steel-tank mission always has at least one of them (and the daily twist even more)
       if (!enemies.some((e) => e.kind === 'steel') && (opt.armored ?? 0) > 0 && enemies.length) enemies[Math.floor(ra() * enemies.length)].kind = 'steel';
+    }
+    // the Maçon (iteration 12) takes over some of the others from the 22nd: yet another stream, nothing else moves
+    if (opt.seed === undefined && mission > 21) {
+      const rm = rng(mission * 4271 + 17);
+      for (const e of enemies) if (e.kind !== 'steel' && rm() < 0.16) e.kind = 'mason';
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);
@@ -708,6 +743,7 @@ export function bossLevel(mission: number, who: 'boss' | 'drill' = bossOf(missio
 
 export function getMission(mission: number): ParsedLevel {
   if (mission <= LEVELS.length) return parseLevel(LEVELS[mission - 1]);
+  if (EXTRA_LEVELS[mission]) return parseLevel(EXTRA_LEVELS[mission]);
   if (isBossMission(mission)) return bossLevel(mission);
   return proceduralLevel(mission);
 }
