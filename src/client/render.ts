@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BOLT_R, BONUS_INFO, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
@@ -164,6 +164,9 @@ interface TankView {
   alertT: number;
   armor?: THREE.Group; // steel tanks (iteration 10): plates that fly off at the first hit
   armorSeen?: boolean; // the plates' state has been synced once (no burst for a tank that starts the mission bare)
+  bit?: THREE.Group; // the Foreur (iteration 11): its spinning drill bit
+  mound?: THREE.Group; // the Foreur under the table: a moving bump of earth
+  under?: boolean;
 }
 
 /** Red « ! » bubble shown above enemies that have spotted a foe at night. */
@@ -290,7 +293,16 @@ const geo = {
   skirt: new RoundedBoxGeometry(0.9, 0.17, 0.05, 2, 0.02),
   mantlet: new THREE.CylinderGeometry(0.27, 0.29, 0.1, 8),
   rivet: new THREE.SphereGeometry(0.025, 8, 6),
+  // the Foreur (iteration 11): a drill bit in front, exhaust stacks behind, and a bump of earth when it is under
+  bit: new THREE.ConeGeometry(0.21, 0.5, 18, 1),
+  bitRidge: new THREE.TorusGeometry(1, 0.028, 6, 22),
+  stack: new THREE.CylinderGeometry(0.045, 0.055, 0.26, 10),
+  mound: new THREE.SphereGeometry(0.62, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+  clod: new THREE.DodecahedronGeometry(0.09, 0),
 };
+const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
+const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 1, flatShading: true });
+const dirtDarkMat = new THREE.MeshStandardMaterial({ color: 0x5e3b20, roughness: 1, flatShading: true });
 const plateMat = new THREE.MeshStandardMaterial({ color: 0x9fb2c8, roughness: 0.28, metalness: 0.85, emissive: 0x101820, emissiveIntensity: 0.4 });
 const rivetMat = new THREE.MeshStandardMaterial({ color: 0x3c4552, roughness: 0.4, metalness: 0.7 });
 const brassMat = new THREE.MeshStandardMaterial({ color: 0xffb43d, roughness: 0.35, metalness: 0.6, emissive: 0x3a2000, emissiveIntensity: 0.3 });
@@ -440,6 +452,48 @@ function buildTank(info: TankInfo): TankView {
     }
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'drill') {
+    // a toy mining machine: a big steel drill bit at the front, exhaust stacks at the back, a miner's lamp
+    const bit = new THREE.Group();
+    const cone = new THREE.Mesh(geo.bit, steelBitMat);
+    cone.rotation.z = -Math.PI / 2;
+    bit.add(cone);
+    for (let i = 0; i < 4; i++) {
+      // little ridges that make the spin readable
+      const r = new THREE.Mesh(geo.bitRidge, barrelMat);
+      const u = (i + 0.5) / 4;
+      r.scale.setScalar(0.21 * (1 - u) + 0.01);
+      r.position.x = -0.25 + u * 0.5;
+      r.rotation.y = Math.PI / 2 + 0.35;
+      bit.add(r);
+    }
+    bit.position.set(0.62, 0.22, 0);
+    hull.add(bit);
+    for (const z of [-0.18, 0.18]) {
+      const st = new THREE.Mesh(geo.stack, barrelMat);
+      st.position.set(-0.32, 0.45, z);
+      hull.add(st);
+    }
+    lamp.visible = true;
+    lampMat.color.setHex(0xfff1a0);
+    lamp.position.set(0.2, 0.2, 0);
+    const mound = new THREE.Group();
+    const hump = new THREE.Mesh(geo.mound, dirtMat);
+    hump.scale.set(1, 0.38, 1);
+    mound.add(hump);
+    for (let i = 0; i < 7; i++) {
+      const c = new THREE.Mesh(geo.clod, i % 2 ? dirtDarkMat : dirtMat);
+      const a = (i / 7) * Math.PI * 2;
+      c.position.set(Math.cos(a) * 0.55, 0.05, Math.sin(a) * 0.55);
+      c.rotation.set(a, a * 2, 0);
+      mound.add(c);
+    }
+    mound.visible = false;
+    root.add(mound);
+    view.bit = bit;
+    view.mound = mound;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
   if (armorGroup) {
     view.armor = armorGroup;
     const collar = turret.getObjectByName('collar');
@@ -519,6 +573,7 @@ export class Renderer {
   private rainPos: Float32Array;
   private rainSpeed: Float32Array;
   private zaps: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
+  private quakes: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
   private bolts: { meshes: THREE.Mesh[]; t: number; max: number }[] = [];
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
   private boltGlowMat = new THREE.MeshBasicMaterial({ color: 0x7fa8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -860,6 +915,7 @@ export class Renderer {
     }
     this.portals = [];
     this.glow.clear(); this.smoke.clear(); this.debris.clear();
+    for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
 
     this.paintFloor(tiles);
     for (let y = 0; y < H; y++) {
@@ -1048,6 +1104,7 @@ export class Renderer {
       this.tankBuffs(v, t, visible, dt);
       this.tankAlert(v, t, dt);
       if (v.armor) this.tankArmor(v, t, visible, dt);
+      if (v.mound && this.tankDrill(v, t, dt)) continue;
       // tread marks
       if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
       const d = Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY);
@@ -1068,6 +1125,148 @@ export class Renderer {
       }
     }
     this.headlights(list);
+  }
+
+  /** The Foreur: the bit spins (wildly while it digs in); under the table only a bump of earth shows, ploughing a furrow. */
+  private tankDrill(v: TankView, t: RTank, dt: number): boolean {
+    const fx = t.fx ?? 0;
+    const under = !!(fx & FLAG_BURROW), spinning = !!(fx & FLAG_CHARGING);
+    v.bit!.rotation.x += dt * (spinning ? 40 : 9);
+    if (spinning && Math.random() < 50 * dt) {
+      // earth thrown up around the hull as it digs in
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2.5;
+      this.debris.emit({ x: t.x + Math.cos(a) * 0.5, y: 0.1, z: t.y + Math.sin(a) * 0.5, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 3, vz: Math.sin(a) * sp, life: 0.8, s0: 0.06 + Math.random() * 0.05, s1: 0.03, c0: 0x8a5a33, c1: 0x5e3b20, grav: 10, drag: 0.5 });
+    }
+    if (v.under !== under) {
+      v.under = under;
+      v.hull.visible = v.turret.visible = !under;
+      v.mound!.visible = under;
+      if (v.ring) v.ring.visible = !under;
+    }
+    if (!under) return false;
+    if (v.alert) v.alert.visible = false;
+    v.mound!.rotation.y += dt * 2;
+    v.mound!.position.y = Math.sin(this.time * 18) * 0.03;
+    v.mound!.scale.setScalar(1 + Math.sin(this.time * 9) * 0.06);
+    this.shake = Math.max(this.shake, 0.05);
+    if (Math.random() < 30 * dt) {
+      const a = Math.random() * Math.PI * 2;
+      this.debris.emit({ x: t.x + Math.cos(a) * 0.4, y: 0.15, z: t.y + Math.sin(a) * 0.4, vx: Math.cos(a) * 1.2, vy: 1.5 + Math.random() * 2, vz: Math.sin(a) * 1.2, life: 0.6, s0: 0.05 + Math.random() * 0.05, s1: 0.03, c0: 0x8a5a33, c1: 0x5e3b20, grav: 10, drag: 0.5 });
+    }
+    if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
+    if (Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY) > 0.18) {
+      const bx = t.x, by = t.y;
+      // a furrow of loose earth on the paper
+      this.floorMark((g) => {
+        g.fillStyle = 'rgba(100,62,30,0.38)';
+        for (let k = 0; k < 4; k++) {
+          g.beginPath();
+          g.arc(bx * PX + (Math.random() - 0.5) * 34, by * PX + (Math.random() - 0.5) * 34, 4 + Math.random() * 9, 0, Math.PI * 2);
+          g.fill();
+        }
+      });
+      v.lastMarkX = t.x; v.lastMarkY = t.y;
+    }
+    return true;
+  }
+
+  /** The Foreur goes under: a spray of earth and a hole on the paper. */
+  dig(x: number, y: number) {
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 3;
+      this.debris.emit({ x, y: 0.2, z: y, vx: Math.cos(a) * sp, vy: 2.5 + Math.random() * 3.5, vz: Math.sin(a) * sp, life: 1 + Math.random() * 0.5, s0: 0.07 + Math.random() * 0.07, s1: 0.03, c0: 0x8a5a33, c1: 0x4a2d16, grav: 11, drag: 0.4 });
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.smoke.emit({ x, y: 0.2, z: y, vx: Math.cos(a) * 1.2, vy: 0.6, vz: Math.sin(a) * 1.2, life: 1.2, s0: 0.2, s1: 0.5, c0: 0x9a7650, c1: 0xcdb08a, drag: 2 });
+    }
+    this.shake = Math.max(this.shake, 0.2);
+    this.floorMark((g) => this.paintHole(g, x, y, 0.55));
+  }
+
+  private paintHole(g: CanvasRenderingContext2D, x: number, y: number, r: number) {
+    const hg = g.createRadialGradient(x * PX, y * PX, 2, x * PX, y * PX, r * PX);
+    hg.addColorStop(0, 'rgba(40,24,10,0.7)');
+    hg.addColorStop(0.6, 'rgba(90,58,30,0.45)');
+    hg.addColorStop(1, 'rgba(110,70,35,0)');
+    g.fillStyle = hg;
+    g.beginPath(); g.arc(x * PX, y * PX, r * PX, 0, Math.PI * 2); g.fill();
+  }
+
+  /** The ground shakes where the Foreur is about to burst out: a ring of cracks that tightens, earth hopping about. */
+  quake(x: number, y: number, warn: number) {
+    const mesh = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.04, y);
+    mesh.scale.setScalar(DRILL_BLAST);
+    const core = new THREE.Mesh(geo.disc, new THREE.MeshBasicMaterial({ color: 0x6b3f1c, transparent: true, opacity: 0, depthWrite: false }));
+    core.rotation.x = -Math.PI / 2;
+    core.position.set(x, 0.03, y);
+    core.scale.setScalar(DRILL_BLAST);
+    this.scene.add(mesh, core);
+    this.quakes.push({ mesh, core, x, y, t: 0, max: warn });
+  }
+
+  private animateQuakes(dt: number) {
+    for (let i = this.quakes.length - 1; i >= 0; i--) {
+      const q = this.quakes[i];
+      q.t += dt;
+      const u = Math.min(1, q.t / q.max);
+      if (q.t > q.max + 0.3) { this.dropQuake(i); continue; }
+      const flick = 0.5 + 0.5 * Math.sin(this.time * (8 + u * 30));
+      (q.mesh.material as THREE.MeshBasicMaterial).opacity = (0.35 + 0.5 * u) * (0.6 + 0.4 * flick);
+      q.mesh.scale.setScalar(DRILL_BLAST * (1.2 - 0.2 * u + 0.03 * flick));
+      (q.core.material as THREE.MeshBasicMaterial).opacity = 0.15 + 0.35 * u;
+      this.shake = Math.max(this.shake, 0.06 + 0.12 * u);
+      if (Math.random() < dt * (10 + u * 40)) {
+        const a = Math.random() * Math.PI * 2, r = DRILL_BLAST * Math.random();
+        this.debris.emit({ x: q.x + Math.cos(a) * r, y: 0.05, z: q.y + Math.sin(a) * r, vy: 1.5 + Math.random() * 2.5, life: 0.5, s0: 0.05 + Math.random() * 0.04, s1: 0.03, c0: 0x8a5a33, c1: 0x5e3b20, grav: 12 });
+      }
+    }
+  }
+  private dropQuake(i: number) {
+    const q = this.quakes[i];
+    this.scene.remove(q.mesh, q.core);
+    (q.mesh.material as THREE.Material).dispose(); (q.core.material as THREE.Material).dispose();
+    this.quakes.splice(i, 1);
+  }
+
+  /** It bursts out: a fountain of earth and wood, a big shock wave, a crater on the paper. */
+  erupt(x: number, y: number) {
+    for (let i = this.quakes.length - 1; i >= 0; i--) if (Math.hypot(this.quakes[i].x - x, this.quakes[i].y - y) < 0.6) this.dropQuake(i);
+    for (let i = 0; i < 90; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 4.5;
+      this.debris.emit({ x: x + Math.cos(a) * 0.3, y: 0.2, z: y + Math.sin(a) * 0.3, vx: Math.cos(a) * sp, vy: 4 + Math.random() * 6, vz: Math.sin(a) * sp, life: 1.3 + Math.random() * 0.8, s0: 0.07 + Math.random() * 0.1, s1: 0.04, c0: Math.random() < 0.2 ? 0xc98f55 : 0x8a5a33, c1: 0x4a2d16, grav: 12, drag: 0.35 });
+    }
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * Math.PI * 2, s = Math.random() * 2.5;
+      this.smoke.emit({ x, y: 0.3, z: y, vx: Math.cos(a) * s, vy: 0.8 + Math.random() * 1.5, vz: Math.sin(a) * s, life: 1.4 + Math.random(), s0: 0.25, s1: 0.7, c0: 0x8a6a48, c1: 0xcdb08a, drag: 2.2 });
+    }
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xffc080, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.08, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.5, size: DRILL_BLAST * 1.5 });
+    this.flash.position.set(x, 1.2, y);
+    this.flash.intensity = 35;
+    this.flashT = 0.25;
+    this.shake = Math.max(this.shake, 0.45);
+    this.floorMark((g) => {
+      this.paintHole(g, x, y, DRILL_BLAST);
+      g.save();
+      g.translate(x * PX, y * PX);
+      g.strokeStyle = 'rgba(50,30,12,0.55)';
+      g.lineCap = 'round';
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + Math.random() * 0.5, l = PX * (DRILL_BLAST * 0.8 + Math.random() * 0.5);
+        g.lineWidth = 2 + Math.random() * 3;
+        g.beginPath(); g.moveTo(Math.cos(a) * PX * 0.4, Math.sin(a) * PX * 0.4);
+        g.lineTo(Math.cos(a + 0.2) * l * 0.6, Math.sin(a + 0.2) * l * 0.6);
+        g.lineTo(Math.cos(a - 0.1) * l, Math.sin(a - 0.1) * l);
+        g.stroke();
+      }
+      g.restore();
+    });
   }
 
   /** Night: the enemy's lamp turns red and a « ! » pops above it while it has someone in sight. */
@@ -1119,7 +1318,7 @@ export class Renderer {
       const a = Math.random() * Math.PI * 2;
       this.debris.emit({
         x, y: 0.6, z: y, vx: Math.cos(a) * (1 + Math.random() * 2), vy: 2 + Math.random() * 3, vz: Math.sin(a) * (1 + Math.random() * 2),
-        life: 1 + Math.random() * 0.5, s0: 0.05 + Math.random() * 0.04, s1: 0.02, c0: Math.random() < 0.3 ? 0xf2c14e : ENEMY_COLORS.boss, c1: 0x2a2a2a, grav: 10, drag: 0.4,
+        life: 1 + Math.random() * 0.5, s0: 0.05 + Math.random() * 0.04, s1: 0.02, c0: Math.random() < 0.3 ? 0xf2c14e : v ? enemyColor(v.info.kind) : ENEMY_COLORS.boss, c1: 0x2a2a2a, grav: 10, drag: 0.4,
       });
     }
     this.spark(x, y);
@@ -1455,6 +1654,7 @@ export class Renderer {
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
     this.animateStorm(dt);
+    this.animateQuakes(dt);
     if (this.night > 0.5 && Math.random() < 5 * dt) {
       // fireflies drifting over the table
       this.glow.emit({

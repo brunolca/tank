@@ -320,6 +320,10 @@ body.demo #boss-bar { top: 18px; }
 #boss-bar.rage { border-color: rgba(255, 70, 50, 0.6); animation: boss-rage 0.6s ease-in-out infinite alternate; }
 #boss-bar.rage #boss-fill { background: linear-gradient(180deg, #ffb070, #ff3b2f); }
 @keyframes boss-rage { to { box-shadow: 0 0 26px rgba(255, 60, 40, 0.55); } }
+/* the Foreur (iteration 11): an earthy bar with a pick instead of the crown */
+#boss-bar.drill .boss-top b { color: #ffad5a; }
+#boss-bar.drill .boss-top b::before { content: '⛏ '; }
+#boss-bar.drill #boss-fill { background: linear-gradient(180deg, #ffb46a, #b5651d); box-shadow: 0 0 12px rgba(255, 150, 60, 0.55); }
 #banner.boss .b-kicker { color: #ff5d4c; }
 #banner.boss .b-title { color: #f2c14e; }
 #banner.night .b-kicker { color: #9db4ff; }

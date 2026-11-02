@@ -6,6 +6,7 @@ export const SUBSTEPS = 2;
 
 export const TANK_R = 0.36;
 export const BOSS_R = 0.62;
+export const DRILL_R = 0.56;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
 export const MINE_BLAST = 1.55;
@@ -36,7 +37,8 @@ export type TankKind =
   | 'white'
   | 'black'
   | 'boss'
-  | 'steel';
+  | 'steel'
+  | 'drill';
 
 export interface TankSpec {
   speed: number;
@@ -69,6 +71,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   boss: { speed: 1.05, maxBullets: 4, bounces: 1, rocket: false, fireCd: 0.75, turretSpeed: 2.2, mines: 3, skill: 2, reaction: 0.4, aimError: 0.05, hp: 8, size: BOSS_R, label: 'Colosse' },
   // iteration 10: armour plates soak up the first hit, then it sheds its weight (see STEEL_STRIPPED)
   steel: { speed: 0.95, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2.2, mines: 0, skill: 2, hp: 2, reaction: 0.5, aimError: 0.06, label: 'Acier' },
+  // iteration 11: the second boss, it digs under the table and bursts out beneath its prey (see DRILL_*)
+  drill: { speed: 1.35, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.1, turretSpeed: 2.4, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: DRILL_R, label: 'Foreur' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -96,6 +100,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   black: 0x2a2a30,
   boss: 0xb8323a,
   steel: 0x56708f,
+  drill: 0xd9822b,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -112,6 +117,26 @@ export const BOSS_HP_PER_PLAYER = 3;
 // flags bits used by the boss (after the bonus flags)
 export const FLAG_CHARGING = 64;
 export const FLAG_RAGE = 128;
+
+// ------------------------------------------------------------------ the Foreur (iteration 11): the boss that digs
+/** Seconds it spins its drill on the spot before going under (flag FLAG_CHARGING meanwhile). */
+export const DRILL_DIG_WARN = 0.8;
+/** Seconds between two dives (calm, then enraged). */
+export const DRILL_DIG_EVERY: [number, number] = [6.5, 4.4];
+/** Speed under the table (calm, then enraged): a bit slower than a player, so running away works. */
+export const DRILL_UNDER_SPEED: [number, number] = [2.4, 2.9];
+/** Longest trip under the table, in seconds (calm, then enraged). */
+export const DRILL_UNDER_MAX: [number, number] = [3.4, 3];
+/** Seconds the ground shakes where it is about to burst out (calm, then enraged). */
+export const DRILL_RISE_WARN: [number, number] = [1.2, 0.95];
+/** Reach of the burst: tanks, shells and cork in it are gone, mines go off. */
+export const DRILL_BLAST = 1.45;
+/** Enraged, it also throws a ring of shells as it comes out. */
+export const DRILL_RING_SHOTS = 8;
+/** Flags bit: the Foreur is under the table (nothing can touch it, it touches nothing). */
+export const FLAG_BURROW = 512;
+/** The two bosses that take turns every ten missions. */
+export const isBossKind = (k: string) => k === 'boss' || k === 'drill';
 
 // ------------------------------------------------------------------ portals
 /** Colour of each portal pair (Tile.PortalA, Tile.PortalB). */

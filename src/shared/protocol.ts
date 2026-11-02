@@ -38,7 +38,7 @@ export interface Input {
 }
 
 // tank: [id, x, y, body, turret, flags, hp?]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan),
-// 64 boss charging a volley, 128 boss enraged, 256 enemy has spotted a foe (night). hp only for tanks with several hit points.
+// 64 boss charging a volley (or the Foreur spinning up), 128 boss enraged, 256 enemy has spotted a foe (night), 512 the Foreur is under the table. hp only for tanks with several hit points.
 export type NetTank = [number, number, number, number, number, number, number?];
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
@@ -64,7 +64,10 @@ export type GameEvent =
   | ['warp', number, number, number, number, number] // x0 y0 x1 y1 tankId (0 for a shell) went through a portal
   | ['ff', number, number, number, number] // x y victimTankId killerTankId: a player destroyed by a player (or by themselves), coop-like modes
   | ['zap', number, number, number] // x y seconds: a lightning strike is announced there (storm, iteration 9)
-  | ['bolt', number, number]; // x y: the lightning falls (older clients ignore both and just see the damage)
+  | ['bolt', number, number] // x y: the lightning falls (older clients ignore both and just see the damage)
+  | ['dig', number, number, number] // x y tankId: the Foreur goes under the table (iteration 11)
+  | ['quake', number, number, number, number] // x y seconds tankId: the ground shakes where the Foreur is about to burst out
+  | ['erupt', number, number, number]; // x y tankId: it bursts out (older clients ignore all three and just see the damage)
 
 /** One finished run on the daily board. */
 export interface BoardEntry {

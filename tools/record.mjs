@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 12, arms: ['canon', 'ricochet'], armor: [4.5], seconds: 13, caption: 'Nouveau : le tank d’acier', sub: 'Son blindage encaisse le premier coup' },
-  { mission: 21, arms: ['fusee', 'canon'], armor: [2.5], seconds: 12, caption: 'Clang ! Le blindage s’envole', sub: 'Dénudé, il devient bien plus rapide' },
-  { daily: [2, 'blindes'], armor: [5], seconds: 11, caption: 'Défi du jour : « Blindés »', sub: 'Une septième consigne, dès le 3 novembre' },
-  { mission: 26, arms: ['sapeur', 'ricochet'], rich: true, seconds: 11, caption: 'Missions générées', sub: 'Dès la 21ᵉ, un ennemi sur cinq porte l’acier' },
-  { mission: 22, arms: ['canon', 'fusee'], bolts: [2, 5.5, 9], seconds: 12, caption: 'Craac !', sub: 'Le tonnerre s’écrit aussi, pour jouer sans le son' },
+  { mission: 20, arms: ['canon', 'ricochet'], digs: [1.2, 8.5], seconds: 15, caption: 'Nouveau boss : le Foreur', sub: 'Il creuse sous la table et jaillit sous vos chenilles' },
+  { mission: 20, arms: ['fusee', 'sapeur'], bossHp: 4, digs: [1.5, 7], seconds: 12, caption: 'Quand le sol tremble, filez !', sub: 'En colère, il ressort en crachant une couronne d’obus' },
+  { mission: 40, arms: ['canon', 'fusee'], digs: [4], seconds: 12, caption: 'Il ronge le liège', sub: 'Intouchable sous terre : frappez-le en surface' },
+  { mission: 10, arms: ['ricochet', 'canon'], volley: true, seconds: 9, caption: 'Deux boss en alternance', sub: 'Le Colosse aux missions 10, 30, 50… le Foreur aux 20, 40, 60…' },
+  { mission: 26, arms: ['sapeur', 'ricochet'], rich: true, seconds: 9, caption: 'Et toujours la campagne sans fin', sub: 'Jusqu’à quatre en ligne' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -64,6 +64,7 @@ try {
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);
       for (const s of shot.bolts ?? []) setTimeout(() => d.bolt?.(), s * 1000);
       for (const s of shot.armor ?? []) setTimeout(() => d.armor?.(), s * 1000);
+      for (const s of shot.digs ?? []) setTimeout(() => d.dig?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

@@ -1,7 +1,7 @@
 {
-  "iteration": 10,
-  "date": "2026-11-01",
-  "title": "Le tank d’acier",
+  "iteration": 11,
+  "date": "2026-11-02",
+  "title": "Le Foreur",
   "journal": [
     {
       "iteration": 1,
@@ -123,6 +123,18 @@
         "On le croise d’abord dans « Forteresse » (mission 12), puis dans les missions générées à partir de la 21ᵉ, où environ un ennemi sur cinq est blindé.",
         "Le défi du jour gagne une septième consigne, « Blindés » : la moitié des ennemis sont en acier. Première édition le 3 novembre.",
         "Le tonnerre s’écrit désormais à l’écran (« Craac ! ») pour celles et ceux qui jouent sans le son, et un onglet resté ouvert longtemps vous prévient désormais quand une nouvelle version du jeu est en ligne."
+      ]
+    },
+    {
+      "iteration": 11,
+      "date": "2026-11-02",
+      "title": "Le Foreur",
+      "notes": [
+        "Un deuxième boss entre en scène : le Foreur, une machine de chantier orange armée d’un énorme foret d’acier. Il garde les missions 20, 40, 60… tandis que le Colosse reste aux missions 10, 30, 50…",
+        "Toutes les quelques secondes, il fait tourner son foret, s’enfonce dans la table et file sous terre vers le tank le plus proche, en passant sous les murs. On ne voit plus qu’une bosse de terre qui laisse un sillon.",
+        "Quand le sol tremble et qu’un anneau orange se resserre, il va jaillir à cet endroit : tout ce qui s’y trouve saute. Filez ! En colère, il ressort en crachant une couronne d’obus.",
+        "Sous terre, il est intouchable : visez-le quand il est en surface. Il ronge le liège en roulant, alors ne comptez pas sur une cachette en liège.",
+        "La barre de vie du boss change d’allure selon l’adversaire, et le tremblement s’écrit à l’écran (« Le sol tremble ! », « Broum ! ») pour jouer sans le son."
       ]
     }
   ]

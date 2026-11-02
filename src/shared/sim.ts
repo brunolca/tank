@@ -1,5 +1,5 @@
 import {
-  BOLT_EVERY, BOLT_FLASH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, TURBO_MULT,
   TankKind, TankSpec, Tile, W, Weapon, isPortal, isSolidTank, playerSpec,
 } from './constants';
@@ -38,6 +38,11 @@ export interface BossState {
   warn: number; // > 0 while the warning glow is on
   spin: number;
   rage: boolean;
+  // the Foreur (iteration 11): 0 on the surface, 1 spinning up, 2 under the table, 3 about to burst out
+  dig: number;
+  digT: number; // seconds left in the current dig phase (or until the next dive, on the surface)
+  tx: number; // under the table: where it is heading
+  ty: number;
 }
 
 /** Active bonuses: shield is a single-use flag, the others are seconds left. */
@@ -126,6 +131,9 @@ export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
+/** The Foreur under the table: out of reach of shells, mines, lightning and other tanks. */
+export const under = (t: Tank) => !!t.boss && t.boss.dig >= 2;
+
 /** Shared by the server simulation and client-side prediction. */
 export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: number, mx: number, my: number, speed: number, dt: number, r = TANK_R): [number, number, number] {
   const len = Math.hypot(mx, my);
@@ -186,7 +194,7 @@ export class Game {
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
       r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false,
     };
-    if (kind === 'boss') t.boss = { volleyT: 5, warn: 0, spin: 0, rage: false };
+    if (kind === 'boss' || kind === 'drill') t.boss = { volleyT: 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
     return t;
@@ -243,7 +251,9 @@ export class Game {
       if (bf.fan > 0) bf.fan -= DT;
       if (bf.invuln > 0) bf.invuln -= DT;
       if (t.reveal > 0) t.reveal -= DT;
-      if (t.boss) this.updateBoss(t);
+      if (t.boss && t.kind === 'drill') {
+        if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
+      } else if (t.boss) this.updateBoss(t);
       if (t.ai) {
         this.updateAI(t);
       } else if (t.pid) {
@@ -418,9 +428,149 @@ export class Game {
     if (!t.boss || t.boss.rage) return;
     t.boss.rage = true;
     t.spec = { ...t.spec, speed: t.spec.speed * 1.35, fireCd: t.spec.fireCd * 0.7, mines: t.spec.mines + 1 };
+    if (t.kind === 'drill' && t.boss.dig === 0) t.boss.digT = Math.min(t.boss.digT, 2);
     if (loud) {
       t.boss.volleyT = Math.min(t.boss.volleyT, 1.5);
       this.events.push(['rage', r2(t.x), r2(t.y), t.id]);
+    }
+  }
+
+  // -------------------------------------------------------------- the Foreur (iteration 11)
+
+  /**
+   * The digging boss. On the surface it fights like a tank and drills through cork; every few seconds it
+   * spins up, goes under the table, burrows toward a foe, makes the ground shake where it will come out,
+   * then bursts out: everything in reach is blown away. Returns true when the AI must not drive it this tick.
+   */
+  updateDrill(t: Tank): boolean {
+    const bs = t.boss!;
+    const k = bs.rage ? 1 : 0;
+    bs.digT -= DT;
+    if (bs.dig === 0) {
+      this.drillCork(t);
+      const foes = this.tanks.some((o) => o.alive && o.team !== t.team);
+      if (bs.digT <= 0 && foes) {
+        bs.dig = 1;
+        bs.digT = DRILL_DIG_WARN;
+      }
+      return false;
+    }
+    if (bs.dig === 1) {
+      t.turret += DT * 6;
+      if (bs.digT <= 0) {
+        bs.dig = 2;
+        bs.digT = DRILL_UNDER_MAX[k];
+        this.events.push(['dig', r2(t.x), r2(t.y), t.id]);
+        if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; t.ai.locked = false; }
+      }
+      return true;
+    }
+    if (bs.dig === 2) {
+      // burrow toward the nearest foe (it can feel the treads above), straight under walls and holes
+      let foe: Tank | undefined, bd = Infinity;
+      for (const o of this.tanks) {
+        if (!o.alive || o.team === t.team || under(o)) continue;
+        const d = Math.hypot(o.x - t.x, o.y - t.y);
+        if (d < bd) { bd = d; foe = o; }
+      }
+      if (foe) { bs.tx = foe.x; bs.ty = foe.y; }
+      const dx = bs.tx - t.x, dy = bs.ty - t.y, d = Math.hypot(dx, dy);
+      const sp = DRILL_UNDER_SPEED[k] * DT;
+      if (d > sp) { t.x += (dx / d) * sp; t.y += (dy / d) * sp; t.body = Math.atan2(dy, dx); }
+      t.x = Math.max(1, Math.min(W - 1, t.x)); t.y = Math.max(1, Math.min(H - 1, t.y));
+      t.turret += DT * 4;
+      if (d < 0.45 || bs.digT <= 0) {
+        const [cx, cy] = this.drillExit(t.x, t.y);
+        bs.dig = 3;
+        bs.digT = DRILL_RISE_WARN[k];
+        bs.tx = cx; bs.ty = cy;
+        this.events.push(['quake', r2(cx), r2(cy), DRILL_RISE_WARN[k], t.id]);
+      }
+      return true;
+    }
+    // dig === 3: slide to the exit spot while the ground shakes, then burst out
+    const dx = bs.tx - t.x, dy = bs.ty - t.y, d = Math.hypot(dx, dy);
+    const sp = 4 * DT;
+    if (d > sp) { t.x += (dx / d) * sp; t.y += (dy / d) * sp; } else { t.x = bs.tx; t.y = bs.ty; }
+    t.turret += DT * 4;
+    if (bs.digT <= 0) {
+      t.x = bs.tx; t.y = bs.ty;
+      this.erupt(t);
+      bs.dig = 0;
+      bs.digT = DRILL_DIG_EVERY[k] * (0.9 + Math.random() * 0.25);
+      t.fireCd = Math.max(t.fireCd, 0.8);
+    }
+    return true;
+  }
+
+  /** Nearest cell where the Foreur can come out: free (or cork, which the burst clears), with no wall, tall wall or hole around. */
+  drillExit(x: number, y: number): [number, number] {
+    const ok = (cx: number, cy: number) => {
+      if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const tl = this.tiles[(cy + dy) * W + cx + dx];
+        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || ((dx || dy) ? false : isPortal(tl))) return false;
+      }
+      return true;
+    };
+    const fx = Math.floor(x), fy = Math.floor(y);
+    let best: [number, number] | undefined, bd = Infinity;
+    for (let rad = 0; rad < 8 && !best; rad++) {
+      for (let cy = fy - rad; cy <= fy + rad; cy++) for (let cx = fx - rad; cx <= fx + rad; cx++) {
+        if (Math.max(Math.abs(cx - fx), Math.abs(cy - fy)) !== rad || !ok(cx, cy)) continue;
+        const d = Math.hypot(cx + 0.5 - x, cy + 0.5 - y);
+        if (d < bd) { bd = d; best = [cx + 0.5, cy + 0.5]; }
+      }
+    }
+    return best ?? [W / 2, H / 2];
+  }
+
+  /** It bursts out of the table: tanks, shells and cork in reach are gone, mines go off; enraged, a ring of shells too. */
+  erupt(t: Tank) {
+    this.events.push(['erupt', r2(t.x), r2(t.y), t.id]);
+    for (const o of this.tanks) {
+      if (o !== t && o.alive && Math.hypot(o.x - t.x, o.y - t.y) < DRILL_BLAST + o.r * 0.4) this.killTank(o, t);
+    }
+    for (const b of this.bullets) if (!b.dead && Math.hypot(b.x - t.x, b.y - t.y) < DRILL_BLAST) b.dead = true;
+    for (const m of this.mines) {
+      if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) < DRILL_BLAST + 0.3 && (m.fuse < 0 || m.fuse > 0.12)) m.fuse = 0.12;
+    }
+    for (let cy = Math.floor(t.y - 2); cy <= Math.floor(t.y + 2); cy++) {
+      for (let cx = Math.floor(t.x - 2); cx <= Math.floor(t.x + 2); cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (Math.hypot(cx + 0.5 - t.x, cy + 0.5 - t.y) < DRILL_BLAST + 0.35) {
+          this.tiles[cy * W + cx] = Tile.Empty;
+          this.events.push(['block', cx, cy]);
+        }
+      }
+    }
+    [t.x, t.y] = resolveCircle(this.tiles, t.x, t.y, t.r);
+    if (t.boss!.rage) {
+      const bs = t.boss!;
+      bs.spin += 0.4 + Math.random() * 0.5;
+      const tip = t.r + 0.2;
+      for (let i = 0; i < DRILL_RING_SHOTS; i++) {
+        const a = bs.spin + (i * Math.PI * 2) / DRILL_RING_SHOTS, dx = Math.cos(a), dy = Math.sin(a);
+        const x = t.x + dx * tip, y = t.y + dy * tip;
+        if (bulletBlocked(this.tiles, x, y, BULLET_R)) continue;
+        const sp = BULLET_SPEED * 0.75;
+        this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces: 0, rocket: false, dead: false });
+      }
+    }
+  }
+
+  /** On the surface the Foreur grinds through any cork it touches. */
+  drillCork(t: Tank) {
+    const rr = t.r + 0.14;
+    for (let cy = Math.floor(t.y - rr); cy <= Math.floor(t.y + rr); cy++) {
+      for (let cx = Math.floor(t.x - rr); cx <= Math.floor(t.x + rr); cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        const nx = Math.max(cx, Math.min(cx + 1, t.x)), ny = Math.max(cy, Math.min(cy + 1, t.y));
+        if ((nx - t.x) ** 2 + (ny - t.y) ** 2 < rr * rr) {
+          this.tiles[cy * W + cx] = Tile.Empty;
+          this.events.push(['block', cx, cy]);
+        }
+      }
     }
   }
 
@@ -494,7 +644,7 @@ export class Game {
   }
 
   separateTanks() {
-    const alive = this.tanks.filter((t) => t.alive);
+    const alive = this.tanks.filter((t) => t.alive && !under(t));
     for (let i = 0; i < alive.length; i++) {
       for (let j = i + 1; j < alive.length; j++) {
         const a = alive[i], b = alive[j];
@@ -540,7 +690,7 @@ export class Game {
     for (const b of this.bullets) {
       if (b.dead) continue;
       for (const t of this.tanks) {
-        if (!t.alive) continue;
+        if (!t.alive || under(t)) continue;
         const rr = t.r + BULLET_R;
         if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
           b.dead = true;
@@ -585,7 +735,7 @@ export class Game {
       m.t += dt;
       if (m.fuse < 0 && m.t > 0.4) {
         for (const t of this.tanks) {
-          if (!t.alive || t.team === m.team || t.id === m.owner) continue;
+          if (!t.alive || t.team === m.team || t.id === m.owner || under(t)) continue;
           if (Math.hypot(t.x - m.x, t.y - m.y) < MINE_TRIGGER_R + t.r - TANK_R) { m.fuse = 0.55; break; }
         }
       }
@@ -627,7 +777,7 @@ export class Game {
   }
 
   killTank(t: Tank, killer: Tank | undefined) {
-    if (!t.alive || t.buffs.invuln > 0) return;
+    if (!t.alive || t.buffs.invuln > 0 || under(t)) return;
     if (t.hp > 1) {
       // tough tanks (the boss) soak up hits, with a short grace so one blast counts once
       t.hp--;
@@ -667,7 +817,7 @@ export class Game {
     const b = t.buffs;
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
-      | (t.boss && t.boss.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (this.night && t.alert ? FLAG_ALERT : 0);
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0);
   }
   netBonuses(): NetBonus[] {
     return this.bonuses.map((c) => [c.id, c.x, c.y, BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
@@ -692,7 +842,7 @@ export class Game {
       const s = segs[si];
       let best: Tank | undefined, bestT = 2;
       for (const o of this.tanks) {
-        if (!o.alive) continue;
+        if (!o.alive || under(o)) continue;
         if (o === t && si === 0) continue;
         const u = segCircle(s, o.x, o.y, o.r + BULLET_R + 0.04);
         if (u >= 0 && u < bestT) { bestT = u; best = o; }
@@ -715,7 +865,7 @@ export class Game {
   private nearestFoe(t: Tank): Tank | undefined {
     let best: Tank | undefined, bd = Infinity;
     for (const o of this.tanks) {
-      if (!o.alive || o.team === t.team || !this.canSee(t, o)) continue;
+      if (!o.alive || o.team === t.team || under(o) || !this.canSee(t, o)) continue;
       const d = Math.hypot(o.x - t.x, o.y - t.y);
       if (d < bd) { bd = d; best = o; }
     }
@@ -824,7 +974,7 @@ export class Game {
     const ai = t.ai!;
     const spec = t.spec;
     if (spec.skill === 0) { ai.aimValid = false; return; }
-    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team && this.canSee(t, o));
+    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team && !under(o) && this.canSee(t, o));
     let bestAng = 0, bestScore = -Infinity;
     const tryAng = (ang: number, bias: number) => {
       const res = this.traceShot(t, ang, spec.bounces);
@@ -881,6 +1031,13 @@ export class Game {
       const d = Math.hypot(dx, dy);
       if (d < BOLT_R + t.r + 0.45) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }
     }
+    // the ground shakes where the Foreur is about to burst out: everyone clears the spot
+    for (const o of this.tanks) {
+      if (o === t || !o.alive || o.boss?.dig !== 3) continue;
+      const dx = t.x - o.x, dy = t.y - o.y;
+      const d = Math.hypot(dx, dy);
+      if (d < DRILL_BLAST + t.r + 0.5) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }
+    }
     if (threat) {
       const l = Math.hypot(ax, ay) || 1;
       ai.dodgeX = ax / l; ai.dodgeY = ay / l; ai.dodgeT = 0.25;
@@ -917,7 +1074,9 @@ export class Game {
     const start = Math.floor(t.y) * W + Math.floor(t.x);
     const blocked = new Uint8Array(W * H);
     // portals are left out of the plans: tanks that slip into one simply replan from the other side
-    for (let i = 0; i < W * H; i++) if (isSolidTank(this.tiles[i]) || (isPortal(this.tiles[i]) && i !== start && i !== ai.goal)) blocked[i] = 1;
+    // the Foreur drills straight through cork
+    const drills = t.kind === 'drill';
+    for (let i = 0; i < W * H; i++) if ((isSolidTank(this.tiles[i]) && !(drills && this.tiles[i] === Tile.Cork)) || (isPortal(this.tiles[i]) && i !== start && i !== ai.goal)) blocked[i] = 1;
     if (t.r > 0.45) {
       // big tanks only fit through cells whose neighbours are all free
       const solid = blocked.slice();
@@ -938,6 +1097,12 @@ export class Game {
       for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++)
         for (let cx = Math.floor(bo.x - 2); cx <= Math.floor(bo.x + 2); cx++)
           if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - bo.x, cy + 0.5 - bo.y) < BOLT_R + 0.5) blocked[cy * W + cx] = 1;
+    }
+    for (const o of this.tanks) {
+      if (o === t || !o.alive || o.boss?.dig !== 3) continue;
+      for (let cy = Math.floor(o.y - 2); cy <= Math.floor(o.y + 2); cy++)
+        for (let cx = Math.floor(o.x - 2); cx <= Math.floor(o.x + 2); cx++)
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - o.x, cy + 0.5 - o.y) < DRILL_BLAST + 0.5) blocked[cy * W + cx] = 1;
     }
     const prev = new Int32Array(W * H).fill(-2);
     const dist = new Int32Array(W * H);

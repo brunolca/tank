@@ -2,7 +2,7 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
-import { BOLT_R, BOLT_WARN, DT, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
+import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
 import { castRicochet } from '../src/shared/physics';
 
 for (let i = 0; i < LEVELS.length; i++) {
@@ -79,7 +79,7 @@ console.log('total', Date.now() - t0, 'ms');
   const fail = (m: string) => { console.error('BOSS:', m); process.exitCode = 1; };
   for (const mission of [10, 20, 30]) {
     const lvl = getMission(mission);
-    if (!isBossMission(mission) || !lvl.enemies.some((e) => e.kind === 'boss')) fail(`la mission ${mission} n’a pas de boss`);
+    if (!isBossMission(mission) || !lvl.enemies.some((e) => e.kind === 'boss' || e.kind === 'drill')) fail(`la mission ${mission} n’a pas de boss`);
   }
   const lvl = getMission(10);
   const g = new Game(lvl.tiles);
@@ -431,4 +431,81 @@ console.log('total', Date.now() - t0, 'ms');
   const per = (performance.now() - t1) / (30 * 60);
   if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`acier OK (${hurt} blindage(s) arraché(s) en 60 s, ${per.toFixed(3)} ms/tick, missions : ${steelMissions.join(', ')})`);
+}
+
+// the Foreur (iteration 11): the boss of even tens; it digs, burrows toward a foe, shakes the ground, then bursts out
+{
+  const fail = (m: string) => { console.error('FOREUR:', m); process.exitCode = 1; };
+  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'boss'], [40, 'drill'], [60, 'drill']] as const) {
+    if (!getMission(mission).enemies.some((e) => e.kind === kind)) fail(`la mission ${mission} devrait opposer ${kind}`);
+  }
+  if (getMission(20).night || getMission(40).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
+  // the daily « Le Colosse attend » keeps its Colosse
+  for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 14; day++) {
+    if (dailyTwist(day) === 'colosse' && !dailyLevel(day, DAILY_STAGES).enemies.some((e) => e.kind === 'boss')) fail('le défi « Le Colosse attend » a perdu son Colosse');
+  }
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  for (let y = 3; y < 14; y++) tiles[y * W + 11] = Tile.Wall; // a wall between them: it digs under it
+  const g = new Game(tiles);
+  const p = g.addTank('player', 0, 9.3, 8.5, 0x3d7bff, 'p1', 'P');
+  const d = g.addTank('drill', 99, 17.5, 8.5, 0);
+  g.frozen = false;
+  if (!d.boss || d.hp !== 8) fail('le Foreur devrait être un boss à 8 PV');
+  d.boss!.digT = 0;
+  let saw: Record<string, number> = {};
+  let underTicks = 0, hitUnder = false, killed = false;
+  g.onKill = (v, k) => { if (v === p && k === d) killed = true; };
+  for (let i = 0; i < 30 * 6 && !saw.erupt; i++) {
+    g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+    for (const e of g.events) saw[e[0]] = (saw[e[0]] ?? 0) + 1;
+    g.events = [];
+    if (d.boss!.dig >= 2) {
+      underTicks++;
+      if (!(g.netTanks().find((n) => n[0] === d.id)![5] & FLAG_BURROW)) fail('drapeau « sous la table » absent');
+      const hp = d.hp;
+      g.killTank(d, p);
+      if (d.hp !== hp) hitUnder = true;
+    }
+  }
+  if (!saw.dig || !saw.quake || !saw.erupt) fail(`cycle incomplet : ${JSON.stringify(saw)}`);
+  if (hitUnder) fail('on peut le toucher sous la table');
+  if (underTicks < 20) fail('trop peu de temps sous la table');
+  if (Math.hypot(d.x - p.x, d.y - p.y) > 2.2) fail(`il ressort trop loin de sa proie (${d.x.toFixed(1)}, ${d.y.toFixed(1)})`);
+  if (d.x > 11) fail('il n’est pas passé sous le mur');
+  if (p.alive || !killed) fail('un joueur immobile sur le sol qui tremble devrait sauter');
+  // the exit spot is always clear of walls
+  const [ex, ey] = g.drillExit(11.5, 8.5);
+  if (Math.abs(ex - 11.5) < 1.2) fail('sortie dans un mur');
+  // enraged: a ring of shells as it comes out; hits on the surface count as usual
+  const h = new Game(new Array(W * H).fill(Tile.Empty));
+  const q = h.addTank('player', 0, 3.5, 3.5, 0x3d7bff, 'p1', 'P');
+  const e = h.addTank('drill', 99, 15.5, 12.5, 0);
+  h.setHp(e, 4, 8);
+  h.frozen = false;
+  if (!e.boss!.rage) fail('pas de colère à mi-vie');
+  e.boss!.digT = 0;
+  let ring = 0;
+  for (let i = 0; i < 30 * 6 && !ring; i++) {
+    const n = h.bullets.length;
+    h.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+    if (h.events.some((x) => x[0] === 'erupt')) ring = h.bullets.length - n;
+    h.events = [];
+  }
+  if (ring < 5) fail(`pas de salve en colère à la sortie (${ring})`);
+  e.buffs.invuln = 0;
+  const hp0 = e.hp;
+  h.killTank(e, q);
+  if (e.boss!.dig < 2 && e.hp !== hp0 - 1) fail('un coup en surface ne compte pas');
+  // a real Foreur fight stays cheap
+  const lvl = getMission(20);
+  const s = new Game(lvl.tiles);
+  for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+  for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
+  s.frozen = false;
+  let erupts = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 60; i++) { s.step(new Map()); erupts += s.events.filter((x) => x[0] === 'erupt').length; s.events = []; }
+  const per = (performance.now() - t1) / (30 * 60);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`Foreur OK (${erupts} sortie(s) en 60 s, ${per.toFixed(3)} ms/tick)`);
 }

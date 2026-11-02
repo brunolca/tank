@@ -83,7 +83,7 @@ function stageName(day: number, stage: number) {
 export function dailyLevel(day: number, stage: number): ParsedLevel {
   const twist = dailyTwist(day);
   if (twist === 'colosse' && stage === DAILY_STAGES) {
-    const lvl = bossLevel(20);
+    const lvl = bossLevel(20, 'boss');
     lvl.name = 'Le Colosse du jour';
     lvl.night = false;
     lvl.storm = false;

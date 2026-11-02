@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
@@ -299,7 +299,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   const enemies = msg.tanks.filter((t) => t.team === 99);
   const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}`;
   const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}`;
-  bossFight = enemies.some((e) => e.kind === 'boss');
+  bossFight = enemies.some((e) => isBossKind(e.kind));
+  const drillFight = enemies.some((e) => e.kind === 'drill');
   if (coopLike(msg.mode)) {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
     if (msg.daily) {
@@ -308,7 +309,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
         `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${wxCls}${bossFight ? ' boss' : ''}`);
     } else if (msg.mode === 'taupe') {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
-    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
+    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
@@ -318,6 +319,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
@@ -548,11 +550,12 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (audible) sfx.pop();
       break;
     case 'boom':
-      if (renderer.tankKind(e[3]) === 'boss') {
+      if (isBossKind(renderer.tankKind(e[3]) ?? '')) {
         // the boss goes down in a chain of blasts
+        const kind = renderer.tankKind(e[3])!;
         renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
-        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, 0xf2c14e), i * 180);
-        floater(e[1], e[2], 'Colosse vaincu !', 0xf2c14e);
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : 0xf2c14e), i * 180);
+        floater(e[1], e[2], `${specOf(kind).label} vaincu !`, 0xf2c14e);
         if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
         if (online && bossFight) setMusicIntensity(1);
       } else {
@@ -603,7 +606,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
         break;
       }
       renderer.hurt(e[3], e[1], e[2]);
-      floater(e[1], e[2], `${e[4]} / ${e[5]}`, ENEMY_COLORS.boss);
+      floater(e[1], e[2], `${e[4]} / ${e[5]}`, enemyColor(renderer.tankKind(e[3]) ?? 'boss'));
       if (audible) sfx.bossHit();
       break;
     case 'volley':
@@ -622,6 +625,21 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.bolt(e[1], e[2]);
       floater(e[1], e[2], 'Craac !', 0xcfe0ff); // the thunder, written: readable without the sound
       if (audible) sfx.thunder();
+      break;
+    case 'dig':
+      renderer.dig(e[1], e[2]);
+      floater(e[1], e[2], 'Il creuse !', 0xd9822b);
+      if (audible) sfx.dig();
+      break;
+    case 'quake':
+      renderer.quake(e[1], e[2], e[3]);
+      floater(e[1], e[2], 'Le sol tremble !', 0xff8a2a); // the rumble, written: readable without the sound
+      if (audible) sfx.quake(e[3]);
+      break;
+    case 'erupt':
+      renderer.erupt(e[1], e[2]);
+      floater(e[1], e[2], 'Broum !', 0xd9822b);
+      if (audible) sfx.erupt();
       break;
     case 'rage':
       renderer.hurt(e[3], e[1], e[2]);
@@ -668,11 +686,11 @@ let lastAlert = 0;
 /** Health bar of the toughest enemy on the table, and the warning whine when the boss charges a volley. */
 function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: number) => number) {
   let boss: RTank | undefined;
-  for (const t of tanks) if (t.alive && maxOf(t.id) > 1 && renderer.tankKind(t.id) === 'boss') { boss = t; break; }
+  for (const t of tanks) if (t.alive && maxOf(t.id) > 1 && isBossKind(renderer.tankKind(t.id) ?? '')) { boss = t; break; }
   const bar = $('#boss-bar');
   for (const t of tanks) {
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
-    if (on && !charging.has(t.id) && online) sfx.bossCharge();
+    if (on && !charging.has(t.id) && online && renderer.tankKind(t.id) !== 'drill') sfx.bossCharge();
     if (on) charging.add(t.id); else charging.delete(t.id);
     const seen = !!((t.fx ?? 0) & FLAG_ALERT) && t.alive;
     if (seen && !alerted.has(t.id) && online && performance.now() - lastAlert > 400) { sfx.alert(); lastAlert = performance.now(); }
@@ -688,7 +706,9 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   bossKey = key;
   bar.hidden = false;
   bar.classList.toggle('rage', hp <= max / 2);
-  $('#boss-name').textContent = SPECS.boss.label;
+  const bossKind = renderer.tankKind(boss.id) ?? 'boss';
+  $('#boss-name').textContent = specOf(bossKind).label;
+  bar.classList.toggle('drill', bossKind === 'drill');
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
@@ -1381,6 +1401,12 @@ if (params.has('demo')) {
     armor() {
       let n = 0;
       for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'steel' && t.hp > 1) { t.buffs.invuln = 0; attract!.killTank(t, undefined); n++; }
+      return n;
+    },
+    /** Make the Foreur dig in right now (to catch its trip under the table on camera). */
+    dig() {
+      let n = 0;
+      for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'drill' && t.boss && t.boss.dig === 0) { t.boss.digT = 0; n++; }
       return n;
     },
     /** Make the boss charge its ring of shells right now (to catch it on camera). */

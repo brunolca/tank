@@ -177,6 +177,29 @@ export const sfx = {
     tone(t + 0.05, 1.0, 105, 60, 0.3, 'square');
     noise(t, 1.0, 500, 0.7, 0.5, 'lowpass', 80);
   },
+  /** The Foreur digs in: a grinding drill and a crunch of earth. */
+  dig() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.7, 140, 90, 0.12, 'sawtooth');
+    tone(t, 0.7, 147, 95, 0.08, 'square');
+    noise(t, 0.8, 900, 0.8, 0.5, 'lowpass', 150);
+  },
+  /** The ground shakes where it will come out: a deep rumble that swells. */
+  quake(secs: number) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 5; i++) noise(t + (i * secs) / 5, secs / 4, 260 + i * 40, 1, 0.15 + i * 0.09, 'lowpass');
+    tone(t, secs, 45, 65, 0.25, 'triangle');
+  },
+  /** It bursts out: a heavy thump and a shower of earth. */
+  erupt() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.5, 120, 35, 0.7, 'sine');
+    noise(t, 0.9, 1400, 0.6, 0.9, 'lowpass', 90);
+    [0.15, 0.3, 0.45, 0.6].forEach((d) => noise(t + d, 0.08, 1200 + d * 1500, 2, 0.12, 'bandpass'));
+  },
   /** Night: an enemy has spotted you (a little « hein ?! »). */
   alert() {
     if (!ctx) return;

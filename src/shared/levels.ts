@@ -3,9 +3,9 @@ import { H, W, Tile, TankKind } from './constants';
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)
 const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill',
 };
 
 export interface LevelDef {
@@ -643,8 +643,61 @@ const BOSS_ARENAS: string[][] = [
 ];
 const BOSS_ESCORTS: TankKind[][] = [['pink', 'green'], ['violet', 'green'], ['violet', 'black'], ['white', 'black']];
 
+/** The Foreur's quarries: cork everywhere (it drills through, and its bursts clear it), a few walls to hide behind. */
+const DRILL_ARENAS: string[][] = [
+  [
+    '......................',
+    '......................',
+    '..1....oo.....oo......',
+    '.......oo.....oo......',
+    '..2...................',
+    '..........HH..........',
+    '....ooo.........ooo...',
+    '......................',
+    '....##.....D.....##...',
+    '......................',
+    '....ooo.........ooo...',
+    '..........HH..........',
+    '......................',
+    '.......oo.....oo......',
+    '.......oo.....oo......',
+    '......................',
+    '......................',
+  ],
+  [
+    '......................',
+    '.1....o........o......',
+    '......o..####..o......',
+    '.2....o........o......',
+    '......................',
+    '...oooo..........oooo.',
+    '..........oo..........',
+    '....#.....oo.....#....',
+    '....#......D.....#....',
+    '....#............#....',
+    '..........oo..........',
+    '...oooo...oo.....oooo.',
+    '......................',
+    '......o........o......',
+    '......o..####..o......',
+    '......o........o......',
+    '......................',
+  ],
+];
+
+/** Which boss holds a boss mission: the Colosse on odd tens (10, 30, 50…), the Foreur on even ones (20, 40, 60…). */
+export function bossOf(mission: number): 'boss' | 'drill' {
+  return (mission / 10) % 2 === 0 ? 'drill' : 'boss';
+}
+
 /** Endless-mode boss fights: an open arena, the boss and two escorts that get nastier. */
-export function bossLevel(mission: number): ParsedLevel {
+export function bossLevel(mission: number, who: 'boss' | 'drill' = bossOf(mission)): ParsedLevel {
+  if (who === 'drill') {
+    const lvl = parseLevel({ name: `Le Foreur · ${mission}`, map: DRILL_ARENAS[(mission / 20) % DRILL_ARENAS.length | 0] });
+    const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
+    lvl.enemies.push({ kind: esc[0], x: 19.5, y: 2.5 }, { kind: esc[1], x: 19.5, y: 14.5 });
+    return lvl; // always by day: you need to see the ground shake
+  }
   const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
   const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
   lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });
