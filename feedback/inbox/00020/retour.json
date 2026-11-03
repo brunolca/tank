@@ -1,0 +1,423 @@
+{
+  "id": 20,
+  "created": "2026-11-02T18:10:17.560Z",
+  "category": "idee",
+  "text": "on pourrait refaire les cases \"trou\" elles sont pas très belles",
+  "context": {
+    "game": {
+      "iteration": 11,
+      "iterationTitle": "Le Foreur",
+      "screen": "game",
+      "online": true,
+      "room": "E7E5Z",
+      "mode": "daily",
+      "phase": "cleared",
+      "mission": 1,
+      "level": "Le Verger oublié",
+      "lives": 3,
+      "daily": {
+        "day": 20759,
+        "twist": "orage",
+        "stage": 1,
+        "stages": 5,
+        "ticks": 730
+      },
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "Bruno",
+          "host": false,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "longduzboub",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 17.73,
+        "y": 13.64,
+        "alive": true,
+        "pendingInputs": 4
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "x": 10.69,
+          "y": 6.62,
+          "alive": false
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "me": true,
+          "x": 17.73,
+          "y": 13.64,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "player",
+          "label": "longduzboub",
+          "team": 0,
+          "x": 1.5,
+          "y": 8.5,
+          "alive": false
+        },
+        {
+          "id": 4,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 99,
+          "x": 14.9,
+          "y": 11.08,
+          "alive": false
+        },
+        {
+          "id": 5,
+          "kind": "green",
+          "label": "Vert",
+          "team": 99,
+          "x": 18.5,
+          "y": 16.5,
+          "alive": false
+        },
+        {
+          "id": 6,
+          "kind": "yellow",
+          "label": "Jaune",
+          "team": 99,
+          "x": 7.91,
+          "y": 5.92,
+          "alive": false
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "tick": 875,
+      "recentEvents": [
+        [
+          551,
+          "pop",
+          9.67,
+          8.08
+        ],
+        [
+          553,
+          "bolt",
+          7.29,
+          5.5
+        ],
+        [
+          554,
+          "mboom",
+          8.19,
+          12.57
+        ],
+        [
+          560,
+          "shot",
+          11.08,
+          12.62,
+          -1.5,
+          0,
+          4
+        ],
+        [
+          561,
+          "shot",
+          11.9,
+          4.8,
+          2.04,
+          1,
+          2
+        ],
+        [
+          561,
+          "bounce",
+          6.55,
+          0.11
+        ],
+        [
+          568,
+          "pop",
+          0.12,
+          4.08
+        ],
+        [
+          570,
+          "mboom",
+          10.67,
+          8.68
+        ],
+        [
+          572,
+          "shot",
+          13.12,
+          4.84,
+          1.83,
+          1,
+          2
+        ],
+        [
+          578,
+          "shot",
+          3.05,
+          10.43,
+          0.39,
+          0,
+          1
+        ],
+        [
+          578,
+          "pop",
+          0.17,
+          3.56
+        ],
+        [
+          579,
+          "shot",
+          13.77,
+          4.83,
+          1.91,
+          1,
+          2
+        ],
+        [
+          580,
+          "pop",
+          6.04,
+          3.9
+        ],
+        [
+          588,
+          "shot",
+          3.07,
+          10.49,
+          0.32,
+          0,
+          1
+        ],
+        [
+          588,
+          "shot",
+          12.77,
+          12.1,
+          -1.25,
+          0,
+          4
+        ],
+        [
+          594,
+          "shot",
+          15.24,
+          4.81,
+          1.98,
+          1,
+          2
+        ],
+        [
+          604,
+          "zap",
+          16.87,
+          6.03,
+          1.4
+        ],
+        [
+          607,
+          "pop",
+          9.84,
+          16.84
+        ],
+        [
+          615,
+          "pop",
+          9.41,
+          16.86
+        ],
+        [
+          620,
+          "bounce",
+          11.96,
+          0.15
+        ],
+        [
+          621,
+          "pop",
+          11.39,
+          13.74
+        ],
+        [
+          633,
+          "bounce",
+          15.75,
+          3.16
+        ],
+        [
+          645,
+          "bolt",
+          16.87,
+          6.03
+        ],
+        [
+          648,
+          "mineSet",
+          14,
+          9.79
+        ],
+        [
+          684,
+          "bounce",
+          21.88,
+          16.82
+        ],
+        [
+          685,
+          "bounce",
+          21.59,
+          16.89
+        ],
+        [
+          702,
+          "pop",
+          13.14,
+          16.85
+        ],
+        [
+          728,
+          "zap",
+          21.4,
+          6.6,
+          1.4
+        ],
+        [
+          732,
+          "shot",
+          13.58,
+          9.4,
+          3.89,
+          0,
+          4
+        ],
+        [
+          766,
+          "shot",
+          13.62,
+          9.36,
+          -2.28,
+          0,
+          4
+        ],
+        [
+          769,
+          "bolt",
+          21.4,
+          6.6
+        ],
+        [
+          777,
+          "bonus",
+          10.5,
+          6.5,
+          3,
+          1
+        ],
+        [
+          783,
+          "shot",
+          11.11,
+          6.93,
+          0.77,
+          0,
+          1
+        ],
+        [
+          784,
+          "boom",
+          10.69,
+          6.62,
+          1
+        ],
+        [
+          795,
+          "pop",
+          0.13,
+          9.67
+        ],
+        [
+          795,
+          "crate",
+          5.5,
+          12.5,
+          1
+        ],
+        [
+          798,
+          "bounce",
+          3.52,
+          0.1
+        ],
+        [
+          801,
+          "mboom",
+          14,
+          9.79
+        ],
+        [
+          801,
+          "boom",
+          14.9,
+          11.08,
+          4
+        ],
+        [
+          821,
+          "pop",
+          0.12,
+          3.34
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 56,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 120
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "viewport": "1512x828",
+      "screen": "1512x982",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/E7E5Z",
+    "time": "2026-11-02T18:09:56.035Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

@@ -1,0 +1,437 @@
+{
+  "id": 17,
+  "created": "2026-11-02T17:53:47.831Z",
+  "category": "bug",
+  "text": "peux tu inclure la recette du tiramisu",
+  "context": {
+    "game": {
+      "iteration": 11,
+      "iterationTitle": "Le Foreur",
+      "screen": "game",
+      "online": true,
+      "room": "E7E5Z",
+      "mode": "coop",
+      "phase": "playing",
+      "mission": 12,
+      "level": "Forteresse",
+      "lives": 3,
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "longduzboub",
+          "host": false,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "Bruno",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 7.27,
+        "y": 10.46,
+        "alive": false,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "x": 19.77,
+          "y": 8.42,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "longduzboub",
+          "team": 0,
+          "me": true,
+          "x": 7.27,
+          "y": 10.46,
+          "alive": false
+        },
+        {
+          "id": 3,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "x": 7.45,
+          "y": 15.75,
+          "alive": false
+        },
+        {
+          "id": 4,
+          "kind": "green",
+          "label": "Vert",
+          "team": 99,
+          "x": 15.5,
+          "y": 5.5,
+          "alive": true
+        },
+        {
+          "id": 5,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 99,
+          "x": 16.36,
+          "y": 9.53,
+          "alive": true
+        },
+        {
+          "id": 6,
+          "kind": "steel",
+          "label": "Acier",
+          "team": 99,
+          "x": 6.88,
+          "y": 5.81,
+          "alive": true
+        },
+        {
+          "id": 7,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 99,
+          "x": 12.64,
+          "y": 11.52,
+          "alive": true
+        }
+      ],
+      "bullets": 4,
+      "mines": 0,
+      "tick": 897,
+      "recentEvents": [
+        [
+          570,
+          "pop",
+          20.6,
+          16.87
+        ],
+        [
+          600,
+          "bounce",
+          3.61,
+          0.13
+        ],
+        [
+          613,
+          "shot",
+          11.73,
+          8.79,
+          2.61,
+          0,
+          5
+        ],
+        [
+          627,
+          "shot",
+          3.24,
+          10.75,
+          -0.23,
+          1,
+          1
+        ],
+        [
+          630,
+          "pop",
+          0.14,
+          5.23
+        ],
+        [
+          641,
+          "shot",
+          3.21,
+          12.07,
+          -0.38,
+          1,
+          1
+        ],
+        [
+          641,
+          "bounce",
+          6.39,
+          11.91
+        ],
+        [
+          647,
+          "pop",
+          5.5,
+          11.27
+        ],
+        [
+          654,
+          "shot",
+          10.95,
+          8.2,
+          2.85,
+          0,
+          5
+        ],
+        [
+          658,
+          "pop",
+          14.47,
+          8.12
+        ],
+        [
+          678,
+          "bounce",
+          6.09,
+          9.67
+        ],
+        [
+          718,
+          "shot",
+          9.09,
+          14.18,
+          -0.82,
+          1,
+          1
+        ],
+        [
+          721,
+          "shot",
+          11.11,
+          10.62,
+          2.19,
+          0,
+          5
+        ],
+        [
+          733,
+          "shot",
+          10.21,
+          14.02,
+          -1.53,
+          1,
+          1
+        ],
+        [
+          742,
+          "pop",
+          14.83,
+          8.17
+        ],
+        [
+          755,
+          "shot",
+          12.17,
+          14.06,
+          -1.96,
+          1,
+          1
+        ],
+        [
+          759,
+          "bounce",
+          6.63,
+          16.86
+        ],
+        [
+          759,
+          "pop",
+          21.85,
+          14.36
+        ],
+        [
+          769,
+          "shot",
+          12.75,
+          10.14,
+          1.34,
+          0,
+          5
+        ],
+        [
+          771,
+          "shot",
+          8.45,
+          10.81,
+          0.61,
+          0,
+          7
+        ],
+        [
+          772,
+          "pop",
+          10.71,
+          0.2
+        ],
+        [
+          775,
+          "shot",
+          14.24,
+          14.04,
+          -1.84,
+          1,
+          1
+        ],
+        [
+          780,
+          "pop",
+          3.94,
+          13.15
+        ],
+        [
+          792,
+          "pop",
+          12.59,
+          8.13
+        ],
+        [
+          796,
+          "shot",
+          15.56,
+          6.08,
+          1.47,
+          1,
+          4
+        ],
+        [
+          798,
+          "pop",
+          6.45,
+          0.12
+        ],
+        [
+          802,
+          "bounce",
+          14.34,
+          16.88
+        ],
+        [
+          811,
+          "shot",
+          13.02,
+          10.01,
+          0.78,
+          0,
+          5
+        ],
+        [
+          811,
+          "shot",
+          10.41,
+          10.71,
+          0.37,
+          0,
+          7
+        ],
+        [
+          823,
+          "bounce",
+          17.26,
+          16.9
+        ],
+        [
+          827,
+          "bounce",
+          16.67,
+          16.87
+        ],
+        [
+          836,
+          "pop",
+          16.87,
+          13.73
+        ],
+        [
+          846,
+          "pop",
+          16.4,
+          8.12
+        ],
+        [
+          850,
+          "pop",
+          21.83,
+          13.65
+        ],
+        [
+          851,
+          "shot",
+          12.01,
+          11.44,
+          -0.06,
+          0,
+          7
+        ],
+        [
+          856,
+          "shot",
+          15.26,
+          9.68,
+          0.32,
+          0,
+          5
+        ],
+        [
+          870,
+          "bounce",
+          21.88,
+          15.18
+        ],
+        [
+          889,
+          "bounce",
+          21.84,
+          11.86
+        ],
+        [
+          889,
+          "shot",
+          13.02,
+          11.57,
+          -0.28,
+          0,
+          7
+        ],
+        [
+          894,
+          "crate",
+          9.5,
+          10.5,
+          3
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 37,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 53
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "language": "en-US",
+      "viewport": "1528x732",
+      "screen": "1536x864",
+      "dpr": 1.25,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 8,
+      "cores": 8,
+      "gl": {
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001506) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (AMD)",
+        "webgl2": true,
+        "pixelRatio": 1.25
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/E7E5Z",
+    "time": "2026-11-02T17:53:26.741Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

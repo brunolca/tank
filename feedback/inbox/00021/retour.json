@@ -1,0 +1,96 @@
+{
+  "id": 21,
+  "created": "2026-11-02T18:21:16.172Z",
+  "category": "bug",
+  "text": "Fais un mode pour jouer à la manette",
+  "context": {
+    "game": {
+      "iteration": 11,
+      "iterationTitle": "Le Foreur",
+      "screen": "home",
+      "online": false,
+      "mode": "démo",
+      "players": [],
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 1,
+          "x": 4.28,
+          "y": 2.33,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 1,
+          "x": 5.67,
+          "y": 3.84,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 2,
+          "x": 14.84,
+          "y": 6.5,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "brown",
+          "label": "Brun",
+          "team": 2,
+          "x": 6.5,
+          "y": 10.5,
+          "alive": true
+        },
+        {
+          "id": 5,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 2,
+          "x": 17.04,
+          "y": 13.92,
+          "alive": true
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "recentEvents": []
+    },
+    "network": {
+      "pingMs": 0,
+      "snapshotsBuffered": 0,
+      "socket": "aucun"
+    },
+    "perf": {
+      "fps": 118
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-GB",
+      "viewport": "1728x962",
+      "screen": "1728x1117",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/",
+    "time": "2026-11-02T18:21:07.744Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

@@ -1,0 +1,151 @@
+{
+  "id": 14,
+  "created": "2026-11-02T17:43:20.110Z",
+  "category": "bug",
+  "text": "je ne peux ni me deplacer ni tirer",
+  "context": {
+    "game": {
+      "iteration": 11,
+      "iterationTitle": "Le Foreur",
+      "screen": "game",
+      "online": true,
+      "room": "E7E5Z",
+      "mode": "coop",
+      "phase": "playing",
+      "mission": 2,
+      "level": "Les deux tours",
+      "lives": 3,
+      "players": [
+        {
+          "name": "Bruno",
+          "host": true,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "JozuhaKimmisch",
+          "host": false,
+          "connected": true
+        },
+        {
+          "name": "longduzboub",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 2.5,
+        "y": 7.5,
+        "alive": true,
+        "pendingInputs": 1
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "me": true,
+          "x": 2.5,
+          "y": 7.5,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "x": 8.3,
+          "y": 16.64,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "player",
+          "label": "longduzboub",
+          "team": 0,
+          "x": 6.09,
+          "y": 10.81,
+          "alive": false
+        },
+        {
+          "id": 4,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 99,
+          "x": 12.08,
+          "y": 13.75,
+          "alive": true
+        },
+        {
+          "id": 5,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 99,
+          "x": 4.31,
+          "y": 13.61,
+          "alive": false
+        }
+      ],
+      "bullets": 2,
+      "mines": 0,
+      "tick": 458,
+      "recentEvents": [
+        [
+          409,
+          "mboom",
+          7.95,
+          10.46
+        ],
+        [
+          435,
+          "shot",
+          6.78,
+          16.3,
+          -0.62,
+          0,
+          2
+        ],
+        [
+          444,
+          "shot",
+          11.91,
+          13.04,
+          -2.52,
+          0,
+          4
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 50,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 120
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "viewport": "1512x828",
+      "screen": "1512x982",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/E7E5Z",
+    "time": "2026-11-02T17:43:08.502Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

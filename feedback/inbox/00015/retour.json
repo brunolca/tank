@@ -1,0 +1,398 @@
+{
+  "id": 15,
+  "created": "2026-11-02T17:44:22.184Z",
+  "category": "bug",
+  "text": "je veux tirer avec autre chose aue le clic gauche",
+  "context": {
+    "game": {
+      "iteration": 11,
+      "iterationTitle": "Le Foreur",
+      "screen": "lobby",
+      "online": false,
+      "room": "E7E5Z",
+      "mode": "démo",
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "longduzboub",
+          "host": false,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "Bruno",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 10.81,
+        "y": 1.79,
+        "alive": true,
+        "pendingInputs": 2
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "x": 4.48,
+          "y": 5.68,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "x": 10.54,
+          "y": 7.69,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "player",
+          "label": "longduzboub",
+          "team": 0,
+          "me": true,
+          "x": 10.81,
+          "y": 1.79,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 99,
+          "x": 8.73,
+          "y": 12.16,
+          "alive": false
+        }
+      ],
+      "bullets": 2,
+      "mines": 0,
+      "recentEvents": [
+        [
+          426,
+          "pop",
+          11.85,
+          4.11
+        ],
+        [
+          429,
+          "shot",
+          4.7,
+          14.83,
+          -1.19,
+          0,
+          2
+        ],
+        [
+          433,
+          "pop",
+          12.19,
+          4.15
+        ],
+        [
+          438,
+          "shot",
+          4.7,
+          14.83,
+          -1.19,
+          0,
+          2
+        ],
+        [
+          444,
+          "bounce",
+          5.83,
+          12.14
+        ],
+        [
+          451,
+          "bounce",
+          5.83,
+          12.14
+        ],
+        [
+          453,
+          "bounce",
+          12.88,
+          11.34
+        ],
+        [
+          462,
+          "pop",
+          12.21,
+          12.87
+        ],
+        [
+          469,
+          "bounce",
+          7.77,
+          16.84
+        ],
+        [
+          476,
+          "shot",
+          6.97,
+          3.38,
+          -2.71,
+          0,
+          4
+        ],
+        [
+          476,
+          "bounce",
+          7.77,
+          16.84
+        ],
+        [
+          482,
+          "pop",
+          8.89,
+          14.15
+        ],
+        [
+          490,
+          "pop",
+          8.89,
+          14.15
+        ],
+        [
+          496,
+          "boom",
+          2.5,
+          1.5,
+          1
+        ],
+        [
+          502,
+          "shot",
+          4.92,
+          14.89,
+          -0.96,
+          0,
+          2
+        ],
+        [
+          510,
+          "shot",
+          4.92,
+          14.89,
+          -0.96,
+          0,
+          2
+        ],
+        [
+          519,
+          "shot",
+          4.92,
+          14.89,
+          -0.96,
+          0,
+          2
+        ],
+        [
+          534,
+          "bounce",
+          8.88,
+          9.13
+        ],
+        [
+          543,
+          "bounce",
+          8.9,
+          9.14
+        ],
+        [
+          553,
+          "bounce",
+          8.88,
+          9.13
+        ],
+        [
+          558,
+          "bounce",
+          6.1,
+          5.06
+        ],
+        [
+          567,
+          "boom",
+          7.5,
+          3.5,
+          4
+        ],
+        [
+          567,
+          "bounce",
+          6.11,
+          5.08
+        ],
+        [
+          575,
+          "shot",
+          5.13,
+          14.28,
+          -0.69,
+          0,
+          2
+        ],
+        [
+          576,
+          "bounce",
+          6.1,
+          5.06
+        ],
+        [
+          589,
+          "shot",
+          7.33,
+          11.1,
+          2.32,
+          0,
+          6
+        ],
+        [
+          592,
+          "bounce",
+          7.9,
+          11.9
+        ],
+        [
+          597,
+          "pop",
+          9.61,
+          0.17
+        ],
+        [
+          606,
+          "pop",
+          9.59,
+          0.15
+        ],
+        [
+          609,
+          "boom",
+          4.04,
+          14.02,
+          2
+        ],
+        [
+          125,
+          "shot",
+          2.48,
+          4.88,
+          0.27,
+          1,
+          3
+        ],
+        [
+          128,
+          "pop",
+          3.83,
+          5.29
+        ],
+        [
+          148,
+          "shot",
+          2.5,
+          6.27,
+          0.08,
+          1,
+          3
+        ],
+        [
+          152,
+          "pop",
+          3.9,
+          6.39
+        ],
+        [
+          158,
+          "shot",
+          3.08,
+          8.67,
+          -0.06,
+          0,
+          2
+        ],
+        [
+          166,
+          "shot",
+          3.08,
+          8.67,
+          -0.06,
+          0,
+          2
+        ],
+        [
+          175,
+          "shot",
+          3.15,
+          8.69,
+          -0.06,
+          0,
+          2
+        ],
+        [
+          186,
+          "bounce",
+          8.86,
+          8.33
+        ],
+        [
+          189,
+          "pop",
+          7.98,
+          8.34
+        ],
+        [
+          191,
+          "shot",
+          3.15,
+          8.69,
+          -0.06,
+          0,
+          2
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 36,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 49
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "language": "en-US",
+      "viewport": "1528x732",
+      "screen": "1536x864",
+      "dpr": 1.25,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 8,
+      "cores": 8,
+      "gl": {
+        "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001506) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (AMD)",
+        "webgl2": true,
+        "pixelRatio": 1.25
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/E7E5Z",
+    "time": "2026-11-02T17:43:58.139Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}

@@ -1,0 +1,418 @@
+{
+  "id": 13,
+  "created": "2026-11-02T17:40:26.416Z",
+  "category": "bug",
+  "text": "Mets un tunnel",
+  "context": {
+    "game": {
+      "iteration": 11,
+      "iterationTitle": "Le Foreur",
+      "screen": "game",
+      "online": true,
+      "room": "E7E5Z",
+      "mode": "coop",
+      "phase": "playing",
+      "mission": 17,
+      "level": "Ultime",
+      "lives": 2,
+      "players": [
+        {
+          "name": "Bruno",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "JozuhaKimmisch",
+          "host": false,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 1.83,
+        "y": 8.89,
+        "alive": false,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "x": 15.7,
+          "y": 14.49,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "me": true,
+          "x": 1.83,
+          "y": 8.89,
+          "alive": false
+        },
+        {
+          "id": 3,
+          "kind": "black",
+          "label": "Noir",
+          "team": 99,
+          "x": 4.76,
+          "y": 6.5,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 99,
+          "x": 15.37,
+          "y": 6.64,
+          "alive": false
+        },
+        {
+          "id": 5,
+          "kind": "white",
+          "label": "Blanc",
+          "team": 99,
+          "x": 7.33,
+          "y": 6.15,
+          "alive": false
+        }
+      ],
+      "bullets": 3,
+      "mines": 1,
+      "tick": 585,
+      "recentEvents": [
+        [
+          195,
+          "shot",
+          5.31,
+          2.19,
+          0.63,
+          1,
+          1
+        ],
+        [
+          212,
+          "pop",
+          12.82,
+          8.17
+        ],
+        [
+          221,
+          "pop",
+          12.78,
+          7.79
+        ],
+        [
+          227,
+          "shot",
+          9.5,
+          5.35,
+          -2.92,
+          1,
+          3
+        ],
+        [
+          234,
+          "mineSet",
+          9.28,
+          8.27
+        ],
+        [
+          237,
+          "shot",
+          2.06,
+          5.36,
+          1.24,
+          1,
+          1
+        ],
+        [
+          244,
+          "pop",
+          2.9,
+          8.01
+        ],
+        [
+          250,
+          "shot",
+          1.31,
+          6.19,
+          0.91,
+          1,
+          1
+        ],
+        [
+          254,
+          "pop",
+          0.12,
+          3.17
+        ],
+        [
+          259,
+          "pop",
+          3.46,
+          8.82
+        ],
+        [
+          264,
+          "shot",
+          6.16,
+          6.45,
+          -3.11,
+          1,
+          3
+        ],
+        [
+          265,
+          "shot",
+          0.89,
+          7.02,
+          0.4,
+          1,
+          1
+        ],
+        [
+          271,
+          "pop",
+          2.83,
+          7.91
+        ],
+        [
+          274,
+          "shot",
+          0.92,
+          7.6,
+          0.25,
+          1,
+          1
+        ],
+        [
+          279,
+          "pop",
+          2.79,
+          8.11
+        ],
+        [
+          281,
+          "pop",
+          0.21,
+          6.28
+        ],
+        [
+          283,
+          "mineSet",
+          4.76,
+          6.5
+        ],
+        [
+          287,
+          "shot",
+          8.71,
+          8.28,
+          -3.15,
+          0,
+          5
+        ],
+        [
+          288,
+          "shot",
+          0.94,
+          8.49,
+          0.01,
+          1,
+          1
+        ],
+        [
+          299,
+          "shot",
+          0.93,
+          9.21,
+          -0.14,
+          1,
+          1
+        ],
+        [
+          301,
+          "pop",
+          5.69,
+          8.43
+        ],
+        [
+          304,
+          "pop",
+          2.84,
+          8.93
+        ],
+        [
+          306,
+          "shot",
+          0.93,
+          9.65,
+          -0.23,
+          1,
+          1
+        ],
+        [
+          311,
+          "pop",
+          2.8,
+          9.18
+        ],
+        [
+          332,
+          "crate",
+          20.5,
+          5.5,
+          3
+        ],
+        [
+          419,
+          "shot",
+          8.37,
+          13.65,
+          -1.36,
+          1,
+          1
+        ],
+        [
+          433,
+          "mboom",
+          9.28,
+          8.27
+        ],
+        [
+          494,
+          "shot",
+          8.25,
+          5.49,
+          1.05,
+          0,
+          5
+        ],
+        [
+          496,
+          "shot",
+          13.47,
+          15.32,
+          -2.17,
+          1,
+          1
+        ],
+        [
+          498,
+          "mineSet",
+          8.14,
+          5.15
+        ],
+        [
+          501,
+          "bounce",
+          9.08,
+          6.83
+        ],
+        [
+          507,
+          "pop",
+          11.18,
+          11.86
+        ],
+        [
+          511,
+          "pop",
+          10.11,
+          5.13
+        ],
+        [
+          548,
+          "shot",
+          14.66,
+          14.02,
+          -2.2,
+          1,
+          1
+        ],
+        [
+          556,
+          "shot",
+          8.32,
+          5.74,
+          0.97,
+          0,
+          5
+        ],
+        [
+          558,
+          "shot",
+          14.57,
+          14.02,
+          -2.18,
+          1,
+          1
+        ],
+        [
+          567,
+          "shot",
+          14.57,
+          14.02,
+          -2.18,
+          1,
+          1
+        ],
+        [
+          578,
+          "mboom",
+          8.14,
+          5.15
+        ],
+        [
+          578,
+          "boom",
+          7.33,
+          6.15,
+          5
+        ],
+        [
+          578,
+          "block",
+          6,
+          5
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 52,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 120
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "en-GB",
+      "viewport": "1728x962",
+      "screen": "1728x1117",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/E7E5Z",
+    "time": "2026-11-02T17:40:20.614Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}
