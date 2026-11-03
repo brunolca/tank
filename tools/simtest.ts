@@ -3,7 +3,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
 import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
-import { castRicochet } from '../src/shared/physics';
+import { castRicochet, tunnelAxis } from '../src/shared/physics';
 
 for (const def of Object.values(EXTRA_LEVELS)) {
   const bad = def.map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
@@ -578,4 +578,64 @@ console.log('total', Date.now() - t0, 'ms');
   const per = (performance.now() - t1) / (30 * 60);
   if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`Maçon OK (${built.length} bloc(s) en tête-à-tête, ${builds} sur le chantier en 60 s, ${per.toFixed(3)} ms/tick, missions : ${masonMissions.join(', ')})`);
+}
+
+// tunnels (iteration 13): tanks drive through and hide inside, shells bounce off, no firing from inside, the roof stops lightning
+{
+  const fail = (m: string) => { console.error('TUNNELS:', m); process.exitCode = 1; };
+  const tunnelMissions: number[] = [];
+  for (let mission = 1; mission <= 80; mission++) {
+    const tiles = getMission(mission).tiles;
+    if (!tiles.includes(Tile.Tunnel)) continue;
+    tunnelMissions.push(mission);
+    tiles.forEach((t, i) => { if (t === Tile.Tunnel && tunnelAxis(tiles, i) < 0) fail(`mission ${mission} : tunnel mal bordé en (${i % W}, ${Math.floor(i / W)})`); });
+  }
+  if (getMission(22).name !== 'Le tunnel' || getMission(23).name !== 'Les galeries') fail('missions 22 et 23 attendues');
+  if (tunnelMissions.length < 2) fail('trop peu de missions à tunnels');
+  if (!Array.from({ length: 11 }, (_, r) => versusArena(r).tiles.includes(Tile.Tunnel)).some(Boolean)) fail('aucune arène de versus à tunnels');
+  // a row: wall above and below cells 8..12, tunnel in the middle
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  for (let x = 8; x <= 12; x++) { tiles[7 * W + x] = Tile.Wall; tiles[9 * W + x] = Tile.Wall; tiles[8 * W + x] = Tile.Tunnel; }
+  if (tunnelAxis(tiles, 8 * W + 10) !== 0) fail('sens du tunnel');
+  // a tank drives straight through
+  let x = 5.5, y = 8.5, body = 0;
+  for (let i = 0; i < 90; i++) [x, y, body] = driveStep(tiles, x, y, body, 1, 0, 3, DT);
+  if (x < 13) fail(`le tank n’a pas traversé (x = ${x.toFixed(2)})`);
+  // a shell bounces off the tunnel
+  const segs = castRicochet(tiles, 10.5, 4.5, Math.PI / 2, 1);
+  if (segs.length < 2 || segs[0].y1 > 7.2) fail('l’obus devrait rebondir sur le toit du tunnel');
+  const g = new Game(tiles.slice());
+  const p = g.addTank('player', 0, 12.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const e = g.addTank('ash', 99, 10.5, 3.5, 0);
+  const close = g.addTank('ash', 99, 13.9, 8.5, 0);
+  g.frozen = false;
+  if (!g.inTunnel(p) || g.canSee(e, p)) fail('un tank dans le tunnel devrait être caché');
+  if (!g.canSee(close, p)) fail('à la porte du tunnel, on voit qui est dedans');
+  p.fireCd = 0; p.turret = -Math.PI / 2;
+  g.tryFire(p);
+  if (g.bullets.length) fail('on ne tire pas depuis un tunnel');
+  g.strike({ x: 12.5, y: 8.5, t: 0 });
+  if (!p.alive) fail('le toit du tunnel devrait protéger de la foudre');
+  // enemies keep hunting a hidden player and never shoot it through the roof; the mission stays cheap
+  close.alive = false;
+  let hits = 0;
+  g.onKill = (v) => { if (v === p) hits++; };
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 20; i++) { g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]])); g.events = []; }
+  if (hits) fail('touché à travers le toit');
+  if (Math.hypot(e.x - 10.5, e.y - 3.5) < 0.5) fail('l’ennemi devrait partir à sa recherche');
+  // the real missions run cheap, and the enemies there rarely blow themselves up
+  let selfKills = 0, ticks = 0;
+  for (const mission of [22, 23, 17, 12]) {
+    const lvl = getMission(mission);
+    const s = new Game(lvl.tiles);
+    for (const [sx, sy] of lvl.spawns) { const pl = s.addTank('player', 0, sx, sy, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+    for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
+    s.frozen = false;
+    s.onKill = (v, k) => { if (k && k.team === v.team && v.team === 99) selfKills++; };
+    for (let i = 0; i < 30 * 40; i++, ticks++) { s.step(new Map()); s.events = []; }
+  }
+  const per = (performance.now() - t1) / (30 * 20 + ticks);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`tunnels OK (missions : ${tunnelMissions.join(', ')}, ${selfKills} ennemi(s) tués par leur camp en ${(ticks / 30).toFixed(0)} s, ${per.toFixed(3)} ms/tick)`);
 }

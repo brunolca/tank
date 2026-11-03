@@ -1,4 +1,4 @@
-import { H, W, isPortal, isSolidTank, isSolidBullet, Tile } from './constants';
+import { H, W, isPortal, isSolidTank, isSolidBullet, isTunnel, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -168,4 +168,20 @@ export function rotateToward(a: number, target: number, maxStep: number) {
   const d = angDiff(a, target);
   if (Math.abs(d) <= maxStep) return target;
   return a + Math.sign(d) * maxStep;
+}
+
+/**
+ * Direction of a tunnel cell (iteration 13): 0 when it runs left-right (solid above and below), 1 when it runs
+ * up-down (solid on both sides), -1 when it is not a proper tunnel. Neighbouring tunnel cells count as a run.
+ */
+export function tunnelAxis(tiles: ArrayLike<number>, cell: number): number {
+  if (!isTunnel(tiles[cell])) return -1;
+  const x = cell % W, y = Math.floor(cell / W);
+  const shut = (cx: number, cy: number) => { const t = tileAt(tiles, cx, cy); return isSolidTank(t) && !isTunnel(t); };
+  const horiz = shut(x, y - 1) && shut(x, y + 1);
+  const vert = shut(x - 1, y) && shut(x + 1, y);
+  if (horiz && !vert) return 0;
+  if (vert && !horiz) return 1;
+  if (horiz && vert) return isTunnel(tileAt(tiles, x - 1, y)) || isTunnel(tileAt(tiles, x + 1, y)) ? 0 : 1;
+  return -1;
 }

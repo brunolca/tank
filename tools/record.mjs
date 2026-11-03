@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 21, arms: ['canon', 'ricochet'], builds: [1.2, 3.5, 6], seconds: 16, caption: 'Nouvel ennemi : le Maçon', sub: 'Il bâtit des murs de liège pour s’abriter' },
-  { mission: 21, arms: ['sapeur', 'fusee'], builds: [0.8, 2.6], seconds: 13, caption: 'Une mine, et tout s’écroule', sub: 'Ses murs sont en liège : mines et éclairs les font sauter' },
-  { mission: 24, arms: ['ricochet', 'canon'], builds: [1.5, 4], seconds: 12, caption: 'Dans les missions sans fin', sub: 'Dès la 22ᵉ mission, il se glisse parmi les autres' },
-  { mission: 20, arms: ['canon', 'fusee'], digs: [1.5], seconds: 10, caption: 'Le Foreur vous attend toujours', sub: 'Mission 20, 40, 60…' },
-  { mission: 26, arms: ['sapeur', 'ricochet'], rich: true, seconds: 9, caption: 'Et toujours la campagne sans fin', sub: 'Jusqu’à quatre en ligne' },
+  { mission: 22, arms: ['canon', 'ricochet'], tunnels: [1.5, 9], seconds: 16, caption: 'Nouveau : les tunnels', sub: 'On s’y cache, l’ennemi te perd de vue' },
+  { mission: 23, arms: ['sapeur', 'fusee'], tunnels: [2, 8], seconds: 15, caption: 'Mission 23 : Les galeries', sub: 'Six portes de tunnel, un tank invisible dedans' },
+  { mission: 22, arms: ['ricochet', 'canon'], night: true, tunnels: [2], seconds: 11, caption: 'Les obus rebondissent sur leur toit', sub: 'Mais de l’intérieur, impossible de tirer' },
+  { mission: 30, arms: ['canon', 'fusee'], night: false, seconds: 10, caption: 'Des trous tout neufs', sub: 'De vraies fosses taillées dans le bois' },
+  { mission: 21, arms: ['sapeur', 'ricochet'], builds: [1, 3.5], seconds: 9, caption: 'Les ennemis ne sautent plus sur leurs mines', sub: 'Et toujours la campagne sans fin, jusqu’à quatre en ligne' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -66,6 +66,7 @@ try {
       for (const s of shot.armor ?? []) setTimeout(() => d.armor?.(), s * 1000);
       for (const s of shot.digs ?? []) setTimeout(() => d.dig?.(), s * 1000);
       for (const s of shot.builds ?? []) setTimeout(() => d.build?.(), s * 1000);
+      for (const s of shot.tunnels ?? []) setTimeout(() => d.tunnel?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

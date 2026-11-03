@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
@@ -193,6 +193,7 @@ let pending: Input[] = [];
 let seq = 0;
 let pred = { x: 0, y: 0, body: 0 };
 let offset = { x: 0, y: 0 };
+let tunnelHinted = false; // the « hidden in the tunnel » hint shows once per mission
 let aimAng = 0;
 let localFireCd = 0;
 let mySpec: TankSpec = SPECS.player; // our tank's sheet with its cannon (prediction of speed, ammo, fire rate)
@@ -275,6 +276,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   snaps = [];
   evq = [];
   pending = [];
+  tunnelHinted = false;
   latestK = renderTick = msg.tick;
   offset = { x: 0, y: 0 };
   lives = msg.lives;
@@ -321,6 +323,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
+  else if (tiles.some(isTunnel)) setTimeout(() => toast('Tunnels : roule dedans pour disparaître aux yeux de l’ennemi. Les obus rebondissent dessus, mais on ne peut pas tirer de l’intérieur.', 4200), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
@@ -434,6 +437,10 @@ function clientTick() {
   if (s.aimAng !== null) aimAng = s.aimAng;
   else if (s.aimX !== null && s.aimY !== null) aimAng = Math.atan2(s.aimY - py, s.aimX - px);
   const playing = phase === 'playing';
+  if (playing && !tunnelHinted && isTunnel(tiles[Math.floor(py) * W + Math.floor(px)] ?? 0)) {
+    tunnelHinted = true;
+    toast('Caché dans le tunnel : l’ennemi te perd de vue… mais ton canon touche le plafond.', 3200);
+  }
   const inp: Input = { s: ++seq, mx: +s.mx.toFixed(3), my: +s.my.toFixed(3), a: +aimAng.toFixed(3), f: s.fire && playing ? 1 : 0, m: s.mine && playing ? 1 : 0 };
   send({ t: 'in', i: [inp] });
   pending.push(inp);
@@ -825,6 +832,11 @@ $('#council').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-v]');
   if (b && !b.disabled && online) castVote(b.dataset.v ?? '');
 });
+// a gamepad plugged in mid-game: say how it plays (iteration 13, players asked for it)
+addEventListener('gamepadconnected', () => {
+  toast('Manette prête : stick gauche pour rouler, stick droit pour viser, gâchette droite (ou X) pour tirer, gâchette gauche (ou A) pour une mine.', 5000);
+});
+
 addEventListener('keydown', (e) => {
   if (!council || !online || (e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
   const m = e.code.match(/^(?:Digit|Numpad)([0-4])$/);
@@ -1031,10 +1043,15 @@ let attractPrev = new Map<number, { x: number; y: number; body: number; turret: 
 interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
 let attractOpts: AttractOpts = {};
 
+function attractMission() {
+  const r = Math.random();
+  return r < 0.12 ? 21 : r < 0.3 ? 22 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 14);
+}
+
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
-  const lvl: ParsedLevel = opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? (Math.random() < 0.15 ? 21 : 2 + Math.floor(Math.random() * 14))); // now and then, the Maçon's building site
+  const lvl: ParsedLevel = opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
   const g = new Game(lvl.tiles);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
@@ -1438,6 +1455,22 @@ if (params.has('demo')) {
         t.ai.path = [];
         t.ai.pathT = 0;
       }
+    },
+    /** Send every hero tank into the nearest tunnel (to show them hiding on camera). */
+    tunnel() {
+      if (!attract) return 0;
+      const g = attract;
+      const cells = g.tiles.map((t, i) => (isTunnel(t) ? i : -1)).filter((i) => i >= 0);
+      let n = 0;
+      for (const t of g.tanks) {
+        if (!t.alive || t.kind !== 'player' || !t.ai || !cells.length) continue;
+        const d = (c: number) => Math.hypot((c % W) + 0.5 - t.x, Math.floor(c / W) + 0.5 - t.y);
+        t.ai.goal = cells.reduce((a, b) => (d(a) <= d(b) ? a : b));
+        t.ai.path = [];
+        t.ai.pathT = 0;
+        n++;
+      }
+      return n;
     },
     /** Drop a bonus crate (random kind if omitted) somewhere free in the demo arena. */
     crate(kind?: BonusKind) {

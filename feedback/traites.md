@@ -14,3 +14,12 @@
 | 10 | 8 | Même demande que le n° 9 : fait avec le mode « La taupe ». |
 | 11 | 8 | Même demande que le n° 9 : fait avec le mode « La taupe ». |
 | 12 | 8 | Même demande que le n° 9 : fait avec le mode « La taupe ». |
+| 13 | 13 | Fait : les tunnels (on s’y cache, les obus rebondissent dessus), missions 22 et 23 et une arène de versus. |
+| 14 | 13 | Corrigé : après un rechargement de la page en pleine partie, la salle ignorait les commandes du joueur (compteur d’entrées gardé) ; il est remis à zéro à chaque reconnexion. |
+| 15 | 13 | Fait : on tire aussi avec E, Maj et Entrée (et X à la manette), l’aide de l’accueil le dit. |
+| 16 | 13 | Écarté : contenu hors de l’esprit tout public du jeu. |
+| 17 | 13 | Écarté : sans rapport avec le jeu. |
+| 18 | 13 | Retenu pour plus tard dans `DESIGN.md` (une version anglaise, le français restant par défaut). |
+| 19 | 13 | Corrigé : les ennemis restaient figés sur la mine qu’ils venaient de poser ; ils prévoient maintenant leur sortie, et leurs ricochets ne reviennent plus sur eux. |
+| 20 | 13 | Fait : les trous sont redessinés en vraies fosses (cases fusionnées, bords, profondeur). |
+| 21 | 13 | Déjà possible (sticks, gâchettes) ; ajouté un message quand une manette se branche, le bouton X pour tirer et l’aide détaillée. Menus à la manette retenus dans `DESIGN.md`. |

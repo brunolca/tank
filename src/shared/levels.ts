@@ -2,6 +2,8 @@ import { H, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
+//         = tunnel (iteration 13): tanks drive through and hide inside, shells bounce off; it must sit between two
+//           solid tiles (walls or holes) on either its left and right or its top and bottom, which gives its direction
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)
 const ENEMY_CHARS: Record<string, TankKind> = {
@@ -466,6 +468,52 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 13: tunnels through a long wall, hide inside to slip past (but you cannot fire from in there)
+  22: {
+    name: 'Le tunnel',
+    map: [
+      '......................',
+      '......................',
+      '.........####.........',
+      '.........####......a..',
+      '..1......====.........',
+      '.........####.........',
+      '..2......####....m....',
+      '..........##..........',
+      '....o.....##.....##y..',
+      '....o.....##..........',
+      '.........####.........',
+      '.........####....p....',
+      '.........====.........',
+      '.........####......a..',
+      '.........####.........',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 13: a walled yard with six tunnel doors, an invisible tank prowling inside
+  23: {
+    name: 'Les galeries',
+    map: [
+      '......................',
+      '..1...................',
+      '.............g........',
+      '..2...................',
+      '......................',
+      '..#####=####=#####....',
+      '..#.......w......#....',
+      '..#..____...____.#....',
+      '..=...........v..=..k.',
+      '..#..____...____.#....',
+      '..#..............#....',
+      '..#####=####=#####....',
+      '......................',
+      '.......o......o.......',
+      '..................a...',
+      '.....................y',
+      '......................',
+    ],
+  },
 };
 
 export interface ParsedLevel {
@@ -492,6 +540,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '_') tiles[i] = Tile.Hole;
       else if (c === '*') tiles[i] = Tile.PortalA;
       else if (c === '+') tiles[i] = Tile.PortalB;
+      else if (c === '=') tiles[i] = Tile.Tunnel;
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
@@ -750,8 +799,9 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 export function versusArena(round: number): ParsedLevel {
-  const pool = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15];
-  const base = parseLevel(LEVELS[pool[round % pool.length]]);
+  // handmade missions, plus the tunnels of mission 22 (iteration 13)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22]);
+  const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];
   base.spawns = corners.map(([cx, cy]) => nearestFree(base.tiles, cx, cy));

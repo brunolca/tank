@@ -1,7 +1,7 @@
 {
-  "iteration": 12,
-  "date": "2026-11-02",
-  "title": "Le Maçon",
+  "iteration": 13,
+  "date": "2026-11-03",
+  "title": "Les tunnels",
   "journal": [
     {
       "iteration": 1,
@@ -147,6 +147,19 @@
         "Ses murs sont en liège : une mine, un éclair ou le Foreur les font sauter… et il en rebâtit aussitôt, six au plus à la fois.",
         "Nouvelle mission faite main : « Le chantier » (mission 21). Ensuite, le Maçon se glisse parmi les ennemis des missions sans fin.",
         "Chaque bloc posé s’annonce par un toc-toc de bois et un « Hop, un mur ! » au-dessus de la table, pour jouer sans le son. Le fond animé de l’accueil visite parfois le chantier."
+      ]
+    },
+    {
+      "iteration": 13,
+      "date": "2026-11-03",
+      "title": "Les tunnels",
+      "notes": [
+        "Des tunnels de train en bois apparaissent sur la table : on roule dedans pour disparaître aux yeux de l’ennemi, qui part alors te chercher. Les obus rebondissent sur leur toit, la foudre aussi… mais de l’intérieur, ton canon touche le plafond.",
+        "Deux nouvelles missions faites main, « Le tunnel » (22) et « Les galeries » (23), et une arène de versus à tunnels.",
+        "Les trous ont fait peau neuve : les cases voisines forment une vraie fosse taillée dans le bois, avec ses bords et sa profondeur.",
+        "Les ennemis ne restent plus plantés sur la mine qu’ils viennent de poser, et vérifient que leurs ricochets ne reviennent pas sur eux.",
+        "Recharger la page en pleine partie ne fige plus ton tank : il répond tout de suite.",
+        "On peut tirer avec E, Maj ou Entrée en plus du clic, et la manette se présente dès qu’on la branche."
       ]
     }
   ]

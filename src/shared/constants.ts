@@ -23,6 +23,7 @@ export const enum Tile {
   Hole = 4,
   PortalA = 5, // portals come in pairs: a tank or a shell entering one pops out of its twin
   PortalB = 6,
+  Tunnel = 7, // iteration 13: a covered passage, tanks drive through and hide inside, shells bounce off its roof
 }
 
 export type TankKind =
@@ -168,14 +169,19 @@ export const FLAG_ALERT = 256;
 export const PLAYER_COLORS = [0x3d7bff, 0xff4d5e, 0x2fd07a, 0xffa63d, 0x26c6f0, 0xc66bff];
 
 export function isSolidTank(t: number) {
-  return t !== Tile.Empty && !isPortal(t);
+  return t !== Tile.Empty && t !== Tile.Tunnel && !isPortal(t);
 }
 export function isPortal(t: number) {
   return t === Tile.PortalA || t === Tile.PortalB;
 }
 export function isSolidBullet(t: number) {
-  return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork;
+  return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork || t === Tile.Tunnel;
 }
+export function isTunnel(t: number) {
+  return t === Tile.Tunnel;
+}
+/** Below this distance an enemy still makes out a tank hiding in a tunnel (iteration 13). */
+export const TUNNEL_SIGHT = 1.6;
 
 // ------------------------------------------------------------------ bonus crates
 // The index in BONUS_KINDS is what travels on the wire: append new kinds, never reorder.

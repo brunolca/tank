@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, tankRadius, type BonusKind } from '../shared/constants';
+import { BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { tunnelAxis } from '../shared/physics';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
@@ -564,6 +565,15 @@ export class Renderer {
   private levelGroup = new THREE.Group();
   private blocks = new Map<number, THREE.Mesh>();
   private portals: PortalView[] = [];
+  // tunnels (iteration 13): an arched toy-train tunnel per cell, its roof fades while a tank is inside
+  private tunnels: { cell: number; root: THREE.Group; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; op: number }[] = [];
+  private tunnelBusy = new Set<number>();
+  private tunnelGeo = {
+    shell: new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1, true, 0, Math.PI),
+    inner: new THREE.CylinderGeometry(0.44, 0.44, 1, 20, 1, true, 0, Math.PI),
+    rim: new THREE.TorusGeometry(0.47, 0.055, 8, 22, Math.PI),
+    key: new THREE.BoxGeometry(0.12, 0.13, 0.1),
+  };
   private swirlTex = swirlTexture();
   private portalGeo = { ring: new THREE.TorusGeometry(0.4, 0.055, 10, 40), swirl: new THREE.CircleGeometry(0.38, 36), rim: new THREE.CylinderGeometry(0.46, 0.48, 0.05, 36) };
   private portalRimMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.7 });
@@ -953,6 +963,12 @@ export class Renderer {
       (p.ring.material as THREE.Material).dispose();
     }
     this.portals = [];
+    for (const tn of this.tunnels) {
+      this.levelGroup.remove(tn.root);
+      for (const m of tn.mats) m.dispose();
+      for (const g of tn.geos) g.dispose();
+    }
+    this.tunnels = [];
     this.glow.clear(); this.smoke.clear(); this.debris.clear();
     for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
 
@@ -969,12 +985,60 @@ export class Renderer {
           this.levelGroup.add(m);
           this.blocks.set(y * W + x, m);
         } else if (isPortal(t)) this.addPortal(x, y, PORTAL_COLORS[t - Tile.PortalA]);
+        else if (isTunnel(t)) this.addTunnel(tiles, x, y);
       }
     }
     for (const info of infos) {
       const v = buildTank(info);
       this.tanks.set(info.id, v);
       this.scene.add(v.root);
+    }
+  }
+
+  /** A piece of toy-train tunnel (iteration 13): a painted arch, dark inside, with a cream rim at each mouth. */
+  private addTunnel(tiles: number[], x: number, y: number) {
+    const cell = y * W + x;
+    const axis = tunnelAxis(tiles, cell);
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    if (axis === 1) root.rotation.y = Math.PI / 2; // built along x, turned for up-down tunnels
+    const paint = new THREE.MeshStandardMaterial({ color: 0xc4573f, roughness: 0.65, transparent: true });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x4a2c1a, roughness: 0.9, side: THREE.BackSide, transparent: true });
+    const cream = new THREE.MeshStandardMaterial({ color: 0xf3e2bf, roughness: 0.55, transparent: true });
+    const shell = new THREE.Mesh(this.tunnelGeo.shell, paint);
+    const inner = new THREE.Mesh(this.tunnelGeo.inner, dark);
+    for (const m of [shell, inner]) { m.rotation.z = Math.PI / 2; m.castShadow = true; m.receiveShadow = true; root.add(m); }
+    // stripes of paint every cell, like a wooden toy
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.505, 0.02, 4, 18, Math.PI), cream);
+    band.rotation.y = Math.PI / 2;
+    root.add(band);
+    // a rim and a keystone at each open end
+    const run = (d: number) => {
+      const nx = axis === 1 ? x : x + d, ny = axis === 1 ? y + d : y;
+      return nx >= 0 && ny >= 0 && nx < W && ny < H && isTunnel(tiles[ny * W + nx]);
+    };
+    for (const d of [-1, 1]) {
+      if (run(d)) continue;
+      const rim = new THREE.Mesh(this.tunnelGeo.rim, cream);
+      rim.rotation.y = Math.PI / 2;
+      rim.position.x = d * 0.48;
+      rim.castShadow = true;
+      const key = new THREE.Mesh(this.tunnelGeo.key, cream);
+      key.position.set(d * 0.48, 0.5, 0);
+      key.rotation.y = Math.PI / 2;
+      root.add(rim, key);
+    }
+    this.levelGroup.add(root);
+    this.tunnels.push({ cell, root, mats: [paint, dark, cream], geos: [band.geometry], op: 1 });
+  }
+
+  /** A tunnel's roof turns see-through while a tank drives inside it. */
+  private animateTunnels(dt: number) {
+    for (const tn of this.tunnels) {
+      const target = this.tunnelBusy.has(tn.cell) ? 0.3 : 1;
+      if (tn.op === target) continue;
+      tn.op = target < tn.op ? Math.max(target, tn.op - dt * 5) : Math.min(target, tn.op + dt * 3);
+      for (const m of tn.mats) { m.opacity = tn.op; m.depthWrite = tn.op > 0.99; }
     }
   }
 
@@ -1074,23 +1138,94 @@ export class Renderer {
           hg.addColorStop(1, col + '00');
           g.fillStyle = hg;
           g.fillRect(cx - PX, cy - PX, PX * 2, PX * 2);
-        } else if (t === Tile.Hole) {
-          const cx = x * PX + PX / 2, cy = y * PX + PX / 2;
-          const hg = g.createRadialGradient(cx, cy, 2, cx, cy, PX * 0.55);
-          hg.addColorStop(0, '#0b0806');
-          hg.addColorStop(0.7, '#1c130c');
-          hg.addColorStop(1, 'rgba(60,35,15,0.0)');
-          g.fillStyle = hg;
-          g.beginPath();
-          g.roundRect(x * PX + 3, y * PX + 3, PX - 6, PX - 6, 14);
-          g.fill();
-          g.strokeStyle = 'rgba(255,240,210,0.25)';
-          g.lineWidth = 2;
-          g.stroke();
+        } else if (isTunnel(t)) {
+          // the dusky floor under the arch
+          g.fillStyle = 'rgba(60,35,20,0.4)';
+          g.fillRect(x * PX + 2, y * PX + 2, PX - 4, PX - 4);
         }
       }
     }
+    this.paintHoles(g, tiles);
     this.floorTex.needsUpdate = true;
+  }
+
+  /**
+   * Holes (redrawn in iteration 13): neighbouring hole cells merge into one pit cut in the board, with rounded
+   * outer corners, a sawn rim and the far wall of the pit lit, so they read as depth instead of black dots.
+   */
+  private paintHoles(g: CanvasRenderingContext2D, tiles: number[]) {
+    const hole = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && tiles[y * W + x] === Tile.Hole;
+    const I = 4, R = 12; // inset on open sides, radius of the outer corners
+    const path = new Path2D();
+    let any = false;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!hole(x, y)) continue;
+      any = true;
+      const l = !hole(x - 1, y), r = !hole(x + 1, y), u = !hole(x, y - 1), d = !hole(x, y + 1);
+      const x0 = x * PX + (l ? I : 0), x1 = (x + 1) * PX - (r ? I : 0);
+      const y0 = y * PX + (u ? I : 0), y1 = (y + 1) * PX - (d ? I : 0);
+      path.roundRect(x0, y0, x1 - x0, y1 - y0, [u && l ? R : 0, u && r ? R : 0, d && r ? R : 0, d && l ? R : 0]);
+    }
+    if (!any) return;
+    // a soft shadow of the cut on the paper around it
+    g.save();
+    g.shadowColor = 'rgba(50,25,5,0.55)';
+    g.shadowBlur = 10;
+    g.fillStyle = '#120b07';
+    g.fill(path);
+    g.restore();
+    g.save();
+    g.clip(path);
+    // the depths: darker towards the middle of each cell
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!hole(x, y)) continue;
+      const cx = x * PX + PX / 2, cy = y * PX + PX / 2;
+      const hg = g.createRadialGradient(cx, cy + PX * 0.1, 2, cx, cy, PX * 0.8);
+      hg.addColorStop(0, '#050302');
+      hg.addColorStop(1, '#22150c');
+      g.fillStyle = hg;
+      g.fillRect(x * PX - 1, y * PX - 1, PX + 2, PX + 2);
+    }
+    // the walls of the pit: the far (top) one catches the light, the sides a little, the near one is hidden
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!hole(x, y)) continue;
+      const X = x * PX, Y = y * PX;
+      if (!hole(x, y - 1)) {
+        const wg = g.createLinearGradient(0, Y + I, 0, Y + PX * 0.42);
+        wg.addColorStop(0, '#a8784a');
+        wg.addColorStop(0.35, '#6e4526');
+        wg.addColorStop(1, 'rgba(30,18,10,0)');
+        g.fillStyle = wg;
+        g.fillRect(X - 1, Y, PX + 2, PX * 0.42);
+        // wood grain on the sawn face
+        g.strokeStyle = 'rgba(60,30,10,0.35)';
+        g.lineWidth = 1;
+        for (let k = 0; k < 3; k++) { const yy = Y + I + 3 + k * 5; g.beginPath(); g.moveTo(X, yy); g.lineTo(X + PX, yy + (k % 2 ? 1 : -1)); g.stroke(); }
+      }
+      for (const [side, dx] of [[!hole(x - 1, y), 1], [!hole(x + 1, y), -1]] as const) {
+        if (!side) continue;
+        const ex = dx > 0 ? X + I : X + PX - I;
+        const sg = g.createLinearGradient(ex, 0, ex + dx * PX * 0.2, 0);
+        sg.addColorStop(0, 'rgba(120,80,45,0.75)');
+        sg.addColorStop(1, 'rgba(40,25,12,0)');
+        g.fillStyle = sg;
+        g.fillRect(Math.min(ex, ex + dx * PX * 0.2), Y - 1, PX * 0.2, PX + 2);
+      }
+    }
+    g.restore();
+    // the sawn rim of the board, drawn outside the pit only (the cells' shared edges stay invisible)
+    g.save();
+    const outside = new Path2D();
+    outside.rect(0, 0, g.canvas.width, g.canvas.height);
+    outside.addPath(path);
+    g.clip(outside, 'evenodd');
+    g.lineWidth = 6;
+    g.strokeStyle = 'rgba(255,244,220,0.6)';
+    g.stroke(path);
+    g.lineWidth = 2.5;
+    g.strokeStyle = 'rgba(90,55,25,0.85)';
+    g.stroke(path);
+    g.restore();
   }
 
   /** The Maçon lays a cork block (iteration 12): it pops out of the floor with a puff of sawdust. */
@@ -1159,6 +1294,14 @@ export class Renderer {
   // ---------------------------------------------------------------- per-frame state
 
   syncTanks(list: RTank[], myId: number, dt: number) {
+    this.tunnelBusy.clear();
+    if (this.tunnels.length) {
+      for (const t of list) {
+        if (!t.alive) continue;
+        // every cell the hull overlaps: the roof clears as soon as a tank noses in
+        for (const [ox, oy] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) this.tunnelBusy.add(Math.floor(t.y + oy) * W + Math.floor(t.x + ox));
+      }
+    }
     for (const t of list) {
       const v = this.tanks.get(t.id);
       if (!v) continue;
@@ -1732,6 +1875,7 @@ export class Renderer {
     this.smoke.update(dt);
     this.debris.update(dt);
     this.animatePortals(dt);
+    this.animateTunnels(dt);
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
     this.animateStorm(dt);

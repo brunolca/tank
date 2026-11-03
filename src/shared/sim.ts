@@ -1,7 +1,7 @@
 import {
   BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, TURBO_MULT,
-  TankKind, TankSpec, Tile, W, Weapon, isPortal, isSolidTank, playerSpec,
+  TankKind, TankSpec, Tile, TUNNEL_SIGHT, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
@@ -126,6 +126,7 @@ interface AIState {
   prowlX: number; // night: a spot to prowl to when nobody is in sight
   prowlY: number;
   prowlT: number;
+  escape?: number; // direction to leave a mine just laid (iteration 13)
 }
 
 type Pt = { x: number; y: number };
@@ -312,7 +313,7 @@ export class Game {
       }
       x = Math.max(0.6, Math.min(W - 0.6, x)); y = Math.max(0.6, Math.min(H - 0.6, y));
       const tile = tileAt(this.tiles, Math.floor(x), Math.floor(y));
-      if (tile === Tile.Wall || tile === Tile.Tall) continue;
+      if (tile === Tile.Wall || tile === Tile.Tall || tile === Tile.Tunnel) continue;
       if (this.bolts.some((o) => Math.hypot(o.x - x, o.y - y) < BOLT_R * 2)) continue;
       const bo: Bolt = { x: r2(x), y: r2(y), t: 0 };
       this.bolts.push(bo);
@@ -327,7 +328,8 @@ export class Game {
     this.events.push(['bolt', bo.x, bo.y]);
     this.flash = BOLT_FLASH;
     for (const t of this.tanks) {
-      if (t.alive && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined);
+      // a tank hiding in a tunnel is under a roof (iteration 13)
+      if (t.alive && !this.inTunnel(t) && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - bo.x, b.y - bo.y) < BOLT_R) b.dead = true;
@@ -518,7 +520,7 @@ export class Game {
       if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const tl = this.tiles[(cy + dy) * W + cx + dx];
-        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || ((dx || dy) ? false : isPortal(tl))) return false;
+        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
       }
       return true;
     };
@@ -642,7 +644,7 @@ export class Game {
     for (const c of this.bonuses) if (!c.dead && near(c.x, c.y, 0.95)) return false;
     for (const bo of this.bolts) if (near(bo.x, bo.y, 0.6)) return false;
     // every open neighbour must still reach every other one once the cell is closed
-    const open = (i: number) => this.tiles[i] === Tile.Empty || isPortal(this.tiles[i]);
+    const open = (i: number) => this.tiles[i] === Tile.Empty || isPortal(this.tiles[i]) || isTunnel(this.tiles[i]);
     const nb: number[] = [];
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const x = cx + dx, y = cy + dy;
@@ -893,6 +895,36 @@ export class Game {
     this.onKill?.(t, killer);
   }
 
+  /**
+   * Direction of a straight run of free ground out of a mine's blast from where tank t stands, the one that heads
+   * furthest from the foe; undefined when there is none (then it does not lay the mine).
+   */
+  mineEscape(t: Tank, foe: Pt): number | undefined {
+    let best: number | undefined, bestScore = -Infinity;
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4, dx = Math.cos(a), dy = Math.sin(a);
+      let ok = true;
+      for (let s = 0.4; s <= MINE_BLAST + 0.6 && ok; s += 0.3) {
+        const x = t.x + dx * s, y = t.y + dy * s;
+        for (const [ox, oy] of [[-dy, dx], [dy, -dx]]) {
+          // the hull is wide: check both of its sides, not only its centre line
+          const sx = x + ox * t.r * 0.9, sy = y + oy * t.r * 0.9;
+          if (isSolidTank(tileAt(this.tiles, Math.floor(sx), Math.floor(sy)))) ok = false;
+        }
+        if (this.mines.some((m) => !m.dead && Math.hypot(m.x - x, m.y - y) < MINE_BLAST)) ok = false;
+      }
+      if (!ok) continue;
+      const score = -(dx * (foe.x - t.x) + dy * (foe.y - t.y));
+      if (score > bestScore) { bestScore = score; best = a; }
+    }
+    return best;
+  }
+
+  /** Is this tank's centre under a tunnel roof? (iteration 13) */
+  inTunnel(t: Tank) {
+    return isTunnel(tileAt(this.tiles, Math.floor(t.x), Math.floor(t.y)));
+  }
+
   tankById(id: number) {
     return this.tanks.find((t) => t.id === id);
   }
@@ -939,7 +971,10 @@ export class Game {
       for (const o of this.tanks) {
         if (!o.alive || under(o)) continue;
         if (o === t && si === 0) continue;
-        const u = segCircle(s, o.x, o.y, o.r + BULLET_R + 0.04);
+        // a ricochet that comes back is checked against a wider self (the shooter keeps moving), and allies get a little
+        // margin too: without it the AI could fire a rebound that it then drove into (players saw them self-destruct)
+        const pad = o === t ? 0.55 : o.team === t.team ? 0.15 : 0.04;
+        const u = segCircle(s, o.x, o.y, o.r + BULLET_R + pad);
         if (u >= 0 && u < bestT) { bestT = u; best = o; }
       }
       // mines also stop bullets: shooting into a mine near us is bad, near foes is fine
@@ -952,7 +987,10 @@ export class Game {
 
   /** Can tank t make out tank o? Always by day; at night only up close, or right after o fired. */
   canSee(t: Tank, o: Tank) {
-    if (!this.night || o.team === t.team || o.reveal > 0 || this.flash > 0) return true;
+    if (o.team === t.team) return true;
+    // a tank in a tunnel is out of sight, unless you are right at its door (iteration 13)
+    if (this.inTunnel(o) && (o.x - t.x) ** 2 + (o.y - t.y) ** 2 > TUNNEL_SIGHT * TUNNEL_SIGHT) return false;
+    if (!this.night || o.reveal > 0 || this.flash > 0) return true;
     const d = NIGHT_SIGHT + o.r;
     return (o.x - t.x) ** 2 + (o.y - t.y) ** 2 < d * d;
   }
@@ -976,7 +1014,8 @@ export class Game {
     const foe = this.nearestFoe(t);
     t.alert = !!foe;
     if (!foe) {
-      if (this.night && this.tanks.some((o) => o.alive && o.team !== t.team)) this.aiProwl(t);
+      // nobody in sight (night, or everyone hiding in tunnels): go and look for them
+      if (this.tanks.some((o) => o.alive && o.team !== t.team && !under(o))) this.aiProwl(t);
       return;
     }
     ai.seenX = foe.x; ai.seenY = foe.y; ai.seenT = 5;
@@ -989,8 +1028,12 @@ export class Game {
       if (spec.mines > 0 && ai.mineCd <= 0 && this.ownMines(t) < spec.mines) {
         const d = Math.hypot(foe.x - t.x, foe.y - t.y);
         const allyNear = this.tanks.some((o) => o.alive && o !== t && o.team === t.team && Math.hypot(o.x - t.x, o.y - t.y) < MINE_BLAST + 0.6);
-        if (!allyNear && (d < 6 ? Math.random() < 0.35 : Math.random() < 0.06)) {
+        // never under a foe's nose (it would set it off before we get away), and only with a way out (iteration 13:
+        // players watched enemies blow themselves up on their own mines)
+        const way = !allyNear && d > 2.4 ? this.mineEscape(t, foe) : undefined;
+        if (way !== undefined && (d < 6 ? Math.random() < 0.35 : Math.random() < 0.06)) {
           if (this.tryMine(t)) {
+            ai.escape = way;
             ai.mineCd = 3 + Math.random() * 4;
             ai.path = [];
             ai.pathT = 0;
@@ -1022,6 +1065,9 @@ export class Game {
         } else {
           const aim = t.turret;
           t.turret += (Math.random() * 2 - 1) * spec.aimError;
+          // the shaky aim must not turn the shot back on itself or a friend: if it would, fire the steady one
+          const shaken = this.traceShot(t, t.turret, spec.bounces).hit;
+          if (shaken && shaken.team === t.team) t.turret = aim;
           this.tryFire(t);
           t.turret = aim;
           ai.locked = false;
@@ -1118,7 +1164,14 @@ export class Game {
     for (const m of this.mines) {
       const dx = t.x - m.x, dy = t.y - m.y;
       const d = Math.hypot(dx, dy);
-      if (d < MINE_BLAST + 0.7) { threat = true; ax += dx / (d + 0.01) * 1.5; ay += dy / (d + 0.01) * 1.5; }
+      if (d >= MINE_BLAST + 0.7) continue;
+      threat = true;
+      if (d < 0.08) {
+        // sitting right on it (a mine just laid): there is no « away », take the planned way out (iteration 13: they
+        // used to freeze on the spot until their own mine went off)
+        const a = ai.escape ?? t.body;
+        ax += Math.cos(a) * 1.5; ay += Math.sin(a) * 1.5;
+      } else { ax += dx / (d + 0.01) * 1.5; ay += dy / (d + 0.01) * 1.5; }
     }
     // announced lightning strikes: get out of the ring (everyone notices the crackling, even simple tanks)
     for (const bo of this.bolts) {

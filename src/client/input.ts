@@ -33,7 +33,8 @@ export class Controls {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || this.suspended) return;
       this.keys.add(e.code);
       if (e.code === 'Space' && !e.repeat) { this.mineLatch = true; e.preventDefault(); }
-      if (e.code === 'Enter' && !e.repeat) this.fireLatch = true;
+      // several fire keys, for those who aim with the mouse but would rather not click (iteration 13)
+      if ((e.code === 'Enter' || e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) this.fireLatch = true;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
@@ -124,7 +125,7 @@ export class Controls {
       const rx = p.axes[2] ?? 0, ry = p.axes[3] ?? 0;
       if (lx || ly) { mx = lx; my = ly; this.usingPad = true; }
       if (Math.hypot(rx, ry) > 0.35) { this.lastPadAim = Math.atan2(ry, rx); this.usingPad = true; }
-      const fireBtn = !!(p.buttons[7]?.pressed || p.buttons[5]?.pressed);
+      const fireBtn = !!(p.buttons[7]?.pressed || p.buttons[5]?.pressed || p.buttons[2]?.pressed);
       const mineBtn = !!(p.buttons[6]?.pressed || p.buttons[4]?.pressed || p.buttons[0]?.pressed);
       if (fireBtn && !this.padFireHeld) fire = true;
       if (mineBtn && !this.padMineHeld) mine = true;

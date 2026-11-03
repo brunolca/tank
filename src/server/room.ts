@@ -100,6 +100,10 @@ export class Room extends DurableObject<Env> {
       try { existing.ws?.close(4000, 'replaced'); } catch {}
       existing.ws = server;
       existing.v = v;
+      // a reloaded tab numbers its inputs from 1 again: forget the old count, or every input would be ignored
+      // as already seen (players found their tank frozen after reloading mid-game)
+      existing.ack = 0;
+      existing.queue = [];
     } else {
       this.players.set(pid, this.makePlayer(att, server));
     }
