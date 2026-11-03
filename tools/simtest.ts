@@ -1,3 +1,4 @@
+import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
@@ -534,7 +535,7 @@ console.log('total', Date.now() - t0, 'ms');
   g.frozen = false;
   const built: number[] = [];
   for (let i = 0; i < 30 * 40; i++) {
-    p.buffs.invuln = 1; // the player stands there and takes it: we only watch the masonry
+    p.buffs.invuln = 1; m.buffs.invuln = 1; // both stand there and take it (its own ricochet could end the test by chance): we only watch the masonry
     g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
     for (const e of g.events) if (e[0] === 'build') {
       built.push(e[2] * W + e[1]);
@@ -618,12 +619,14 @@ console.log('total', Date.now() - t0, 'ms');
   if (!p.alive) fail('le toit du tunnel devrait protéger de la foudre');
   // enemies keep hunting a hidden player and never shoot it through the roof; the mission stays cheap
   close.alive = false;
+  p.x = 10.5; // deep inside: at the mouth its hull sticks out, and a ricochet there is fair game
   let hits = 0;
   g.onKill = (v) => { if (v === p) hits++; };
   const t1 = performance.now();
-  for (let i = 0; i < 30 * 20; i++) { g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]])); g.events = []; }
+  let roamed = 0; // furthest the enemy went from its post (its prowl may bring it back by chance: judge the whole trip)
+  for (let i = 0; i < 30 * 20; i++) { g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]])); g.events = []; roamed = Math.max(roamed, Math.hypot(e.x - 10.5, e.y - 3.5)); }
   if (hits) fail('touché à travers le toit');
-  if (Math.hypot(e.x - 10.5, e.y - 3.5) < 0.5) fail('l’ennemi devrait partir à sa recherche');
+  if (roamed < 0.5) fail('l’ennemi devrait partir à sa recherche');
   // the real missions run cheap, and the enemies there rarely blow themselves up
   let selfKills = 0, ticks = 0;
   for (const mission of [22, 23, 17, 12]) {
@@ -638,4 +641,56 @@ console.log('total', Date.now() - t0, 'ms');
   const per = (performance.now() - t1) / (30 * 20 + ticks);
   if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`tunnels OK (missions : ${tunnelMissions.join(', ')}, ${selfKills} ennemi(s) tués par leur camp en ${(ticks / 30).toFixed(0)} s, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the workshop (iteration 14): maps drawn by the players are checked by the room, shared by link, and play like any mission
+{
+  const fail = (m: string) => { console.error('ATELIER:', m); process.exitCode = 1; };
+  const why = checkAtelier(ATELIER_SAMPLE.map);
+  if (why) fail(`la mission d’exemple est refusée : ${why}`);
+  // every handmade mission can serve as a template
+  for (const def of [...LEVELS, ...Object.values(EXTRA_LEVELS)]) { const w = checkAtelier(def.map); if (w) fail(`« ${def.name} » refusée comme modèle : ${w}`); }
+  // share codes go there and back, weather included
+  for (const a of [ATELIER_SAMPLE, { name: 'Été ! « ça » ⛵', map: LEVELS[9].map, night: true, storm: true }, { name: '', map: blankMap() }]) {
+    const code = encodeAtelier(a);
+    const back = decodeAtelier(code);
+    if (!back || back.map.join('') !== a.map.join('') || back.name !== cleanName(a.name) || !!back.night !== !!a.night || !!back.storm !== !!a.storm) fail(`aller-retour du code raté pour « ${a.name} »`);
+    if (/[^A-Za-z0-9_.-]/.test(code)) fail(`code pas sûr pour un lien : ${code}`);
+    if (code.length > 400) fail(`code trop long (${code.length})`);
+  }
+  for (const bad of ['', 'abc', 'AAAA.Z9', '.A373', '.A375', 'x.A2000']) if (decodeAtelier(bad)) fail(`code invalide accepté : ${bad}`);
+  // the room refuses what it cannot play
+  const edit = (f: (rows: string[]) => void) => { const m = ATELIER_SAMPLE.map.slice(); f(m); return m; };
+  const set = (m: string[], x: number, y: number, c: string) => { m[y] = m[y].slice(0, x) + c + m[y].slice(x + 1); };
+  const cases: [string, unknown][] = [
+    ['pas un tableau', 'nope'],
+    ['ligne trop courte', edit((m) => { m[3] = m[3].slice(1); })],
+    ['caractère inconnu', edit((m) => set(m, 0, 0, 'Z'))],
+    ['sans départ', edit((m) => { m[4] = m[4].replace('1', '.'); })],
+    ['deux départs 1', edit((m) => set(m, 0, 0, '1'))],
+    ['sans ennemi', blankMap()],
+    ['deux boss', edit((m) => { set(m, 0, 0, 'X'); set(m, 0, 16, 'D'); })],
+    ['portail seul', edit((m) => set(m, 0, 0, '+'))],
+    ['tunnel en plein champ', edit((m) => set(m, 0, 0, '='))],
+    ['départ emmuré', edit((m) => { set(m, 1, 4, '#'); set(m, 3, 4, '#'); set(m, 2, 3, '#'); set(m, 2, 5, '#'); })],
+    ['trop d’ennemis', edit((m) => { m[16] = 'bbbbbbbbbbbbbbbbbbbbbb'; })],
+  ];
+  for (const [label, map] of cases) if (!checkAtelier(map)) fail(`carte acceptée à tort : ${label}`);
+  if (cleanName('  <b>Ma\nmission</b> trop longue pour tenir sur la ligne ') !== 'bMa mission/b trop longue po') fail(`nettoyage du nom : « ${cleanName('  <b>Ma\nmission</b> trop longue pour tenir sur la ligne ')} »`);
+  // it plays: heroes driven by the AI against the sample, night and storm included, and stays cheap
+  const t1 = performance.now();
+  let ticks = 0, kills = 0;
+  for (const a of [ATELIER_SAMPLE, { ...ATELIER_SAMPLE, night: true, storm: true }]) {
+    const lvl = atelierLevel(a);
+    if (lvl.name !== a.name || !!lvl.night !== !!a.night) fail('niveau de l’atelier mal construit');
+    const g = new Game(lvl.tiles);
+    for (const [sx, sy] of lvl.spawns) { const pl = g.addTank('player', 0, sx, sy, 0x3d7bff); g.enableAI(pl, { skill: 2 }); }
+    for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
+    g.night = !!lvl.night; g.storm = !!lvl.storm; g.bonusOn = true; g.frozen = false;
+    g.onKill = (v) => { if (v.team === 99) kills++; };
+    for (let i = 0; i < 30 * 45; i++, ticks++) { g.step(new Map()); g.events = []; }
+  }
+  const per = (performance.now() - t1) / ticks;
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`atelier OK (« ${ATELIER_SAMPLE.name} » : ${kills} ennemi(s) détruit(s) en ${(ticks / 30).toFixed(0)} s, ${per.toFixed(3)} ms/tick, code de ${encodeAtelier(ATELIER_SAMPLE).length} caractères)`);
 }

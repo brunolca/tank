@@ -1,14 +1,16 @@
 import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
 import { angDiff } from '../shared/physics';
-import type { BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
+import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
 import { initAudio, isMusicOn, setMusicIntensity, setRain, sfx, startMusic, toggleMusic } from './audio';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
+import { Workshop, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RMine, type RTank } from './render';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -72,7 +74,7 @@ function escapeHtml(s: string) {
 
 // ------------------------------------------------------------------ screens
 
-type Screen = 'home' | 'lobby' | 'game' | 'results';
+type Screen = 'home' | 'lobby' | 'game' | 'results' | 'atelier';
 let screen: Screen = 'home';
 function show(s: Screen) {
   if (s === 'home' && screen !== 'home') void loadDaily();
@@ -80,6 +82,7 @@ function show(s: Screen) {
   $('#home').hidden = s !== 'home';
   $('#lobby').hidden = s !== 'lobby';
   $('#results').hidden = s !== 'results';
+  $('#atelier').hidden = s !== 'atelier';
   $('#hud').hidden = s !== 'game';
   document.body.dataset.screen = s;
   if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; setRain(false); }
@@ -118,6 +121,8 @@ let lobbyPlayers: PlayerInfo[] = [];
 let lobbyMode: Mode = 'coop';
 let lobbyFrom = 1; // coop checkpoint picked by the host
 let wantDaily = false; // « Relever le défi » from the home screen: switch the new room to the daily challenge
+let wantAtelier: AtelierMap | undefined; // « Jouer en ligne » from the workshop: hand the mission to the new room
+let lobbyAtelier: AtelierMap | undefined; // the workshop mission of the room (iteration 14)
 let phase: Phase = 'lobby';
 let ping = 0;
 
@@ -227,12 +232,17 @@ function onMessage(msg: ServerMsg) {
       lobbyMode = msg.mode;
       lobbyFrom = msg.from ?? 1;
       phase = msg.phase;
+      lobbyAtelier = msg.atelier;
       if (wantDaily && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
         wantDaily = false;
         if (msg.mode !== 'daily') send({ t: 'mode', mode: 'daily' });
       }
+      if (wantAtelier && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
+        send({ t: 'atelier', ...wantAtelier });
+        wantAtelier = undefined;
+      }
       renderLobby();
-      if (msg.phase === 'lobby' && screen !== 'results') { online = false; show('lobby'); hideBanner(); startAttract(); }
+      if (msg.phase === 'lobby' && screen !== 'results' && screen !== 'atelier') { online = false; show('lobby'); hideBanner(); startAttract(); }
       break;
     }
     case 'level':
@@ -296,6 +306,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     ? `<b>La taupe · étape ${msg.mission}/${TAUPE_STAGES}</b><span>${escapeHtml(msg.name)}</span>`
     : msg.mode === 'coop'
     ? `<b>Mission ${msg.mission}</b><span>${escapeHtml(msg.name)}</span>`
+    : msg.mode === 'atelier'
+    ? `<b>Atelier</b><span>${escapeHtml(msg.name)}</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
@@ -311,6 +323,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
         `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${wxCls}${bossFight ? ' boss' : ''}`);
     } else if (msg.mode === 'taupe') {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
+    } else if (msg.mode === 'atelier') {
+      banner(`Atelier · mission maison${wx}`, msg.name, `Tanks ennemis : ${enemies.length} · ${ATELIER_LIVES} vies`, `intro atelier${wxCls}${bossFight ? ' boss' : ''}`);
     } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
@@ -361,7 +375,8 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
       if (msg.daily) {
         const last = msg.daily.stage >= msg.daily.stages;
         banner('Bravo !', last ? 'Défi relevé !' : `Étape ${msg.daily.stage} réussie`, `Chrono : ${formatTicks(msg.daily.ticks)}`, 'good');
-      } else banner('Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : '', 'good');
+      } else if (currentMode === 'atelier') banner('Bravo !', 'Mission réussie', currentLevelName, 'good');
+      else banner('Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : '', 'good');
       break;
     case 'failed':
       setMusicIntensity(0);
@@ -881,13 +896,19 @@ function renderLobby() {
   $('#lobby-wait').hidden = isHost;
   const n = lobbyPlayers.filter((p) => p.connected).length;
   const need = lobbyMode === 'versus' ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
-  start.disabled = n < need;
-  start.textContent = n < need ? `Il faut ${need} joueurs` : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
+  const noMap = lobbyMode === 'atelier' && !lobbyAtelier;
+  start.disabled = n < need || noMap;
+  start.textContent = n < need ? `Il faut ${need} joueurs` : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
+  renderLobbyAtelier(isHost);
   const today = dayNumber();
   $('#mode-desc').textContent = lobbyMode === 'daily'
     ? `Défi du jour (${dayLabel(today)}) : ${DAILY_STAGES} missions générées, les mêmes pour tout le monde aujourd’hui, avec 3 vies et sans vie bonus. Consigne du jour : ${TWIST_INFO[dailyTwist(today)].label.toLowerCase()}. ${TWIST_INFO[dailyTwist(today)].desc} Le chrono décide du classement.`
     : lobbyMode === 'taupe'
     ? `La taupe (${TAUPE_MIN_PLAYERS} ou 4 joueurs) : ${TAUPE_STAGES} missions en coop… mais l’un de vous, tiré au sort en secret, veut les faire échouer. Après chaque mission, le conseil vote : démasquez la taupe pour gagner, mais accuser un innocent coûte une vie. La taupe gagne si vous perdez vos 3 vies.`
+    : lobbyMode === 'atelier'
+    ? (lobbyAtelier
+      ? `Atelier : « ${lobbyAtelier.name} », une mission dessinée par l’hôte, à jouer en coop avec ${ATELIER_LIVES} vies.${lobbyAtelier.night ? ' De nuit.' : ''}${lobbyAtelier.storm ? ' Sous l’orage.' : ''}`
+      : 'Atelier : l’hôte dessine sa propre mission (murs, liège, trous, tunnels, portails, ennemis et même un boss), puis vous la jouez en coop.')
     : lobbyMode === 'coop'
     ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
@@ -944,6 +965,68 @@ $('#from-select').addEventListener('click', (e) => {
   sfx.click();
   send({ t: 'from', n: Number(b.dataset.n) });
 });
+
+// ------------------------------------------------------------------ the workshop (iteration 14)
+
+let workshopBack: Screen = 'home'; // where « Fermer » goes back to
+const workshop = new Workshop($('#atelier'), {
+  click: () => sfx.click(),
+  place: (ch) => (ch === '.' ? sfx.click() : sfx.build()),
+  close: () => { sfx.click(); show(roomCode ? 'lobby' : workshopBack === 'atelier' ? 'home' : workshopBack); },
+  share: async (a) => {
+    sfx.click();
+    const url = `${location.origin}/#atelier=${encodeAtelier(a)}`;
+    try {
+      if (navigator.share && controls.touchMode) await navigator.share({ title: `Tanks! · ${a.name}`, url });
+      else { await navigator.clipboard.writeText(url); toast('Lien de la mission copié : envoie-le à tes amis !'); }
+    } catch {}
+  },
+  play: (a) => {
+    sfx.click();
+    const me = lobbyPlayers.find((p) => p.id === pid);
+    if (roomCode && ws?.readyState === WebSocket.OPEN) {
+      if (!me?.host) { toast('Seul l’hôte de la salle choisit la mission. Copie le lien pour la partager !'); return; }
+      if (phase !== 'lobby') { toast('Une partie est en cours : attends le retour au salon.'); return; }
+      send({ t: 'atelier', ...a });
+      show('lobby');
+      return;
+    }
+    wantAtelier = a;
+    void createRoom($<HTMLButtonElement>('#btn-atelier'), false);
+  },
+});
+
+function openWorkshop(a?: AtelierMap) {
+  if (screen !== 'atelier') workshopBack = screen;
+  if (a) workshop.set(a);
+  show('atelier');
+  workshop.open();
+}
+
+/** Lobby: preview of the room's workshop mission, with a button to edit it (host) or copy it (others). */
+function renderLobbyAtelier(isHost: boolean) {
+  const box = $('#lobby-atelier');
+  box.hidden = lobbyMode !== 'atelier';
+  if (box.hidden) return;
+  const cv = box.querySelector('canvas')!;
+  cv.hidden = !lobbyAtelier;
+  if (lobbyAtelier) {
+    requestAnimationFrame(() => drawMap(cv, lobbyAtelier!.map));
+    const kinds = atelierKinds(lobbyAtelier.map);
+    box.querySelector('.la-tanks')!.innerHTML = kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('');
+  } else box.querySelector('.la-tanks')!.innerHTML = '';
+  const btn = box.querySelector<HTMLButtonElement>('button')!;
+  btn.textContent = isHost ? (lobbyAtelier ? 'Modifier dans l’atelier' : 'Ouvrir l’atelier') : 'Copier dans mon atelier';
+  btn.disabled = !isHost && !lobbyAtelier;
+}
+$('#lobby-atelier button').addEventListener('click', () => {
+  sfx.click();
+  const host = lobbyPlayers.find((p) => p.id === pid)?.host;
+  openWorkshop(lobbyAtelier);
+  if (!host && lobbyAtelier) toast('Copie gardée dans ton atelier : tu peux la modifier et la partager.');
+});
+$('#btn-atelier').addEventListener('click', () => { sfx.click(); openWorkshop(); });
+
 
 // ------------------------------------------------------------------ daily challenge
 
@@ -1015,6 +1098,7 @@ function showResults(r: Results) {
   const title = r.daily
     ? (r.daily.cleared >= r.daily.state.stages ? 'Défi du jour relevé !' : `Défi du jour · ${r.daily.cleared}/${r.daily.state.stages} étapes`)
     : r.taupe ? (r.taupe.winner === 'taupe' ? 'La taupe l’emporte !' : 'Les loyaux l’emportent !')
+    : r.atelier ? (r.atelier.won ? `« ${r.atelier.name} » réussie !` : `« ${r.atelier.name} » : plus de vies…`)
     : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
   const coop = coopLike(r.mode);
   const ff = coop && r.players.some((p) => p.ff !== undefined);
@@ -1040,7 +1124,7 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
+interface AttractOpts { atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -1051,7 +1135,7 @@ function attractMission() {
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
-  const lvl: ParsedLevel = opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
+  const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
   const g = new Game(lvl.tiles);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
@@ -1189,7 +1273,12 @@ $('#btn-copy').addEventListener('click', async () => {
   } catch {}
 });
 document.querySelectorAll<HTMLButtonElement>('#mode-select button').forEach((b) =>
-  b.addEventListener('click', () => { sfx.click(); send({ t: 'mode', mode: b.dataset.mode as Mode }); }),
+  b.addEventListener('click', () => {
+    sfx.click();
+    // the workshop without a mission yet: open the editor, « Jouer en ligne » hands the mission over
+    if (b.dataset.mode === 'atelier' && !lobbyAtelier) openWorkshop();
+    else send({ t: 'mode', mode: b.dataset.mode as Mode });
+  }),
 );
 $('#btn-start').addEventListener('click', () => { sfx.click(); send({ t: 'start' }); });
 $('#btn-leave').addEventListener('click', () => leaveRoom());
@@ -1231,7 +1320,7 @@ $('#btn-journal-close').addEventListener('click', () => ($('#journal').hidden = 
 
 // ------------------------------------------------------------------ feedback
 
-const TILE_NAMES = ['vide', 'mur', 'mur haut', 'liège', 'trou'];
+const TILE_NAMES = ['vide', 'mur', 'mur haut', 'liège', 'trou', 'portail bleu', 'portail rose', 'tunnel'];
 function tankLabel(id: number) {
   const info = infos.get(id) ?? attract?.tanks.find((t) => t.id === id);
   if (!info) return { id };
@@ -1412,6 +1501,26 @@ if (params.has('demo')) {
       }, ms * 0.7);
       setTimeout(() => ($('#council').hidden = true), ms);
     },
+    /** The workshop: paint the showcase mission cell by cell in the editor, for `ms`, then leave it on screen. */
+    atelier(ms = 9000, a: AtelierMap = ATELIER_SAMPLE) {
+      attract = undefined; // the table behind stays still: all the machine's time goes to the painting
+      openWorkshop();
+      workshop.animate(a, ms);
+      return a.name;
+    },
+    /** The showcase mission of the workshop. */
+    atelierSample: () => ({ ...ATELIER_SAMPLE, map: ATELIER_SAMPLE.map.slice() }),
+    /** Play a workshop mission (the showcase one by default) with the heroes. */
+    playAtelier(a: AtelierMap = ATELIER_SAMPLE, arms?: Weapon[]) {
+      show('game');
+      $('#hud').hidden = true;
+      attract = undefined;
+      startAttract({ heroes: true, atelier: a, arms: arms?.filter(isWeapon) });
+      const wx = `${a.night ? ' · Nuit' : ''}${a.storm ? ' · Orage' : ''}`;
+      banner(`Atelier · mission maison${wx}`, a.name, `Tanks ennemis : ${atelierLevel(a).enemies.length}`, `intro atelier${a.night ? ' night' : ''}${a.storm ? ' storm' : ''}`);
+      setTimeout(hideBanner, 2600);
+      return a.name;
+    },
     /** Show the home screen (and its daily challenge card) over the demo for a moment. */
     home(ms = 4000) {
       show('home');
@@ -1501,8 +1610,15 @@ if (params.has('demo')) {
 const m = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,8})/);
 startAttract();
 void loadDaily();
+const shared = location.hash.startsWith('#atelier=') ? decodeAtelier(location.hash.slice(9)) : undefined;
 if (m) {
   connect(m[1].toUpperCase());
   show('lobby');
+} else if (shared) {
+  // a mission shared by link: open it in the workshop, ready to play
+  history.replaceState(null, '', '/');
+  show('home');
+  openWorkshop(shared);
+  toast(`Mission partagée : « ${shared.name} ». Clique sur « Jouer en ligne » !`, 4500);
 } else show('home');
 }

@@ -311,11 +311,12 @@ export class Game {
       } else {
         x = 1 + Math.random() * (W - 2); y = 1 + Math.random() * (H - 2);
       }
-      x = Math.max(0.6, Math.min(W - 0.6, x)); y = Math.max(0.6, Math.min(H - 0.6, y));
+      // rounded first: the announced spot is the one checked (a strike at 4.998 used to be sent as 5.00, on the wall next door)
+      x = r2(Math.max(0.6, Math.min(W - 0.6, x))); y = r2(Math.max(0.6, Math.min(H - 0.6, y)));
       const tile = tileAt(this.tiles, Math.floor(x), Math.floor(y));
       if (tile === Tile.Wall || tile === Tile.Tall || tile === Tile.Tunnel) continue;
       if (this.bolts.some((o) => Math.hypot(o.x - x, o.y - y) < BOLT_R * 2)) continue;
-      const bo: Bolt = { x: r2(x), y: r2(y), t: 0 };
+      const bo: Bolt = { x, y, t: 0 };
       this.bolts.push(bo);
       this.events.push(['zap', bo.x, bo.y, BOLT_WARN]);
       return bo;

@@ -4,7 +4,8 @@ import type { CouncilState, TaupeResult } from './taupe';
 
 // 'daily' (the daily challenge) came with iteration 6: older tabs show it like the coop campaign at worst.
 // 'taupe' (the hidden mole) came with iteration 8, and its 'council' phase: older tabs show a coop game that pauses.
-export type Mode = 'coop' | 'versus' | 'daily' | 'taupe';
+// 'atelier' (a mission drawn in the workshop) came with iteration 14: older tabs are told to reload anyway (welcome.v).
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
@@ -70,6 +71,9 @@ export type GameEvent =
   | ['erupt', number, number, number] // x y tankId: it bursts out (older clients ignore all three and just see the damage)
   | ['build', number, number, number]; // cx cy tankId: the Maçon lays a cork block on that cell (iteration 12; older tabs are told to reload)
 
+/** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
+export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean }
+
 /** One finished run on the daily board. */
 export interface BoardEntry {
   team: { name: string; color: number }[];
@@ -101,6 +105,7 @@ export interface Results {
   mission?: number;
   daily?: { state: DailyState; cleared: number; board?: BoardDay };
   taupe?: TaupeResult & { cleared: number; stages: number };
+  atelier?: { name: string; won: boolean }; // workshop mission (iteration 14)
   // ff: teammates destroyed (coop-like modes, iteration 8)
   players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number }[];
   winner?: string;
@@ -108,7 +113,7 @@ export interface Results {
 
 export type ServerMsg =
   | { t: 'welcome'; id: string; room: string; v?: number } // v: the server's iteration (iteration 10), so an old tab knows to reload
-  | { t: 'lobby'; players: PlayerInfo[]; mode: Mode; phase: Phase; from?: number } // from: mission the coop campaign starts at
+  | { t: 'lobby'; players: PlayerInfo[]; mode: Mode; phase: Phase; from?: number; atelier?: AtelierMap } // from: mission the coop campaign starts at; atelier: the host's workshop mission
   | {
       t: 'level';
       mode: Mode;
@@ -137,6 +142,7 @@ export type ClientMsg =
   | { t: 'mode'; mode: Mode }
   | { t: 'arm'; w: Weapon } // pick a cannon (iteration 7, applies from the next mission)
   | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
+  | { t: 'atelier'; name: string; map: string[]; night?: boolean; storm?: boolean } // host: the workshop mission to play (iteration 14; also switches to that mode)
   | { t: 'vote'; who: string } // mole mode, during a council: the pid accused ('' = nobody)
   | { t: 'start' }
   | { t: 'stop' }

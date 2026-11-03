@@ -1,7 +1,7 @@
 {
-  "iteration": 13,
+  "iteration": 14,
   "date": "2026-11-03",
-  "title": "Les tunnels",
+  "title": "L’atelier",
   "journal": [
     {
       "iteration": 1,
@@ -160,6 +160,18 @@
         "Les ennemis ne restent plus plantés sur la mine qu’ils viennent de poser, et vérifient que leurs ricochets ne reviennent pas sur eux.",
         "Recharger la page en pleine partie ne fige plus ton tank : il répond tout de suite.",
         "On peut tirer avec E, Maj ou Entrée en plus du clic, et la manette se présente dès qu’on la branche."
+      ]
+    },
+    {
+      "iteration": 14,
+      "date": "2026-11-03",
+      "title": "L’atelier",
+      "notes": [
+        "Nouveau : l’atelier ! Dessine ta propre mission sur la table : murs, murs hauts, liège, trous, tunnels, portails, les départs des joueurs et jusqu’à douze tanks ennemis, boss compris.",
+        "Un mode Miroir pour bâtir des cartes symétriques, l’annulation (Ctrl+Z), la nuit et l’orage en option, et les missions de la campagne comme modèles à remixer.",
+        "« Jouer en ligne » ouvre une salle avec ta mission : tes amis la voient en aperçu dans le salon, puis vous la jouez ensemble avec 3 vies.",
+        "« Copier le lien » donne une adresse qui ouvre ta mission dans l’atelier de qui la reçoit : partage tes créations !",
+        "La foudre ne s’annonce plus jamais sur un mur voisin, et la fenêtre « Ton avis » reconnaît enfin les portails et les tunnels."
       ]
     }
   ]

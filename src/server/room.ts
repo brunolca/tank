@@ -1,9 +1,10 @@
 import { DurableObject } from 'cloudflare:workers';
 import META from '../shared/meta.json';
 import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, isCheckpoint, isWeapon } from '../shared/constants';
+import { ATELIER_LIVES, atelierLevel, checkAtelier, cleanName } from '../shared/atelier';
 import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
-import type { BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
+import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
@@ -55,6 +56,8 @@ export class Room extends DurableObject<Env> {
   private council?: CouncilState; // mole mode: the vote in progress (or its verdict)
   private votes: Record<string, string> = {}; // mole mode: secret ballots of the council in progress
   private taupeEnd?: TaupeResult; // mole mode: outcome, once the game is over
+  private atelier?: AtelierMap; // workshop mode (iteration 14): the mission the host drew, already checked
+  private atelierWon = false;
   private loop?: ReturnType<typeof setInterval>;
   private roomCode = '';
 
@@ -68,6 +71,7 @@ export class Room extends DurableObject<Env> {
     ctx.blockConcurrencyWhile(async () => {
       this.mode = (await ctx.storage.get<Mode>('mode')) ?? 'coop';
       this.roomCode = (await ctx.storage.get<string>('code')) ?? '';
+      this.atelier = await ctx.storage.get<AtelierMap>('atelier');
     });
   }
 
@@ -178,12 +182,23 @@ export class Room extends DurableObject<Env> {
         }
         break;
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier')) {
           this.mode = msg.mode;
           await this.ctx.storage.put('mode', this.mode);
           this.broadcastLobby();
         }
         break;
+      case 'atelier': {
+        if (p.pid !== this.hostId() || this.phase !== 'lobby') break;
+        const why = checkAtelier(msg.map);
+        if (why) { this.send(ws, { t: 'error', msg: `Atelier : ${why}` }); break; }
+        this.atelier = { name: cleanName(msg.name) || 'Mission maison', map: (msg.map as string[]).slice(), night: msg.night === true || undefined, storm: msg.storm === true || undefined };
+        this.mode = 'atelier';
+        await this.ctx.storage.put('atelier', this.atelier);
+        await this.ctx.storage.put('mode', this.mode);
+        this.broadcastLobby();
+        break;
+      }
       case 'vote':
         this.onVote(p, String(msg.who ?? ''));
         break;
@@ -250,6 +265,10 @@ export class Room extends DurableObject<Env> {
       for (const p of active) this.send(p.ws!, { t: 'error', msg: 'Il faut au moins 2 joueurs pour le mode versus.' });
       return;
     }
+    if (this.mode === 'atelier' && !this.atelier) {
+      for (const p of active) this.send(p.ws!, { t: 'error', msg: 'L’hôte doit d’abord dessiner une mission dans l’atelier.' });
+      return;
+    }
     if (this.mode === 'taupe' && active.length < TAUPE_MIN_PLAYERS) {
       for (const p of active) this.send(p.ws!, { t: 'error', msg: `Il faut au moins ${TAUPE_MIN_PLAYERS} joueurs pour démasquer une taupe.` });
       return;
@@ -258,7 +277,8 @@ export class Room extends DurableObject<Env> {
       p.score = 0; p.kills = {}; p.deaths = 0; p.ff = 0; p.inGame = !!p.ws;
     }
     this.mission = this.mode === 'coop' ? this.from : 1;
-    this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : 3;
+    this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : this.mode === 'atelier' ? ATELIER_LIVES : 3;
+    this.atelierWon = false;
     this.mole = this.mode === 'taupe' ? active[Math.floor(Math.random() * active.length)].pid : undefined;
     this.taupeSeed = (Math.random() * 2 ** 31) >>> 0;
     this.council = undefined;
@@ -279,6 +299,7 @@ export class Room extends DurableObject<Env> {
     this.level = this.mode === 'coop' ? getMission(this.mission)
       : this.mode === 'daily' ? dailyLevel(this.day, this.mission)
       : this.mode === 'taupe' ? taupeLevel(this.taupeSeed, this.mission)
+      : this.mode === 'atelier' && this.atelier ? atelierLevel(this.atelier)
       : versusArena(this.round);
     this.council = undefined;
     const game = new Game(this.level.tiles);
@@ -439,7 +460,8 @@ export class Room extends DurableObject<Env> {
     const taupe = this.mode === 'taupe' && this.taupeEnd
       ? { ...this.taupeEnd, cleared: this.taupeEnd.why === 'missions' ? TAUPE_STAGES : this.mission - 1, stages: TAUPE_STAGES }
       : undefined;
-    return { mode: this.mode, mission: this.mission, players, winner: this.mode === 'versus' ? players[0]?.id : undefined, daily, taupe };
+    const atelier = this.mode === 'atelier' && this.atelier ? { name: this.atelier.name, won: this.atelierWon } : undefined;
+    return { mode: this.mode, mission: this.mission, players, winner: this.mode === 'versus' ? players[0]?.id : undefined, daily, taupe, atelier };
   }
 
   private tick() {
@@ -496,6 +518,7 @@ export class Room extends DurableObject<Env> {
         }
         if (this.phaseTimer <= 0) {
           if (this.mode === 'daily' && this.mission >= DAILY_STAGES) { void this.finishDaily(); break; }
+          if (this.mode === 'atelier') { this.atelierWon = true; this.setPhase('gameover', 10); this.broadcastPhase(); break; }
           this.mission++;
           this.killedEnemies.clear();
           this.enemyHp.clear();
@@ -668,7 +691,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private broadcastLobby() {
-    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, phase: this.phase, from: this.from });
+    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, phase: this.phase, from: this.from, atelier: this.atelier });
   }
 
   private broadcast(msg: ServerMsg) {

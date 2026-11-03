@@ -6,7 +6,7 @@ import { H, W, Tile, TankKind } from './constants';
 //           solid tiles (walls or holes) on either its left and right or its top and bottom, which gives its direction
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)
-const ENEMY_CHARS: Record<string, TankKind> = {
+export const ENEMY_CHARS: Record<string, TankKind> = {
   b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason',
 };
 

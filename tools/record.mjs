@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 22, arms: ['canon', 'ricochet'], tunnels: [1.5, 9], seconds: 16, caption: 'Nouveau : les tunnels', sub: 'On s’y cache, l’ennemi te perd de vue' },
-  { mission: 23, arms: ['sapeur', 'fusee'], tunnels: [2, 8], seconds: 15, caption: 'Mission 23 : Les galeries', sub: 'Six portes de tunnel, un tank invisible dedans' },
-  { mission: 22, arms: ['ricochet', 'canon'], night: true, tunnels: [2], seconds: 11, caption: 'Les obus rebondissent sur leur toit', sub: 'Mais de l’intérieur, impossible de tirer' },
-  { mission: 30, arms: ['canon', 'fusee'], night: false, seconds: 10, caption: 'Des trous tout neufs', sub: 'De vraies fosses taillées dans le bois' },
-  { mission: 21, arms: ['sapeur', 'ricochet'], builds: [1, 3.5], seconds: 9, caption: 'Les ennemis ne sautent plus sur leurs mines', sub: 'Et toujours la campagne sans fin, jusqu’à quatre en ligne' },
+  { atelier: 10, seconds: 12, caption: 'Nouveau : l’atelier', sub: 'Dessine ta propre mission, case par case' },
+  { playAtelier: {}, arms: ['canon', 'ricochet'], seconds: 18, caption: '« La forge de Lou », une mission maison', sub: 'Jouée en ligne, en coop, jusqu’à quatre' },
+  { playAtelier: { night: true, storm: true }, arms: ['fusee', 'sapeur'], bolts: [2, 5, 8], seconds: 12, caption: 'Nuit et orage en option', sub: 'Partage ta mission par un simple lien' },
+  { mission: 22, arms: ['canon', 'ricochet'], tunnels: [1.5], seconds: 10, caption: 'Tunnels, portails, liège et boss', sub: 'Tout ce que la campagne connaît est dans la palette' },
+  { mission: 21, arms: ['sapeur', 'ricochet'], builds: [1, 3.5], seconds: 9, caption: 'Et toujours la campagne sans fin', sub: 'Le Maçon, le Foreur, le Colosse…' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -53,6 +53,8 @@ try {
     await page.evaluate((shot) => {
       const d = window.__demo;
       if (shot.home) d.home(shot.home * 1000);
+      else if (shot.atelier) d.atelier(shot.atelier * 1000);
+      else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
