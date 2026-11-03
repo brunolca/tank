@@ -1,0 +1,404 @@
+{
+  "id": 22,
+  "created": "2026-11-03T17:14:53.898Z",
+  "category": "bug",
+  "text": "J'ai la grosse barre d'adresse en paysage sur mobile chrome iOS",
+  "context": {
+    "game": {
+      "iteration": 13,
+      "iterationTitle": "Les tunnels",
+      "screen": "game",
+      "online": true,
+      "room": "PTVT9",
+      "mode": "coop",
+      "phase": "playing",
+      "mission": 3,
+      "level": "Bouchons",
+      "lives": 3,
+      "players": [
+        {
+          "name": "Chenille31",
+          "host": true,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 12.65,
+        "y": 15.82,
+        "alive": true,
+        "pendingInputs": 3
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Chenille31",
+          "team": 0,
+          "me": true,
+          "x": 12.65,
+          "y": 15.82,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 99,
+          "x": 10.71,
+          "y": 6.5,
+          "alive": false
+        },
+        {
+          "id": 3,
+          "kind": "brown",
+          "label": "Brun",
+          "team": 99,
+          "x": 6.5,
+          "y": 10.5,
+          "alive": false
+        },
+        {
+          "id": 4,
+          "kind": "ash",
+          "label": "Gris",
+          "team": 99,
+          "x": 11.93,
+          "y": 10.15,
+          "alive": true
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "tick": 668,
+      "recentEvents": [
+        [
+          397,
+          "pop",
+          19.02,
+          0.19
+        ],
+        [
+          398,
+          "shot",
+          12.77,
+          11.32,
+          -1.35,
+          1,
+          1
+        ],
+        [
+          403,
+          "pop",
+          16.73,
+          0.25
+        ],
+        [
+          406,
+          "pop",
+          9.59,
+          10.18
+        ],
+        [
+          409,
+          "shot",
+          12.67,
+          11.05,
+          -1.37,
+          1,
+          1
+        ],
+        [
+          412,
+          "pop",
+          13.97,
+          6.2
+        ],
+        [
+          421,
+          "pop",
+          15.87,
+          0.16
+        ],
+        [
+          423,
+          "pop",
+          13.67,
+          6.25
+        ],
+        [
+          425,
+          "shot",
+          12.11,
+          10.33,
+          -1.43,
+          1,
+          1
+        ],
+        [
+          434,
+          "shot",
+          11.64,
+          10.52,
+          -1.46,
+          1,
+          1
+        ],
+        [
+          441,
+          "pop",
+          12.91,
+          4.44
+        ],
+        [
+          453,
+          "pop",
+          12.32,
+          4.25
+        ],
+        [
+          457,
+          "shot",
+          12.61,
+          10.18,
+          -1.82,
+          1,
+          1
+        ],
+        [
+          457,
+          "shot",
+          11.63,
+          8.27,
+          1.2,
+          0,
+          4
+        ],
+        [
+          468,
+          "shot",
+          13.4,
+          10.02,
+          -1.87,
+          1,
+          1
+        ],
+        [
+          475,
+          "bounce",
+          12.9,
+          11.64
+        ],
+        [
+          475,
+          "pop",
+          11.04,
+          4.25
+        ],
+        [
+          482,
+          "pop",
+          12.38,
+          12.9
+        ],
+        [
+          485,
+          "shot",
+          14.38,
+          10.01,
+          -2.75,
+          1,
+          1
+        ],
+        [
+          485,
+          "pop",
+          11.56,
+          4.16
+        ],
+        [
+          495,
+          "pop",
+          11.14,
+          8.62
+        ],
+        [
+          496,
+          "shot",
+          14.76,
+          9.34,
+          -2.52,
+          1,
+          1
+        ],
+        [
+          508,
+          "boom",
+          10.71,
+          6.5,
+          2
+        ],
+        [
+          510,
+          "shot",
+          14.66,
+          8.54,
+          -2.73,
+          1,
+          1
+        ],
+        [
+          520,
+          "shot",
+          14.46,
+          8.61,
+          -2.5,
+          1,
+          1
+        ],
+        [
+          521,
+          "pop",
+          11.13,
+          6.94
+        ],
+        [
+          529,
+          "shot",
+          14.43,
+          9.5,
+          -2.44,
+          1,
+          1
+        ],
+        [
+          539,
+          "pop",
+          9.15,
+          4.51
+        ],
+        [
+          541,
+          "shot",
+          14.44,
+          10.37,
+          -1.95,
+          1,
+          1
+        ],
+        [
+          549,
+          "pop",
+          9.21,
+          4.99
+        ],
+        [
+          551,
+          "shot",
+          14.21,
+          11.17,
+          -2.04,
+          1,
+          1
+        ],
+        [
+          551,
+          "pop",
+          14.13,
+          10.85
+        ],
+        [
+          559,
+          "pop",
+          11.93,
+          4.19
+        ],
+        [
+          563,
+          "shot",
+          14.97,
+          11.49,
+          -1.99,
+          1,
+          1
+        ],
+        [
+          567,
+          "shot",
+          12.49,
+          9.14,
+          0.83,
+          0,
+          4
+        ],
+        [
+          584,
+          "shot",
+          14.7,
+          13.19,
+          -1.88,
+          1,
+          1
+        ],
+        [
+          585,
+          "pop",
+          11.62,
+          4.14
+        ],
+        [
+          588,
+          "pop",
+          14.12,
+          11.19
+        ],
+        [
+          616,
+          "bounce",
+          19.6,
+          16.84
+        ],
+        [
+          634,
+          "pop",
+          21.91,
+          14.25
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 36,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 31
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/156.0.8078.54 Mobile/15E148 Safari/604.1",
+      "language": "fr-FR",
+      "viewport": "724x315",
+      "screen": "393x852",
+      "dpr": 3,
+      "touch": true,
+      "gamepads": [],
+      "cores": 4,
+      "gl": {
+        "renderer": "Apple GPU",
+        "vendor": "Apple Inc.",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/PTVT9",
+    "time": "2026-11-03T17:13:42.107Z",
+    "regions": []
+  },
+  "hasScreenshot": true,
+  "attachment": {
+    "name": "IMG_1984.png",
+    "type": "image/png",
+    "size": 598207
+  }
+}
