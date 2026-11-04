@@ -23,3 +23,4 @@
 | 19 | 13 | Corrigé : les ennemis restaient figés sur la mine qu’ils venaient de poser ; ils prévoient maintenant leur sortie, et leurs ricochets ne reviennent plus sur eux. |
 | 20 | 13 | Fait : les trous sont redessinés en vraies fosses (cases fusionnées, bords, profondeur). |
 | 21 | 13 | Déjà possible (sticks, gâchettes) ; ajouté un message quand une manette se branche, le bouton X pour tirer et l’aide détaillée. Menus à la manette retenus dans `DESIGN.md`. |
+| 22 | 15 | Corrigé dans la mesure du possible : sur iPhone, aucune page ne peut cacher la barre d’adresse ; un bouton « plein écran » (vrai plein écran là où il existe) et un conseil en paysage expliquent l’ajout à l’écran d’accueil, qui ouvre maintenant le jeu en plein écran (manifeste, icônes). |

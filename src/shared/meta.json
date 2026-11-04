@@ -1,7 +1,7 @@
 {
-  "iteration": 14,
-  "date": "2026-11-03",
-  "title": "L’atelier",
+  "iteration": 15,
+  "date": "2026-11-04",
+  "title": "Le Pilleur",
   "journal": [
     {
       "iteration": 1,
@@ -172,6 +172,18 @@
         "« Jouer en ligne » ouvre une salle avec ta mission : tes amis la voient en aperçu dans le salon, puis vous la jouez ensemble avec 3 vies.",
         "« Copier le lien » donne une adresse qui ouvre ta mission dans l’atelier de qui la reçoit : partage tes créations !",
         "La foudre ne s’annonce plus jamais sur un mur voisin, et la fenêtre « Ton avis » reconnaît enfin les portails et les tunnels."
+      ]
+    },
+    {
+      "iteration": 15,
+      "date": "2026-11-04",
+      "title": "Le Pilleur",
+      "notes": [
+        "Nouvel ennemi : le Pilleur, un tank bordeaux masqué de noir, avec un gros sac de toile sur le dos. Il file droit sur les caisses bonus, d’un bout à l’autre de la table.",
+        "Ce qu’il ramasse, il le garde : bouclier, turbo, super-ricochet ou tir en éventail. Son sac gonfle à chaque larcin. Tant qu’il rôde, les caisses tombent plus souvent : à toi d’arriver le premier !",
+        "Détruis-le et son butin roule hors du sac : la dernière caisse volée retombe à côté de l’épave.",
+        "Nouvelle mission 24 : « Le marché aux puces », trois Pilleurs entre les étals de liège. Ensuite, il se glisse dans la campagne sans fin, et il rejoint la palette de l’atelier.",
+        "Un bouton « plein écran » rejoint celui de la musique, en haut à droite. Sur iPhone, où le navigateur garde sa barre d’adresse, il explique comment installer Tanks! sur l’écran d’accueil pour jouer sans elle."
       ]
     }
   ]

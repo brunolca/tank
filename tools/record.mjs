@@ -7,11 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { atelier: 10, seconds: 12, caption: 'Nouveau : l’atelier', sub: 'Dessine ta propre mission, case par case' },
-  { playAtelier: {}, arms: ['canon', 'ricochet'], seconds: 18, caption: '« La forge de Lou », une mission maison', sub: 'Jouée en ligne, en coop, jusqu’à quatre' },
-  { playAtelier: { night: true, storm: true }, arms: ['fusee', 'sapeur'], bolts: [2, 5, 8], seconds: 12, caption: 'Nuit et orage en option', sub: 'Partage ta mission par un simple lien' },
-  { mission: 22, arms: ['canon', 'ricochet'], tunnels: [1.5], seconds: 10, caption: 'Tunnels, portails, liège et boss', sub: 'Tout ce que la campagne connaît est dans la palette' },
-  { mission: 21, arms: ['sapeur', 'ricochet'], builds: [1, 3.5], seconds: 9, caption: 'Et toujours la campagne sans fin', sub: 'Le Maçon, le Foreur, le Colosse…' },
+  { mission: 24, arms: ['canon', 'ricochet'], baits: [1.2, 5, 9.5], seconds: 16, caption: 'Nouvel ennemi : le Pilleur', sub: 'Il file droit sur les caisses bonus' },
+  { mission: 24, arms: ['fusee', 'sapeur'], rich: true, baits: [0.8, 4], seconds: 14, caption: 'Il garde les bonus pour lui', sub: 'Bouclier, turbo, éventail : un Pilleur repu est redoutable' },
+  { mission: 29, arms: ['ricochet', 'canon'], baits: [1.5, 6], seconds: 13, caption: 'Détruis-le : il lâche son butin', sub: 'Dès la 25ᵉ mission, il rôde dans la campagne sans fin' },
+  { mission: 22, arms: ['sapeur', 'ricochet'], tunnels: [1.5], seconds: 9, caption: 'Et toujours tunnels, maçons et boss', sub: 'Jusqu’à quatre en ligne, et en plein écran sur mobile' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -69,6 +68,7 @@ try {
       for (const s of shot.digs ?? []) setTimeout(() => d.dig?.(), s * 1000);
       for (const s of shot.builds ?? []) setTimeout(() => d.build?.(), s * 1000);
       for (const s of shot.tunnels ?? []) setTimeout(() => d.tunnel?.(), s * 1000);
+      for (const s of shot.baits ?? []) setTimeout(() => d.bait?.(), s * 1000);
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

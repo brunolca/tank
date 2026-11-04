@@ -6,6 +6,12 @@
   <title>Tanks!</title>
   <meta name="description" content="Remake moderne de Tanks (Wii Play) jouable en multijoueur en ligne." />
   <meta name="theme-color" content="#1b1d24" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icon-180.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tanks!" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='8' y='26' width='48' height='24' rx='8' fill='%233d7bff'/><circle cx='32' cy='28' r='12' fill='%236fa0ff'/><rect x='38' y='24' width='22' height='7' rx='3' fill='%23233f8a'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -28,6 +34,7 @@
     <div class="hud-center"><div id="hud-enemies"></div><div id="hud-clock" hidden></div><div id="scoreboard"></div></div>
     <div class="hud-right">
       <span id="hud-ping"></span>
+      <button id="btn-full" class="icon-btn" title="Plein écran" aria-label="Plein écran">⛶</button>
       <button id="btn-music" class="icon-btn" title="Musique (M)">♪</button>
       <button id="btn-menu" class="icon-btn" title="Menu (Échap)">☰</button>
     </div>

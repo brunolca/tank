@@ -40,7 +40,8 @@ export type TankKind =
   | 'boss'
   | 'steel'
   | 'drill'
-  | 'mason';
+  | 'mason'
+  | 'thief';
 
 export interface TankSpec {
   speed: number;
@@ -77,6 +78,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   drill: { speed: 1.35, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.1, turretSpeed: 2.4, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: DRILL_R, label: 'Foreur' },
   // iteration 12: it lays cork blocks between itself and its prey (see MASON_*)
   mason: { speed: 1.6, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.7, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.55, aimError: 0.08, label: 'Maçon' },
+  // iteration 15: it races the players to the bonus crates and keeps them for itself (see THIEF_*)
+  thief: { speed: 2.5, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2.6, mines: 0, skill: 1, reaction: 0.5, aimError: 0.09, label: 'Pilleur' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -106,6 +109,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   steel: 0x56708f,
   drill: 0xd9822b,
   mason: 0x7b7430,
+  thief: 0x8e2a4e,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -151,6 +155,12 @@ export const MASON_FIRST = 2.5;
 export const MASON_MAX = 6;
 /** It builds within this distance of its own centre (tiles). */
 export const MASON_REACH = 2.6;
+
+// ------------------------------------------------------------------ the Pilleur (iteration 15): the tank that steals the bonus crates
+/** While a Pilleur is around, crates fall this much more often (there is something to fight over). */
+export const THIEF_CRATE_RUSH = 1.8;
+/** It heads for a crate within this many steps of its path (the other tanks only look 9 steps ahead). */
+export const THIEF_REACH = 40;
 
 // ------------------------------------------------------------------ portals
 /** Colour of each portal pair (Tile.PortalA, Tile.PortalB). */

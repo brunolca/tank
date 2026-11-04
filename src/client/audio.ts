@@ -111,6 +111,14 @@ export const sfx = {
     tone(t + 0.11, 0.07, 520, 360, 0.2, 'triangle');
     noise(t + 0.2, 0.14, 2800, 1.4, 0.12, 'bandpass', 1800);
   },
+  /** A Pilleur snatches a crate: a sly little « hé hé » on two descending notes and a rustle of burlap. */
+  steal() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.12, 1600, 1.2, 0.14, 'bandpass', 900);
+    tone(t + 0.05, 0.09, 740, 620, 0.16, 'square');
+    tone(t + 0.17, 0.12, 620, 470, 0.16, 'square');
+  },
   block() {
     if (!ctx) return;
     noise(ctx.currentTime, 0.4, 900, 0.6, 0.6, 'lowpass', 200);

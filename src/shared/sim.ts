@@ -1,6 +1,6 @@
 import {
   BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
-  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, TURBO_MULT,
+  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, Tile, TUNNEL_SIGHT, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -31,6 +31,7 @@ export interface Tank {
   alert: boolean; // AI: a foe is in sight right now
   weapon?: Weapon; // player tanks: the cannon picked in the lobby (canon when omitted)
   build?: MasonState; // the Maçon (iteration 12)
+  loot?: BonusKind; // the Pilleur (iteration 15): the last bonus it stole, dropped when it is destroyed
 }
 
 /** The Maçon: when it lays its next block, and the cells of the blocks it laid. */
@@ -132,7 +133,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -352,7 +353,8 @@ export class Game {
   // -------------------------------------------------------------- bonus crates
 
   stepBonuses(dt: number) {
-    this.bonusNext -= dt;
+    // a Pilleur on the table: crates fall faster, there is something to race for (iteration 15)
+    this.bonusNext -= this.tanks.some((t) => t.alive && t.kind === 'thief') ? dt * THIEF_CRATE_RUSH : dt;
     if (this.bonusNext <= 0) {
       const [a, b] = this.bonusEvery;
       this.bonusNext = a + Math.random() * (b - a);
@@ -363,11 +365,12 @@ export class Game {
       if (c.t >= BONUS_LIFE) { c.dead = true; continue; }
       if (c.t < 0.5) continue; // still dropping in
       for (const t of this.tanks) {
-        if (!t.alive || t.kind !== 'player') continue;
+        if (!t.alive || (t.kind !== 'player' && t.kind !== 'thief')) continue;
         const rr = TANK_R + BONUS_R;
         if ((t.x - c.x) ** 2 + (t.y - c.y) ** 2 < rr * rr) {
           c.dead = true;
           this.giveBonus(t, c.kind);
+          if (t.kind === 'thief') t.loot = c.kind;
           this.events.push(['bonus', r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), t.id]);
           break;
         }
@@ -390,6 +393,8 @@ export class Game {
       const c: Bonus = { id: this.nextId++, kind: k, x, y, t: 0, dead: false };
       this.bonuses.push(c);
       this.events.push(['crate', x, y, BONUS_KINDS.indexOf(k)]);
+      // the Pilleurs hear it fall and turn towards it
+      for (const o of this.tanks) if (o.alive && o.kind === 'thief' && o.ai) o.ai.pathT = Math.min(o.ai.pathT, 0.4);
       return c;
     }
     return undefined;
@@ -893,7 +898,28 @@ export class Game {
     }
     t.alive = false;
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
+    if (t.loot && this.bonusOn) this.dropLoot(t, t.loot);
     this.onKill?.(t, killer);
+  }
+
+  /** A Pilleur falls: the crate it stole tumbles out of its sack, on the free cell nearest to the wreck. */
+  dropLoot(t: Tank, kind: BonusKind) {
+    t.loot = undefined;
+    const cx0 = Math.floor(t.x), cy0 = Math.floor(t.y);
+    let best: [number, number] | undefined, bd = Infinity;
+    for (let cy = cy0 - 2; cy <= cy0 + 2; cy++) for (let cx = cx0 - 2; cx <= cx0 + 2; cx++) {
+      if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1 || this.tiles[cy * W + cx] !== Tile.Empty) continue;
+      const x = cx + 0.5, y = cy + 0.5;
+      if (this.mines.some((m) => !m.dead && Math.hypot(m.x - x, m.y - y) < MINE_BLAST)) continue;
+      if (this.bonuses.some((o) => Math.hypot(o.x - x, o.y - y) < 0.9)) continue;
+      const d = Math.hypot(x - t.x, y - t.y);
+      if (d < bd) { bd = d; best = [x, y]; }
+    }
+    if (!best) return;
+    const c: Bonus = { id: this.nextId++, kind, x: best[0], y: best[1], t: 0, dead: false };
+    this.bonuses.push(c);
+    this.events.push(['crate', c.x, c.y, BONUS_KINDS.indexOf(kind)]);
+    this.events.push(['loot', c.x, c.y, BONUS_KINDS.indexOf(kind)]);
   }
 
   /**
@@ -1201,7 +1227,8 @@ export class Game {
     ai.pathT -= DT;
     if (ai.path.length === 0 || ai.pathT <= 0) {
       this.aiPlan(t, foe);
-      ai.pathT = 2 + Math.random() * 2.5;
+      // a Pilleur keeps an eye on the crates: a new one and it changes course at once
+      ai.pathT = t.kind === 'thief' && this.bonuses.length ? 0.5 + Math.random() * 0.4 : 2 + Math.random() * 2.5;
     }
     if (ai.path.length) {
       const c = ai.path[0];
@@ -1253,6 +1280,8 @@ export class Game {
         for (let cx = Math.floor(o.x - 2); cx <= Math.floor(o.x + 2); cx++)
           if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - o.x, cy + 0.5 - o.y) < DRILL_BLAST + 0.5) blocked[cy * W + cx] = 1;
     }
+    // the Pilleur looks across the whole table when there is a crate to snatch (iteration 15)
+    const thief = t.kind === 'thief' && this.bonuses.some((c) => c.t >= 0.3);
     const prev = new Int32Array(W * H).fill(-2);
     const dist = new Int32Array(W * H);
     prev[start] = -1;
@@ -1260,7 +1289,7 @@ export class Game {
     const reach: number[] = [];
     for (let qi = 0; qi < q.length; qi++) {
       const c = q[qi];
-      if (dist[c] > (ai.goal !== undefined ? 40 : 9)) continue;
+      if (dist[c] > (ai.goal !== undefined || thief ? THIEF_REACH : 9)) continue;
       if (dist[c] <= 9) reach.push(c);
       const x = c % W, y = (c / W) | 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
@@ -1278,10 +1307,10 @@ export class Game {
     let best = -1, bestScore = -Infinity;
     if (ai.goal !== undefined && prev[ai.goal] !== -2 && ai.goal !== start) best = ai.goal;
     // AI-driven player tanks (demo) love bonus crates
-    if (best < 0 && t.kind === 'player' && this.bonuses.length && Math.random() < 0.8) {
+    if (best < 0 && (thief || (t.kind === 'player' && this.bonuses.length && Math.random() < 0.8))) {
       for (const c of this.bonuses) {
         const cell = Math.floor(c.y) * W + Math.floor(c.x);
-        if (prev[cell] === -2 || dist[cell] > 9) continue;
+        if (prev[cell] === -2 || dist[cell] > (thief ? THIEF_REACH : 9)) continue;
         if (best < 0 || dist[cell] < dist[best]) best = cell;
       }
     }

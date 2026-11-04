@@ -168,6 +168,7 @@ interface TankView {
   bit?: THREE.Group; // the Foreur (iteration 11): its spinning drill bit
   mound?: THREE.Group; // the Foreur under the table: a moving bump of earth
   crane?: THREE.Group; // the Maçon (iteration 12): its crane swings when it lays a block
+  sack?: THREE.Group; // the Pilleur (iteration 15): its loot sack swells with each crate it steals
   under?: boolean;
 }
 
@@ -311,6 +312,15 @@ const geo = {
 };
 const masonCorkMat = new THREE.MeshStandardMaterial({ color: 0xc98f55, roughness: 0.95 });
 const craneMat = new THREE.MeshStandardMaterial({ color: 0xf2c230, roughness: 0.5, metalness: 0.2 });
+// the Pilleur (iteration 15): a burlap sack on the back deck, a rope knot, a black mask round the turret, a gold coin peeking out
+const sackGeo = new THREE.SphereGeometry(0.2, 18, 12);
+const knotGeo = new THREE.TorusGeometry(0.05, 0.02, 6, 14);
+const maskGeo = new THREE.CylinderGeometry(0.236, 0.236, 0.05, 24, 1, true);
+const coinGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.015, 16);
+const sackMat = new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 1 });
+const ropeMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 });
+const maskMat = new THREE.MeshStandardMaterial({ color: 0x17171c, roughness: 0.6, side: THREE.DoubleSide });
+const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
 const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
 const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 1, flatShading: true });
 const dirtDarkMat = new THREE.MeshStandardMaterial({ color: 0x5e3b20, roughness: 1, flatShading: true });
@@ -530,6 +540,25 @@ function buildTank(info: TankInfo): TankView {
     trowel.rotation.z = -0.3;
     hull.add(trowel);
     view.crane = crane;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'thief') {
+    const sack = new THREE.Group();
+    sack.position.set(-0.32, 0.44, 0);
+    const bag = new THREE.Mesh(sackGeo, sackMat);
+    bag.scale.set(1, 0.85, 1.1);
+    const knot = new THREE.Mesh(knotGeo, ropeMat);
+    knot.position.y = 0.17;
+    knot.rotation.x = Math.PI / 2;
+    const coin = new THREE.Mesh(coinGeo, coinMat);
+    coin.position.set(0.03, 0.2, 0.04);
+    coin.rotation.set(0.9, 0, 0.4);
+    sack.add(bag, knot, coin);
+    hull.add(sack);
+    const mask = new THREE.Mesh(maskGeo, maskMat);
+    mask.position.y = 0.07;
+    turret.add(mask);
+    view.sack = sack;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (armorGroup) {
@@ -1260,6 +1289,15 @@ export class Renderer {
       if (u >= 1) this.rising.splice(i, 1);
     }
     for (const v of this.tanks.values()) {
+      const sk = v.sack;
+      if (sk) {
+        // it wobbles as it drives, and gulps (a quick swell) each time it steals a crate
+        const g = (sk.userData.gulp as number | undefined) ?? 0;
+        const full = 1 + Math.min(3, (sk.userData.loot as number | undefined) ?? 0) * 0.12;
+        const s0 = full + Math.sin(g * Math.PI) * 0.45;
+        sk.scale.set(s0, s0 * (1 + Math.sin(this.time * 9 + v.info.id) * 0.04), s0);
+        if (g > 0) sk.userData.gulp = Math.max(0, g - dt * 2.2);
+      }
       const c = v.crane;
       if (!c) continue;
       const sw = (c.userData.swing as number | undefined) ?? 0;
@@ -1954,6 +1992,14 @@ export class Renderer {
     const v = new THREE.Vector3(x, h, y).project(this.camera);
     const r = this.canvas.getBoundingClientRect();
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  }
+
+  /** A Pilleur snatches a crate: its sack gulps and grows a little fatter. */
+  steal(id: number) {
+    const sk = this.tanks.get(id)?.sack;
+    if (!sk) return;
+    sk.userData.gulp = 1;
+    sk.userData.loot = ((sk.userData.loot as number | undefined) ?? 0) + 1;
   }
 
   tankKind(id: number) {

@@ -5,9 +5,9 @@ import { H, W, Tile, TankKind } from './constants';
 //         = tunnel (iteration 13): tanks drive through and hide inside, shells bounce off; it must sit between two
 //           solid tiles (walls or holes) on either its left and right or its top and bottom, which gives its direction
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief',
 };
 
 export interface LevelDef {
@@ -514,6 +514,29 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 15: the Pilleurs' flea market, cork stalls round an open square where the crates fall
+  24: {
+    name: 'Le marché aux puces',
+    map: [
+      '......................',
+      '..............t.......',
+      '..1....oo....oo.......',
+      '.......o......o....a..',
+      '..2...................',
+      '....##..........##....',
+      '....#....o..o....#....',
+      '.........o..o.........',
+      '..o..........t.....o..',
+      '.........o..o.........',
+      '....#....o..o....#....',
+      '....##..........##....',
+      '...................p..',
+      '.......o......o.......',
+      '.......oo....oo.......',
+      '..............t.......',
+      '......................',
+    ],
+  },
 };
 
 export interface ParsedLevel {
@@ -642,6 +665,12 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 21) {
       const rm = rng(mission * 4271 + 17);
       for (const e of enemies) if (e.kind !== 'steel' && rm() < 0.16) e.kind = 'mason';
+    }
+    // the Pilleur (iteration 15) slips in from the 25th: one more stream, at most two of them
+    if (opt.seed === undefined && mission > 24) {
+      const rt = rng(mission * 9029 + 41);
+      let n = 0;
+      for (const e of enemies) if (n < 2 && e.kind !== 'steel' && e.kind !== 'mason' && rt() < 0.09) { e.kind = 'thief'; n++; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

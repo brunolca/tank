@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
@@ -335,6 +335,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
   else if (tiles.some(isTunnel)) setTimeout(() => toast('Tunnels : roule dedans pour disparaître aux yeux de l’ennemi. Les obus rebondissent dessus, mais on ne peut pas tirer de l’intérieur.', 4200), 2200);
@@ -618,8 +619,20 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (!kind) break;
       const info = BONUS_INFO[kind];
       renderer.bonusBurst(e[1], e[2], info.color);
+      if (renderer.tankKind(e[4]) === 'thief') {
+        // a Pilleur got there first (iteration 15)
+        renderer.steal(e[4]);
+        floater(e[1], e[2], `Volé : ${info.label.toLowerCase()} !`, enemyColor('thief'));
+        if (audible) sfx.steal();
+        break;
+      }
       floater(e[1], e[2], `${info.label} !`, info.color);
       if (audible) sfx.bonus();
+      break;
+    }
+    case 'loot': {
+      const kind = BONUS_KINDS[e[3]];
+      floater(e[1], e[2], 'Le butin !', kind ? BONUS_INFO[kind].color : 0xffc94a);
       break;
     }
     case 'shield':
@@ -1129,7 +1142,7 @@ let attractOpts: AttractOpts = {};
 
 function attractMission() {
   const r = Math.random();
-  return r < 0.12 ? 21 : r < 0.3 ? 22 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 14);
+  return r < 0.1 ? 21 : r < 0.25 ? 22 + Math.floor(Math.random() * 2) : r < 0.4 ? 24 : 2 + Math.floor(Math.random() * 14); // the flea market of the Pilleurs too (iteration 15)
 }
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -1303,6 +1316,37 @@ function updateMusicBtn(on = isMusicOn()) {
 }
 $('#btn-music').addEventListener('click', () => updateMusicBtn(toggleMusic()));
 updateMusicBtn();
+
+// ------------------------------------------------------------------ full screen (iteration 15, a player's report: the big address bar in landscape on iPhone)
+{
+  const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void; webkitFullscreenEnabled?: boolean };
+  const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  const installed = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  // an iPhone has no full-screen mode for web pages: only a shortcut on the home screen hides the address bar
+  const canFull = !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled) && !!(root.requestFullscreen || root.webkitRequestFullscreen);
+  const howTo = 'Sur iPhone, la barre d’adresse ne se cache pas dans le navigateur. Pour jouer en plein écran : bouton Partager, puis « Sur l’écran d’accueil », et lance Tanks! depuis l’icône.';
+  const btn = $('#btn-full');
+  if (installed || new URLSearchParams(location.search).has('demo')) btn.hidden = true;
+  btn.addEventListener('click', async () => {
+    if (!canFull) { toast(howTo, 7000); return; }
+    try {
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) await (document.exitFullscreen?.() ?? doc.webkitExitFullscreen?.());
+      else {
+        await (root.requestFullscreen?.({ navigationUI: 'hide' }) ?? root.webkitRequestFullscreen?.());
+        await (window.screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock?.('landscape').catch(() => {});
+      }
+    } catch { toast('Le plein écran n’est pas disponible ici.', 3000); }
+  });
+  // in landscape on a phone, say it once per visit
+  let told = false;
+  const hint = () => {
+    if (told || installed || canFull || !(controls.touchMode || matchMedia('(pointer: coarse)').matches) || innerWidth <= innerHeight || innerHeight > 520) return;
+    told = true;
+    setTimeout(() => toast(howTo, 7000), 1200);
+  };
+  addEventListener('resize', hint);
+  addEventListener('touchstart', hint, { once: true, passive: true });
+}
 
 // ------------------------------------------------------------------ iteration stamp, journal
 
@@ -1584,6 +1628,19 @@ if (params.has('demo')) {
     /** Drop a bonus crate (random kind if omitted) somewhere free in the demo arena. */
     crate(kind?: BonusKind) {
       return !!attract?.spawnBonus(kind && BONUS_KINDS.includes(kind) ? kind : undefined);
+    },
+    /** Drop a crate a few steps from a Pilleur, on the far side from the heroes (to film the theft). */
+    bait(kind?: BonusKind) {
+      const th = attract?.tanks.find((t) => t.alive && t.kind === 'thief');
+      const c = attract?.spawnBonus(kind && BONUS_KINDS.includes(kind) ? kind : undefined);
+      if (!th || !c || !attract) return !!c;
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2, x = Math.floor(th.x + Math.cos(a) * 2.6) + 0.5, y = Math.floor(th.y + Math.sin(a) * 2.6) + 0.5;
+        if (x < 1 || y < 1 || x > W - 1 || y > H - 1 || attract.tiles[Math.floor(y) * W + Math.floor(x)] !== Tile.Empty) continue;
+        c.x = x; c.y = y;
+        break;
+      }
+      return true;
     },
     /** Hand a bonus straight to every hero tank (to show it on camera). */
     buff(kind: BonusKind) {

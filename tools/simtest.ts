@@ -581,6 +581,70 @@ console.log('total', Date.now() - t0, 'ms');
   if (process.exitCode !== 1) console.log(`Maçon OK (${built.length} bloc(s) en tête-à-tête, ${builds} sur le chantier en 60 s, ${per.toFixed(3)} ms/tick, missions : ${masonMissions.join(', ')})`);
 }
 
+// the Pilleur (iteration 15): it races to the crates, keeps the bonus, and drops it when destroyed
+{
+  const fail = (m: string) => { console.error('PILLEUR:', m); process.exitCode = 1; };
+  if (getMission(24).name !== 'Le marché aux puces' || getMission(24).enemies.filter((e) => e.kind === 'thief').length < 2) fail('« Le marché aux puces » (24) devrait avoir des pilleurs');
+  if (getMission(21).name !== 'Le chantier' || getMission(22).name !== 'Le tunnel') fail('les missions faites main ont bougé');
+  const thiefMissions: number[] = [];
+  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'thief')) thiefMissions.push(mission);
+  if (thiefMissions.some((m) => m < 24)) fail('pilleur avant la 24ᵉ mission');
+  if (thiefMissions.length < 8) fail(`trop peu de missions avec des pilleurs (${thiefMissions.length})`);
+  for (let day = SEVEN_TWISTS_FROM - 3; day < SEVEN_TWISTS_FROM + 20; day++) {
+    for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'thief')) fail(`défi du jour ${day} : un pilleur est apparu`);
+  }
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'thief')) fail('pilleur dans la taupe');
+  // open table: a crate falls far from both, the Pilleur fetches it
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  g.bonusOn = true;
+  g.bonusNext = 999;
+  const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const th = g.addTank('thief', 99, 12.5, 8.5, 0);
+  g.frozen = false;
+  const c = g.spawnBonus('fan');
+  if (!c) fail('aucune caisse posée');
+  else {
+    c.x = 18.5; c.y = 2.5;
+    let took = -1;
+    for (let i = 0; i < 30 * 15 && took < 0; i++) {
+      p.buffs.invuln = 1; th.buffs.invuln = 1;
+      g.bonusNext = 999;
+      g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+      for (const e of g.events) if (e[0] === 'bonus' && e[4] === th.id) took = i;
+      g.events = [];
+    }
+    if (took < 0) fail('le pilleur n’a pas ramassé la caisse en 15 s');
+    else if (th.buffs.fan <= 0 || th.loot !== 'fan') fail('le pilleur n’a pas gardé le bonus');
+    th.buffs.invuln = 0;
+    g.killTank(th, p);
+    const loot = g.events.find((e) => e[0] === 'loot');
+    if (th.alive) fail('le pilleur a survécu');
+    else if (!loot || !g.bonuses.some((b) => b.kind === 'fan')) fail('le butin n’est pas tombé');
+    else if (g.tiles[Math.floor(loot[2] as number) * W + Math.floor(loot[1] as number)] !== Tile.Empty) fail('butin posé sur un mur');
+    if (process.exitCode !== 1) console.log(`Pilleur : caisse volée en ${(took / 30).toFixed(1)} s`);
+  }
+  // the flea market stays cheap with four AI players
+  const lvl = getMission(24);
+  const s = new Game(lvl.tiles);
+  s.bonusOn = true;
+  for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+  for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
+  s.frozen = false;
+  let stolen = 0, crates = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 60; i++) {
+    s.step(new Map());
+    for (const e of s.events) {
+      if (e[0] === 'crate') crates++;
+      if (e[0] === 'bonus' && s.tankById(e[4] as number)?.kind === 'thief') stolen++;
+    }
+    s.events = [];
+  }
+  const per = (performance.now() - t1) / (30 * 60);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`Pilleur OK (${crates} caisse(s) et ${stolen} vol(s) au marché en 60 s, ${per.toFixed(3)} ms/tick, missions : ${thiefMissions.join(', ')})`);
+}
+
 // tunnels (iteration 13): tanks drive through and hide inside, shells bounce off, no firing from inside, the roof stops lightning
 {
   const fail = (m: string) => { console.error('TUNNELS:', m); process.exitCode = 1; };

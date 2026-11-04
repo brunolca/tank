@@ -38,6 +38,7 @@ export const BRUSHES: Brush[] = [
   { ch: 'c', label: 'Maçon', group: 'tank' },
   { ch: 'X', label: 'Colosse', group: 'tank' },
   { ch: 'D', label: 'Foreur', group: 'tank' },
+  { ch: 't', label: 'Pilleur', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

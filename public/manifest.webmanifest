@@ -1,0 +1,18 @@
+{
+  "name": "Tanks!",
+  "short_name": "Tanks!",
+  "description": "Des tanks jouets en bois, des obus qui ricochent, jusqu’à quatre en ligne.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#1b1d24",
+  "theme_color": "#1b1d24",
+  "icons": [
+    { "src": "/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

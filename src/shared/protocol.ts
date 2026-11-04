@@ -69,7 +69,8 @@ export type GameEvent =
   | ['dig', number, number, number] // x y tankId: the Foreur goes under the table (iteration 11)
   | ['quake', number, number, number, number] // x y seconds tankId: the ground shakes where the Foreur is about to burst out
   | ['erupt', number, number, number] // x y tankId: it bursts out (older clients ignore all three and just see the damage)
-  | ['build', number, number, number]; // cx cy tankId: the Maçon lays a cork block on that cell (iteration 12; older tabs are told to reload)
+  | ['build', number, number, number] // cx cy tankId: the Maçon lays a cork block on that cell (iteration 12; older tabs are told to reload)
+  | ['loot', number, number, number]; // x y bonusKind: a Pilleur is destroyed and drops a crate of what it stole (iteration 15)
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
 export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean }
