@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { BELT_SPEED, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import type { TankInfo } from '../shared/protocol';
 
@@ -231,6 +231,44 @@ function crateTexture(kind: BonusKind) {
 }
 
 /** Spiral swirl painted once and shared by every portal (tinted by the material colour). */
+/** Rubber of a conveyor belt (iteration 16): orange chevrons pointing along +u, wooden rails on both edges. */
+function beltTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#3b3f4b';
+  g.fillRect(0, 0, 128, 128);
+  // ribs of the rubber
+  g.fillStyle = 'rgba(255,255,255,0.06)';
+  for (let x = 0; x < 128; x += 16) g.fillRect(x, 14, 6, 100);
+  // two chevrons per tile
+  g.strokeStyle = '#ffb43d';
+  g.lineWidth = 11;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (const x0 of [14, 78]) {
+    g.beginPath();
+    g.moveTo(x0, 34);
+    g.lineTo(x0 + 26, 64);
+    g.lineTo(x0, 94);
+    g.stroke();
+  }
+  // rails along both edges
+  for (const y0 of [0, 116]) {
+    g.fillStyle = '#b98a55';
+    g.fillRect(0, y0, 128, 12);
+    g.fillStyle = 'rgba(70,40,15,0.45)';
+    g.fillRect(0, y0 === 0 ? 10 : 116, 128, 2);
+    g.fillStyle = '#6b4a2c';
+    for (let x = 8; x < 128; x += 32) { g.beginPath(); g.arc(x, y0 + 6, 2.2, 0, Math.PI * 2); g.fill(); }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
 function swirlTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -595,6 +633,11 @@ export class Renderer {
   private blocks = new Map<number, THREE.Mesh>();
   private portals: PortalView[] = [];
   // tunnels (iteration 13): an arched toy-train tunnel per cell, its roof fades while a tank is inside
+  /** Conveyor belts (iteration 16): one instanced slab per belt cell, a single texture scrolls them all along. */
+  private beltTex = beltTexture();
+  private beltMat = new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.85 });
+  private beltGeo = new THREE.PlaneGeometry(1, 0.94).rotateX(-Math.PI / 2);
+  private beltMesh?: THREE.InstancedMesh;
   private tunnels: { cell: number; root: THREE.Group; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; op: number }[] = [];
   private tunnelBusy = new Set<number>();
   private tunnelGeo = {
@@ -973,7 +1016,7 @@ export class Renderer {
     for (let i = n; i < this.heads.length; i++) this.heads[i].intensity = 0;
   }
 
-  setLevel(tiles: number[], infos: TankInfo[]) {
+  setLevel(tiles: number[], infos: TankInfo[], belts: number[] = []) {
     this.nightApplied = -1; // the new tanks' lamps follow the current light
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
@@ -1002,6 +1045,7 @@ export class Renderer {
     for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
 
     this.paintFloor(tiles);
+    this.addBelts(belts);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const t = tiles[y * W + x];
@@ -1022,6 +1066,25 @@ export class Renderer {
       this.tanks.set(info.id, v);
       this.scene.add(v.root);
     }
+  }
+
+  private addBelts(belts: number[]) {
+    if (this.beltMesh) { this.levelGroup.remove(this.beltMesh); this.beltMesh.dispose(); this.beltMesh = undefined; }
+    const cells: number[] = [];
+    belts.forEach((b, i) => { if (b >= 1 && b <= 4) cells.push(i); });
+    if (!cells.length) return;
+    const mesh = new THREE.InstancedMesh(this.beltGeo, this.beltMat, cells.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+    // the texture runs along local x: turn each slab so that x points down its belt (right, left, up the grid = -z, down = +z)
+    const ANG = [0, 0, Math.PI, Math.PI / 2, -Math.PI / 2];
+    cells.forEach((i, k) => {
+      q.setFromAxisAngle(up, ANG[belts[i]]);
+      m.compose(new THREE.Vector3((i % W) + 0.5, 0.014, Math.floor(i / W) + 0.5), q, one);
+      mesh.setMatrixAt(k, m);
+    });
+    mesh.receiveShadow = true;
+    this.levelGroup.add(mesh);
+    this.beltMesh = mesh;
   }
 
   /** A piece of toy-train tunnel (iteration 13): a painted arch, dark inside, with a cream rim at each mouth. */
@@ -1683,6 +1746,10 @@ export class Renderer {
         c = { root, box, halo, beam, born: this.time, x: b.x, y: b.y, kind };
         this.crates.set(b.id, c);
       }
+      const far = Math.abs(b.x - c.root.position.x) + Math.abs(b.y - c.root.position.z) > 1; // and so do the crates
+      c.root.position.x += (b.x - c.root.position.x) * (far ? 1 : 0.5);
+      c.root.position.z += (b.y - c.root.position.z) * (far ? 1 : 0.5);
+      c.x = b.x; c.y = b.y;
       const age = this.time - c.born;
       const fall = Math.max(0, 1 - age / 0.45);
       c.box.position.y = 0.36 + Math.sin(this.time * 2.6 + b.id) * 0.05 + fall * fall * 4;
@@ -1791,6 +1858,10 @@ export class Renderer {
         this.scene.add(g);
         this.mines.set(mn.id, g);
       }
+      // mines ride the belts (iteration 16): glide to the new spot, jump when a portal took them
+      const far = Math.abs(mn.x - g.position.x) + Math.abs(mn.y - g.position.z) > 1;
+      g.position.x += (mn.x - g.position.x) * (far ? 1 : 0.5);
+      g.position.z += (mn.y - g.position.z) * (far ? 1 : 0.5);
       const led = g.getObjectByName('led') as THREE.Mesh;
       const on = mn.blink ? Math.sin(this.time * 22) > 0 : Math.sin(this.time * 3) > 0.6;
       led.material = on ? this.ledOn : this.ledOff;
@@ -1914,6 +1985,7 @@ export class Renderer {
     this.debris.update(dt);
     this.animatePortals(dt);
     this.animateTunnels(dt);
+    if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
     this.animateStorm(dt);

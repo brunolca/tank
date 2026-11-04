@@ -102,6 +102,18 @@ export class Controls {
     this.keys.clear();
   }
 
+  /** A jolt in the hands (iteration 16): the gamepad rumbles if it can, a touch phone buzzes. */
+  rumble(strength: number, ms: number) {
+    try {
+      if (this.usingPad) {
+        for (const p of navigator.getGamepads?.() ?? []) {
+          const act = (p as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, o: object) => Promise<unknown> } }) | null)?.vibrationActuator;
+          if (p?.connected && act?.playEffect) { act.playEffect('dual-rumble', { duration: ms, strongMagnitude: strength, weakMagnitude: Math.min(1, strength + 0.2) }).catch(() => {}); break; }
+        }
+      } else if (this.touchMode && navigator.vibrate) navigator.vibrate(ms);
+    } catch { /* no rumble here: never mind */ }
+  }
+
   sample(): InputSample {
     if (this.suspended) {
       this.fireLatch = this.mineLatch = false;

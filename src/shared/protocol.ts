@@ -126,6 +126,7 @@ export type ServerMsg =
       tick: number;
       night?: 1; // night mission (older clients just play it in daylight)
       storm?: 1; // storm: lightning strikes (iteration 9; older clients see tanks blow up without the lightning)
+      belts?: number[]; // conveyor belts, one code per cell (iteration 16; older tabs are told to reload, at worst they see tanks glide)
       daily?: DailyState;
     }
   | {

@@ -1,9 +1,9 @@
 import {
-  BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BELT_DIRS, BELT_SPEED, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, Tile, TUNNEL_SIGHT, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
-import { angDiff, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { angDiff, beltStep, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 
 export interface Tank {
@@ -185,13 +185,16 @@ export class Game {
   bolts: Bolt[] = [];
   /** Seconds left of the last lightning flash: the whole table is lit (the AI sees everyone, even at night). */
   flash = 0;
+  /** Conveyor belts (iteration 16): one code per cell (0 none, 1 right, 2 left, 3 up, 4 down), empty when the map has none. */
+  belts: number[] = [];
   tick = 0;
   frozen = true;
   private nextId = 1;
   onKill?: KillCb;
 
-  constructor(tiles: number[]) {
+  constructor(tiles: number[], belts?: number[]) {
     this.tiles = tiles.slice();
+    if (belts?.some(Boolean)) this.belts = belts.slice();
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -267,9 +270,10 @@ export class Game {
       if (t.build) this.updateMason(t);
       if (t.ai) {
         this.updateAI(t);
+        this.rideBelt(t);
       } else if (t.pid) {
         const inp = inputs.get(t.pid);
-        if (inp) this.applyInput(t, inp);
+        if (inp) { this.applyInput(t, inp); this.rideBelt(t); } // same order as the client prediction: drive, then the belt
       }
     }
     this.separateTanks();
@@ -364,6 +368,7 @@ export class Game {
       c.t += dt;
       if (c.t >= BONUS_LIFE) { c.dead = true; continue; }
       if (c.t < 0.5) continue; // still dropping in
+      if (this.belts.length) [c.x, c.y] = beltStep(this.tiles, this.belts, c.x, c.y, BONUS_R, dt); // and so do the crates
       for (const t of this.tanks) {
         if (!t.alive || (t.kind !== 'player' && t.kind !== 'thief')) continue;
         const rr = TANK_R + BONUS_R;
@@ -697,6 +702,17 @@ export class Game {
     }
   }
 
+  /** A conveyor belt under the tank carries it along (iteration 16). */
+  rideBelt(t: Tank) {
+    if (!this.belts.length || !t.alive) return;
+    const px = t.x, py = t.y;
+    [t.x, t.y] = beltStep(this.tiles, this.belts, t.x, t.y, t.r, DT);
+    if ((t.x - px) ** 2 + (t.y - py) ** 2 > 1) {
+      this.events.push(['warp', r2(px), r2(py), r2(t.x), r2(t.y), t.id]);
+      if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; t.ai.goal = undefined; }
+    }
+  }
+
   ownBullets(t: Tank) {
     let n = 0;
     for (const b of this.bullets) if (b.owner === t.id && !b.dead) n++;
@@ -836,6 +852,7 @@ export class Game {
     for (const m of this.mines) {
       if (m.dead) continue;
       m.t += dt;
+      if (this.belts.length) [m.x, m.y] = beltStep(this.tiles, this.belts, m.x, m.y, MINE_R, dt); // mines ride the belts too
       if (m.fuse < 0 && m.t > 0.4) {
         for (const t of this.tanks) {
           if (!t.alive || t.team === m.team || t.id === m.owner || under(t)) continue;
@@ -974,7 +991,7 @@ export class Game {
       | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0);
   }
   netBonuses(): NetBonus[] {
-    return this.bonuses.map((c) => [c.id, c.x, c.y, BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
+    return this.bonuses.map((c) => [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
   }
   netBullets(): NetBullet[] {
     return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), b.rocket ? 1 : 0, b.owner]);
@@ -1282,6 +1299,7 @@ export class Game {
     }
     // the Pilleur looks across the whole table when there is a crate to snatch (iteration 15)
     const thief = t.kind === 'thief' && this.bonuses.some((c) => c.t >= 0.3);
+    const slowOnBelts = this.belts.length > 0 && this.speedOf(t) < BELT_SPEED + 0.5;
     const prev = new Int32Array(W * H).fill(-2);
     const dist = new Int32Array(W * H);
     prev[start] = -1;
@@ -1298,6 +1316,11 @@ export class Game {
         const n = ny * W + nx;
         if (prev[n] !== -2 || blocked[n]) continue;
         if (dx && dy && (blocked[y * W + nx] || blocked[ny * W + x])) continue;
+        if (slowOnBelts && this.belts[n]) {
+          // a tank slower than the belts cannot drive up one: it plans around (or rides it) instead (iteration 16)
+          const [bx, by] = BELT_DIRS[this.belts[n]];
+          if (bx * dx + by * dy < 0) continue;
+        }
         prev[n] = c;
         dist[n] = dist[c] + 1;
         q.push(n);

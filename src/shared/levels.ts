@@ -1,9 +1,10 @@
-import { H, W, Tile, TankKind } from './constants';
+import { BELT_CHARS, H, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
 //         = tunnel (iteration 13): tanks drive through and hide inside, shells bounce off; it must sit between two
 //           solid tiles (walls or holes) on either its left and right or its top and bottom, which gives its direction
+//         > < ^ V conveyor belts (iteration 16): tanks, mines and crates ride them (the cell stays floor underneath)
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)
 export const ENEMY_CHARS: Record<string, TankKind> = {
@@ -15,6 +16,8 @@ export interface LevelDef {
   map: string[];
   night?: boolean; // dark table: the AI only sees up close (or a muzzle flash), players drive with headlights
   storm?: boolean; // lightning strikes fall on the table, announced by a crackling ring (iteration 9)
+  /** Optional overlay of conveyor belts (same 17 rows, only > < ^ V count): lets a tank start on a belt (iteration 16). */
+  belts?: string[];
 }
 
 export const LEVELS: LevelDef[] = [
@@ -537,6 +540,71 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 16: the toy factory's assembly line, three belts running across the table in turn
+  25: {
+    name: 'La chaîne de montage',
+    map: [
+      '......................',
+      '..1.......#.......a...',
+      '..........#...........',
+      '..2.......#.....##....',
+      '>>>>>>>>>>>>>>>>>>>>>>',
+      '......o.......o.......',
+      '....###...y.....###...',
+      '......................',
+      '<<<<<<<<<<<<<<<<<<<<<<',
+      '......................',
+      '....###.....p....###..',
+      '......o.......o.......',
+      '>>>>>>>>>>>>>>>>>>>>>>',
+      '..........#.....##....',
+      '..........#.......a...',
+      '.......m..#...........',
+      '......................',
+    ],
+  },
+  // iteration 16: a merry-go-round of belts carrying brown and green turrets round the yard
+  26: {
+    name: 'Le carrousel',
+    map: [
+      '......................',
+      '..1...................',
+      '......................',
+      '.......b.....b........',
+      '......................',
+      '.....##.......##......',
+      '.....#....a.....#.....',
+      '......................',
+      '.......HHHHHHHH.....g.',
+      '......................',
+      '.....#.....p....#.....',
+      '.....##.......##......',
+      '......................',
+      '........b.......b.....',
+      '......................',
+      '..2...................',
+      '......................',
+    ],
+    belts: [
+      '......................',
+      '......................',
+      '......................',
+      '.V<<<<<<<<<<<<<<<<<<<.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.V..................^.',
+      '.>>>>>>>>>>>>>>>>>>>^.',
+      '......................',
+      '......................',
+      '......................',
+    ],
+  },
 };
 
 export interface ParsedLevel {
@@ -546,12 +614,15 @@ export interface ParsedLevel {
   enemies: { kind: TankKind; x: number; y: number }[];
   night?: boolean;
   storm?: boolean;
+  /** Conveyor belts (iteration 16): one code per cell (0 none, 1 right, 2 left, 3 up, 4 down), only when the map has some. */
+  belts?: number[];
 }
 
 export function parseLevel(def: LevelDef): ParsedLevel {
   const tiles = new Array(W * H).fill(Tile.Empty);
   const spawns: [number, number][] = [];
   const enemies: ParsedLevel['enemies'] = [];
+  let belts: number[] | undefined;
   for (let y = 0; y < H; y++) {
     const row = (def.map[y] ?? '').padEnd(W, '.');
     for (let x = 0; x < W; x++) {
@@ -564,11 +635,21 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '*') tiles[i] = Tile.PortalA;
       else if (c === '+') tiles[i] = Tile.PortalB;
       else if (c === '=') tiles[i] = Tile.Tunnel;
+      else if ((BELT_CHARS as readonly string[]).includes(c)) (belts ??= new Array(W * H).fill(0))[i] = (BELT_CHARS as readonly string[]).indexOf(c) + 1;
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm };
+  if (def.belts) {
+    for (let y = 0; y < H; y++) {
+      const row = def.belts[y] ?? '';
+      for (let x = 0; x < W; x++) {
+        const k = (BELT_CHARS as readonly string[]).indexOf(row[x]);
+        if (k >= 0) (belts ??= new Array(W * H).fill(0))[y * W + x] = k + 1;
+      }
+    }
+  }
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
@@ -828,8 +909,8 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 export function versusArena(round: number): ParsedLevel {
-  // handmade missions, plus the tunnels of mission 22 (iteration 13)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22]);
+  // handmade missions, plus the tunnels of mission 22 (iteration 13) and the belts of mission 25 (iteration 16)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25]);
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

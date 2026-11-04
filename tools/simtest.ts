@@ -4,7 +4,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
 import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
-import { castRicochet, tunnelAxis } from '../src/shared/physics';
+import { beltStep, castRicochet, tunnelAxis } from '../src/shared/physics';
 
 for (const def of Object.values(EXTRA_LEVELS)) {
   const bad = def.map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
@@ -18,7 +18,7 @@ let t0 = Date.now();
 for (let mission = 1; mission <= LEVELS.length + 13; mission++) {
   const lvl = getMission(mission);
   if (!lvl.spawns.length || !lvl.enemies.length) { console.error(`M${mission}: no spawn or no enemy`); process.exitCode = 1; }
-  const g = new Game(lvl.tiles);
+  const g = new Game(lvl.tiles, lvl.belts);
   const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
   for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
   g.frozen = false;
@@ -46,7 +46,7 @@ console.log('total', Date.now() - t0, 'ms');
 {
   const fail = (m: string) => { console.error('BONUS:', m); process.exitCode = 1; };
   const lvl = getMission(1);
-  const g = new Game(lvl.tiles);
+  const g = new Game(lvl.tiles, lvl.belts);
   g.bonusOn = true;
   g.bonusNext = 999;
   const [sx, sy] = lvl.spawns[0];
@@ -87,7 +87,7 @@ console.log('total', Date.now() - t0, 'ms');
     if (!isBossMission(mission) || !lvl.enemies.some((e) => e.kind === 'boss' || e.kind === 'drill')) fail(`la mission ${mission} n’a pas de boss`);
   }
   const lvl = getMission(10);
-  const g = new Game(lvl.tiles);
+  const g = new Game(lvl.tiles, lvl.belts);
   const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
   const be = lvl.enemies.find((e) => e.kind === 'boss')!;
   const boss = g.addTank('boss', 99, be.x, be.y, 0);
@@ -216,7 +216,7 @@ console.log('total', Date.now() - t0, 'ms');
       if ((twist === 'colosse' && stage === DAILY_STAGES) !== lvl.enemies.some((e) => e.kind === 'boss')) fail(`jour ${day} étape ${stage} : Colosse mal placé`);
       // a quick fight to make sure the stage runs and stays cheap
       if (day < today + 5) {
-        const g = new Game(lvl.tiles);
+        const g = new Game(lvl.tiles, lvl.belts);
         applyTwist(g, twist);
         const p = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P');
         for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
@@ -248,7 +248,7 @@ console.log('total', Date.now() - t0, 'ms');
   const fail = (m: string) => { console.error('ARSENAL:', m); process.exitCode = 1; };
   const lvl = getMission(1);
   for (const w of WEAPONS) {
-    const g = new Game(lvl.tiles);
+    const g = new Game(lvl.tiles, lvl.belts);
     const [sx, sy] = lvl.spawns[0];
     const p = g.addTank('player', 0, sx, sy, 0x3d7bff, 'p1', 'P');
     g.arm(p, w);
@@ -354,7 +354,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (fled < 5) fail(`l’IA ne fuit pas la foudre (${fled}/6)`);
   // a storm keeps striking on its own, never on walls, and stays cheap
   const lvl = getMission(16);
-  const s = new Game(lvl.tiles);
+  const s = new Game(lvl.tiles, lvl.belts);
   s.storm = true;
   s.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'P').ai = undefined;
   for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
@@ -426,7 +426,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (u.hp !== 1 || u.spec.speed !== STEEL_STRIPPED.speed) fail('setHp ne dénude pas un blindé déjà touché');
   // a real mission with steel tanks runs and stays cheap
   const lvl = getMission(12);
-  const s = new Game(lvl.tiles);
+  const s = new Game(lvl.tiles, lvl.belts);
   for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
   for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
   s.frozen = false;
@@ -503,7 +503,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (e.boss!.dig < 2 && e.hp !== hp0 - 1) fail('un coup en surface ne compte pas');
   // a real Foreur fight stays cheap
   const lvl = getMission(20);
-  const s = new Game(lvl.tiles);
+  const s = new Game(lvl.tiles, lvl.belts);
   for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
   for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
   s.frozen = false;
@@ -569,7 +569,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (!q.alive && !n.alive) fail('test du couloir incohérent');
   // a real building site stays cheap
   const lvl = getMission(21);
-  const s = new Game(lvl.tiles);
+  const s = new Game(lvl.tiles, lvl.belts);
   for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
   for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
   s.frozen = false;
@@ -625,7 +625,7 @@ console.log('total', Date.now() - t0, 'ms');
   }
   // the flea market stays cheap with four AI players
   const lvl = getMission(24);
-  const s = new Game(lvl.tiles);
+  const s = new Game(lvl.tiles, lvl.belts);
   s.bonusOn = true;
   for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
   for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
@@ -695,7 +695,7 @@ console.log('total', Date.now() - t0, 'ms');
   let selfKills = 0, ticks = 0;
   for (const mission of [22, 23, 17, 12]) {
     const lvl = getMission(mission);
-    const s = new Game(lvl.tiles);
+    const s = new Game(lvl.tiles, lvl.belts);
     for (const [sx, sy] of lvl.spawns) { const pl = s.addTank('player', 0, sx, sy, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
     for (const en of lvl.enemies) s.addTank(en.kind, 99, en.x, en.y, 0);
     s.frozen = false;
@@ -747,7 +747,7 @@ console.log('total', Date.now() - t0, 'ms');
   for (const a of [ATELIER_SAMPLE, { ...ATELIER_SAMPLE, night: true, storm: true }]) {
     const lvl = atelierLevel(a);
     if (lvl.name !== a.name || !!lvl.night !== !!a.night) fail('niveau de l’atelier mal construit');
-    const g = new Game(lvl.tiles);
+    const g = new Game(lvl.tiles, lvl.belts);
     for (const [sx, sy] of lvl.spawns) { const pl = g.addTank('player', 0, sx, sy, 0x3d7bff); g.enableAI(pl, { skill: 2 }); }
     for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
     g.night = !!lvl.night; g.storm = !!lvl.storm; g.bonusOn = true; g.frozen = false;
@@ -757,4 +757,98 @@ console.log('total', Date.now() - t0, 'ms');
   const per = (performance.now() - t1) / ticks;
   if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`atelier OK (« ${ATELIER_SAMPLE.name} » : ${kills} ennemi(s) détruit(s) en ${(ticks / 30).toFixed(0)} s, ${per.toFixed(3)} ms/tick, code de ${encodeAtelier(ATELIER_SAMPLE).length} caractères)`);
+}
+
+// conveyor belts (iteration 16): they carry tanks, mines and crates, the client prediction agrees, slow tanks don't fight them
+{
+  const fail = (m: string) => { console.error('TAPIS:', m); process.exitCode = 1; };
+  const beltMissions: number[] = [];
+  for (let mission = 1; mission <= 40; mission++) {
+    const lvl = getMission(mission);
+    if (!lvl.belts) continue;
+    beltMissions.push(mission);
+    if (lvl.belts.length !== W * H) fail(`mission ${mission} : couche de tapis de mauvaise taille`);
+    lvl.belts.forEach((b, i) => {
+      if (b < 0 || b > 4) fail(`mission ${mission} : code de tapis ${b}`);
+      if (b && lvl.tiles[i] !== Tile.Empty) fail(`mission ${mission} : tapis sous un mur en (${i % W}, ${Math.floor(i / W)})`);
+    });
+  }
+  if (!beltMissions.includes(25) || !beltMissions.includes(26)) fail(`missions à tapis : ${beltMissions.join(', ')}`);
+  if (!Array.from({ length: 24 }, (_, r) => !!versusArena(r).belts).some(Boolean)) fail('aucune arène de versus à tapis');
+  for (let d = 0; d < 60; d++) if (dailyLevel(20000 + d, 1 + (d % DAILY_STAGES)).belts) fail('un tapis dans le défi du jour');
+  // an empty table with a belt running right along row 8, a wall at its end
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  const belts = new Array(W * H).fill(0);
+  for (let x = 2; x <= 15; x++) belts[8 * W + x] = 1;
+  tiles[8 * W + 17] = Tile.Wall;
+  const g = new Game(tiles, belts);
+  const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const brown = g.addTank('brown', 99, 6.5, 8.5, 0);
+  g.frozen = false;
+  const idle = new Map([['p1', { s: 0, mx: 0, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+  for (let i = 0; i < 30; i++) { g.step(idle); g.events = []; }
+  if (Math.abs(p.x - 3.5 - 1.45) > 0.05) fail(`le tapis n’emporte pas le joueur (${p.x.toFixed(2)})`);
+  if (Math.abs(brown.x - 6.5 - 1.45) > 0.05) fail(`le tapis n’emporte pas la tourelle (${brown.x.toFixed(2)})`);
+  // a mine rides along and stops just past the end of the belt (its centre leaves the last cell)
+  const mine = { id: 999, owner: brown.id, team: 99, x: 12.5, y: 8.5, t: 0, fuse: -1, dead: false };
+  g.mines.push(mine as (typeof g.mines)[number]);
+  g.tanks = g.tanks.filter((t) => t !== brown);
+  p.x = 3.5; p.y = 4.5;
+  for (let i = 0; i < 30 * 3; i++) { g.step(idle); g.events = []; }
+  if (mine.x < 16 || mine.x > 16.1) fail(`la mine n’a pas suivi le tapis jusqu’au bout (${mine.x.toFixed(2)})`);
+  // the client prediction (drive, then belt, input by input) lands exactly where the room puts the tank
+  {
+    const lvl = getMission(26);
+    const s = new Game(lvl.tiles, lvl.belts);
+    const pl = s.addTank('player', 0, 1.5, 6.5, 0x3d7bff, 'p1', 'P');
+    s.frozen = false;
+    let x = pl.x, y = pl.y, body = pl.body, worst = 0;
+    for (let k = 0; k < 30 * 8; k++) {
+      const inp = { s: k, mx: Math.cos(k / 23) * 0.6, my: Math.sin(k / 31), a: 0, f: 0 as const, m: 0 as const };
+      s.step(new Map([['p1', inp]]));
+      s.events = [];
+      [x, y, body] = driveStep(lvl.tiles, x, y, body, inp.mx, inp.my, SPECS.player.speed, DT);
+      [x, y] = beltStep(lvl.tiles, lvl.belts, x, y, pl.r, DT);
+      worst = Math.max(worst, Math.hypot(x - pl.x, y - pl.y));
+    }
+    if (worst > 1e-9) fail(`la prédiction s’écarte de ${worst.toFixed(4)} sur les tapis`);
+  }
+  // the carrousel turns: its brown turrets come back round, and slow tanks never plan a path up a belt
+  {
+    const lvl = getMission(26);
+    const s = new Game(lvl.tiles, lvl.belts);
+    for (const e of lvl.enemies) s.addTank(e.kind, 99, e.x, e.y, 0);
+    s.frozen = false;
+    const b0 = s.tanks.find((t) => t.kind === 'brown')!;
+    const x0 = b0.x, y0 = b0.y;
+    let moved = 0;
+    for (let i = 0; i < 30 * 20; i++) { s.step(new Map()); s.events = []; moved = Math.max(moved, Math.hypot(b0.x - x0, b0.y - y0)); }
+    if (moved < 5) fail(`la tourelle du carrousel ne tourne pas (${moved.toFixed(1)} cases)`);
+  }
+  // the workshop paints belts and shares them by link
+  {
+    const map = ATELIER_SAMPLE.map.slice();
+    map[7] = '>>>>>>^...VVV....<<<<';
+    map[7] = map[7].padEnd(W, '<');
+    if (checkAtelier(map)) fail(`atelier : carte à tapis refusée (${checkAtelier(map)})`);
+    const code = encodeAtelier({ name: 'Usine', map });
+    const back = decodeAtelier(code);
+    if (!back || back.map.join('') !== map.join('')) fail('atelier : aller-retour du code raté avec des tapis');
+    if (/[^A-Za-z0-9_.-]/.test(code)) fail(`atelier : code pas sûr pour un lien : ${code}`);
+    if (!atelierLevel({ name: 'Usine', map }).belts?.some(Boolean)) fail('atelier : les tapis disparaissent en partie');
+    if (decodeAtelier(encodeAtelier(ATELIER_SAMPLE))?.map.join('') !== ATELIER_SAMPLE.map.join('')) fail('atelier : les anciens codes ne passent plus');
+  }
+  // performance with every belt busy
+  {
+    const lvl = getMission(25);
+    const s = new Game(lvl.tiles, lvl.belts);
+    for (const [sx, sy] of lvl.spawns) { const pl = s.addTank('player', 0, sx, sy, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+    for (const e of lvl.enemies) s.addTank(e.kind, 99, e.x, e.y, 0);
+    s.bonusOn = true; s.frozen = false;
+    const t1 = performance.now();
+    for (let i = 0; i < 30 * 40; i++) { s.step(new Map()); s.events = []; }
+    const per = (performance.now() - t1) / (30 * 40);
+    if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+    if (process.exitCode !== 1) console.log(`tapis OK (missions : ${beltMissions.join(', ')}, ${per.toFixed(3)} ms/tick)`);
+  }
 }

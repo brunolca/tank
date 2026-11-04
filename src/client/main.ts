@@ -3,7 +3,7 @@ import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelie
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, type ParsedLevel } from '../shared/levels';
 import META from '../shared/meta.json';
-import { angDiff } from '../shared/physics';
+import { angDiff, beltStep } from '../shared/physics';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
@@ -188,6 +188,7 @@ interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, N
 
 let online = false;
 let tiles: number[] = [];
+let belts: number[] = []; // conveyor belts of the current level (iteration 16), empty when it has none
 let infos = new Map<number, TankInfo>();
 let myTankId = -1;
 let snaps: Snap[] = [];
@@ -275,6 +276,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   currentMode = msg.mode;
   if (msg.mode !== 'taupe') myRole = undefined;
   tiles = msg.tiles.slice();
+  belts = Array.isArray(msg.belts) && msg.belts.length === W * H ? msg.belts.map((b) => b | 0) : [];
   infos = new Map(msg.tanks.map((t) => [t.id, t]));
   myTankId = msg.tanks.find((t) => t.pid === pid)?.id ?? -1;
   mySpec = playerSpec(msg.tanks.find((t) => t.id === myTankId)?.w ?? 'canon');
@@ -292,7 +294,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   lives = msg.lives;
   currentMission = msg.mission;
   currentLevelName = msg.name;
-  renderer.setLevel(tiles, msg.tanks);
+  renderer.setLevel(tiles, msg.tanks, belts);
   renderer.setNight(!!msg.night);
   renderer.setStorm(!!msg.storm);
   show('game');
@@ -338,6 +340,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
+  else if (belts.some(Boolean)) setTimeout(() => toast('Tapis roulants : ils emportent les tanks, les mines et les caisses. Remonter le courant, ça ralentit !', 4200), 2200);
   else if (tiles.some(isTunnel)) setTimeout(() => toast('Tunnels : roule dedans pour disparaître aux yeux de l’ennemi. Les obus rebondissent dessus, mais on ne peut pas tirer de l’intérieur.', 4200), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
@@ -430,6 +433,7 @@ function predictStep(x: number, y: number, body: number, mx: number, my: number,
   const snap = s ?? snaps[snaps.length - 1];
   const turbo = (snap?.T.get(myTankId)?.[5] ?? 0) & BONUS_INFO.turbo.flag;
   [x, y, body] = driveStep(tiles, x, y, body, mx, my, mySpec.speed * (turbo ? TURBO_MULT : 1), DT);
+  if (belts.length) [x, y] = beltStep(tiles, belts, x, y, TANK_R, DT); // the belt carries us after each drive step, as on the server
   // treat other tanks as static obstacles
   if (snap) {
     for (const t of snap.T.values()) {
@@ -587,7 +591,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
         renderer.explosion(e[1], e[2], false, renderer.tankColor(e[3]));
         if (audible) sfx.boom(false);
       }
-      if (e[3] === myTankId && online) toast('Détruit !', 1500);
+      if (e[3] === myTankId && online) { toast('Détruit !', 1500); controls.rumble(1, 320); }
       break;
     case 'mineSet':
       if (audible) sfx.mineSet();
@@ -639,6 +643,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.bonusBurst(e[1], e[2], BONUS_INFO.shield.color, true);
       floater(e[1], e[2], 'Bouclier brisé !', BONUS_INFO.shield.color);
       if (audible) sfx.shieldBreak();
+      if (e[3] === myTankId && online) controls.rumble(0.5, 140);
       break;
     case 'hurt':
       if (renderer.tankKind(e[3]) === 'steel') {
@@ -1142,14 +1147,15 @@ let attractOpts: AttractOpts = {};
 
 function attractMission() {
   const r = Math.random();
-  return r < 0.1 ? 21 : r < 0.25 ? 22 + Math.floor(Math.random() * 2) : r < 0.4 ? 24 : 2 + Math.floor(Math.random() * 14); // the flea market of the Pilleurs too (iteration 15)
+  // the flea market of the Pilleurs too (iteration 15), and the toy factory's belts (iteration 16)
+  return r < 0.1 ? 21 : r < 0.22 ? 22 + Math.floor(Math.random() * 2) : r < 0.32 ? 24 : r < 0.47 ? 25 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 14);
 }
 
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
   const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
-  const g = new Game(lvl.tiles);
+  const g = new Game(lvl.tiles, lvl.belts);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
   g.night = opts.night ?? (!!lvl.night || (!opts.heroes && opts.mission === undefined && Math.random() < 0.25));
@@ -1178,7 +1184,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   attract = g;
   attractEnd = 0;
   attractPrev.clear();
-  renderer.setLevel(g.tiles, g.tankInfos());
+  renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
   renderer.setNight(g.night);
   renderer.setStorm(g.storm);
 }
@@ -1452,7 +1458,7 @@ const screen_ = window.screen;
 const params = new URLSearchParams(location.search);
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y } };
   },
 };
 if (params.has('demo')) {
@@ -1641,6 +1647,22 @@ if (params.has('demo')) {
         break;
       }
       return true;
+    },
+    /** Drop a crate right onto a conveyor belt, away from the tanks (to film it riding along). */
+    beltCrate(kind?: BonusKind) {
+      const g = attract;
+      if (!g || !g.belts.length) return false;
+      const cells = g.belts.map((b, i) => (b && g.tiles[i] === Tile.Empty ? i : -1)).filter((i) => i >= 0);
+      for (let k = 0; k < 30 && cells.length; k++) {
+        const i = cells[Math.floor(Math.random() * cells.length)];
+        const x = (i % W) + 0.5, y = Math.floor(i / W) + 0.5;
+        if (g.tanks.some((t) => t.alive && Math.hypot(t.x - x, t.y - y) < 2.5) || g.bonuses.some((c) => Math.hypot(c.x - x, c.y - y) < 2)) continue;
+        const c = g.spawnBonus(kind && BONUS_KINDS.includes(kind) ? kind : undefined);
+        if (!c) return false;
+        c.x = x; c.y = y;
+        return true;
+      }
+      return false;
     },
     /** Hand a bonus straight to every hero tank (to show it on camera). */
     buff(kind: BonusKind) {

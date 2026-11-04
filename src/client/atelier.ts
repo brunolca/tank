@@ -7,7 +7,7 @@ import { tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const GROUND = '.#Ho_=*+';
+const GROUND = '.#Ho_=*+><^V'; // the last four: conveyor belts (iteration 16)
 
 /** Draw a map onto a 2D canvas (the editor, the lobby preview). `hot`: a cell to highlight (the brush under the cursor). */
 export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number; y: number; ch: string }) {
@@ -75,6 +75,22 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
     g.beginPath(); g.arc(px + s / 2, py + s / 2, s * 0.34, 0, 7); g.stroke();
     g.fillStyle = hex(PORTAL_COLORS[c === '*' ? 0 : 1]) + '55'; g.fill();
     g.lineWidth = 1;
+  } else if (c === '>' || c === '<' || c === '^' || c === 'V') {
+    // a conveyor belt: dark rubber, wooden rails, an orange chevron pointing where it carries
+    g.fillStyle = '#3b3f4b'; g.fillRect(px, py, s, s);
+    const across = c === '>' || c === '<';
+    g.fillStyle = '#b98a55';
+    if (across) { g.fillRect(px, py, s, s * 0.12); g.fillRect(px, py + s * 0.88, s, s * 0.12); }
+    else { g.fillRect(px, py, s * 0.12, s); g.fillRect(px + s * 0.88, py, s * 0.12, s); }
+    const [dx, dy] = c === '>' ? [1, 0] : c === '<' ? [-1, 0] : c === '^' ? [0, -1] : [0, 1];
+    const cx = px + s / 2, cy = py + s / 2, k = s * 0.22;
+    g.strokeStyle = '#ffb43d'; g.lineWidth = Math.max(1.5, s * 0.12); g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(cx - dx * k - dy * k * 1.2, cy - dy * k - dx * k * 1.2);
+    g.lineTo(cx + dx * k, cy + dy * k);
+    g.lineTo(cx - dx * k + dy * k * 1.2, cy - dy * k + dx * k * 1.2);
+    g.stroke();
+    g.lineWidth = 1; g.lineCap = 'butt'; g.lineJoin = 'miter';
   } else if (c === '1' || c === '2') {
     const col = hex(PLAYER_COLORS[c === '1' ? 0 : 1]);
     g.fillStyle = col + '44'; g.beginPath(); g.arc(px + s / 2, py + s / 2, s * 0.46, 0, 7); g.fill();
@@ -295,7 +311,8 @@ export class Workshop {
     if (this.mirror && ground) {
       const mx = W - 1 - c.x;
       const there = this.map[c.y][mx];
-      if (GROUND.includes(there) || ch === '.') this.setCell(mx, c.y, ch);
+      const flip = ch === '>' ? '<' : ch === '<' ? '>' : ch; // a mirrored belt runs the other way
+      if (GROUND.includes(there) || ch === '.') this.setCell(mx, c.y, flip);
     }
     this.hooks.place(ch);
     this.draw();

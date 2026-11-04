@@ -302,7 +302,7 @@ export class Room extends DurableObject<Env> {
       : this.mode === 'atelier' && this.atelier ? atelierLevel(this.atelier)
       : versusArena(this.round);
     this.council = undefined;
-    const game = new Game(this.level.tiles);
+    const game = new Game(this.level.tiles, this.level.belts);
     const spawns = this.level.spawns.slice();
     const used: [number, number][] = [];
     participants.forEach((p, i) => {
@@ -363,6 +363,7 @@ export class Room extends DurableObject<Env> {
       tick: this.game.tick,
       night: this.level.night ? 1 : undefined,
       storm: this.level.storm ? 1 : undefined,
+      belts: this.game.belts.length ? this.game.belts : undefined,
       daily: this.dailyState(),
     });
     if (this.mode === 'taupe') {

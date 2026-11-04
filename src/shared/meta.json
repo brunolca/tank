@@ -1,7 +1,7 @@
 {
-  "iteration": 15,
+  "iteration": 16,
   "date": "2026-11-04",
-  "title": "Le Pilleur",
+  "title": "L’usine à jouets",
   "journal": [
     {
       "iteration": 1,
@@ -184,6 +184,18 @@
         "Détruis-le et son butin roule hors du sac : la dernière caisse volée retombe à côté de l’épave.",
         "Nouvelle mission 24 : « Le marché aux puces », trois Pilleurs entre les étals de liège. Ensuite, il se glisse dans la campagne sans fin, et il rejoint la palette de l’atelier.",
         "Un bouton « plein écran » rejoint celui de la musique, en haut à droite. Sur iPhone, où le navigateur garde sa barre d’adresse, il explique comment installer Tanks! sur l’écran d’accueil pour jouer sans elle."
+      ]
+    },
+    {
+      "iteration": 16,
+      "date": "2026-11-04",
+      "title": "L’usine à jouets",
+      "notes": [
+        "Nouveau terrain : les tapis roulants. Ils emportent tout ce qui s’y pose : tanks, mines et caisses bonus. Remonter le courant ralentit, le suivre donne un coup de pouce.",
+        "Mission 25, « La chaîne de montage » : trois tapis traversent la table dans un sens puis dans l’autre, et les mines du tank jaune partent en voyage.",
+        "Mission 26, « Le carrousel » : une ronde de tapis promène des tourelles autour de la cour. Elles ne restent jamais au même endroit !",
+        "L’atelier gagne quatre pinceaux de tapis (un par direction), le miroir les retourne, et les liens de partage les gardent. Une arène de versus en a aussi.",
+        "La manette vibre quand ton tank est détruit ou que ton bouclier cède ; sur téléphone, c’est l’appareil qui vibre."
       ]
     }
   ]

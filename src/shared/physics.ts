@@ -1,4 +1,4 @@
-import { H, W, isPortal, isSolidTank, isSolidBullet, isTunnel, Tile } from './constants';
+import { BELT_DIRS, BELT_SPEED, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -184,4 +184,35 @@ export function tunnelAxis(tiles: ArrayLike<number>, cell: number): number {
   if (vert && !horiz) return 1;
   if (horiz && vert) return isTunnel(tileAt(tiles, x - 1, y)) || isTunnel(tileAt(tiles, x + 1, y)) ? 0 : 1;
   return -1;
+}
+
+/** Belt code (0 none, 1 right, 2 left, 3 up, 4 down) under a point, iteration 16. */
+export function beltAt(belts: ArrayLike<number> | undefined, x: number, y: number): number {
+  if (!belts || !belts.length) return 0;
+  const cx = Math.floor(x), cy = Math.floor(y);
+  if (cx < 0 || cy < 0 || cx >= W || cy >= H) return 0;
+  return belts[cy * W + cx] | 0;
+}
+
+/**
+ * A conveyor belt carries whatever sits on it (its centre decides) one step along. Purely positional, like the
+ * portals: the server and the client prediction run the same function after each drive step and agree.
+ * Returns the moved position (through a portal when the belt runs into one).
+ */
+export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | undefined, x: number, y: number, r: number, dt: number): [number, number] {
+  const b = beltAt(belts, x, y);
+  if (!b) return [x, y];
+  const [dx, dy] = BELT_DIRS[b] ?? [0, 0];
+  const px = x, py = y;
+  const sp = BELT_SPEED * dt;
+  [x, y] = moveCircle(tiles, x, y, dx * sp, dy * sp, r);
+  // a gentle pull toward the middle of the belt, so things ride along it instead of scraping its edge
+  if (dx) y += (Math.floor(y) + 0.5 - y) * Math.min(1, 1.5 * dt);
+  else x += (Math.floor(x) + 0.5 - x) * Math.min(1, 1.5 * dt);
+  [x, y] = resolveCircle(tiles, x, y, r);
+  if (r <= PORTAL_MAX_R) {
+    const w = warpTarget(tiles, px, py, x, y);
+    if (w) [x, y] = w;
+  }
+  return [x, y];
 }

@@ -39,6 +39,11 @@ export const BRUSHES: Brush[] = [
   { ch: 'X', label: 'Colosse', group: 'tank' },
   { ch: 'D', label: 'Foreur', group: 'tank' },
   { ch: 't', label: 'Pilleur', group: 'tank' },
+  // iteration 16: conveyor belts (share-code letters Y, Z, a, b)
+  { ch: '>', label: 'Tapis →', group: 'sol' },
+  { ch: '<', label: 'Tapis ←', group: 'sol' },
+  { ch: '^', label: 'Tapis ↑', group: 'sol' },
+  { ch: 'V', label: 'Tapis ↓', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -65,6 +70,9 @@ export const ATELIER_SAMPLE: AtelierMap = {
 };
 
 const CHARS = BRUSHES.map((b) => b.ch).join('');
+/** Share-code letter of a brush: A to Z, then a, b… (iteration 16, older codes only use capitals). */
+const letter = (i: number) => String.fromCharCode(i < 26 ? 65 + i : 97 + i - 26);
+const brushOf = (l: string) => { const c = l.charCodeAt(0); return CHARS[c >= 97 ? c - 97 + 26 : c - 65]; };
 
 /** An empty table with the two starting spots on the left. */
 export function blankMap(): string[] {
@@ -121,7 +129,7 @@ export function atelierKinds(map: string[]): TankKind[] {
 }
 
 // ---------------------------------------------------------------- share codes
-// Each cell becomes a letter (A, B, C… in BRUSHES order); a run of identical cells is the letter followed by its length.
+// Each cell becomes a letter (A, B, C… in BRUSHES order, then a, b… past Z); a run of identical cells is the letter followed by its length.
 // The name goes first, as base64url, then a dot, the cells, and optionally a dot and the weather (n night, s storm). The code lives in the link's hash: it never reaches the server.
 
 const b64 = (s: string) => {
@@ -141,7 +149,7 @@ export function encodeAtelier(a: AtelierMap): string {
   for (let i = 0; i < cells.length;) {
     let j = i;
     while (j < cells.length && cells[j] === cells[i]) j++;
-    out += String.fromCharCode(65 + CHARS.indexOf(cells[i])) + (j - i > 1 ? String(j - i) : '');
+    out += letter(CHARS.indexOf(cells[i])) + (j - i > 1 ? String(j - i) : '');
     i = j;
   }
   const flags = (a.night ? 'n' : '') + (a.storm ? 's' : '');
@@ -154,11 +162,11 @@ export function decodeAtelier(code: string): AtelierMap | undefined {
     if (body === undefined) return;
     const name = cleanName(unb64(head));
     let cells = '';
-    const re = /([A-Z])(\d*)/g;
+    const re = /([A-Za-z])(\d*)/g;
     let m: RegExpExecArray | null;
     let used = 0;
     while ((m = re.exec(body))) {
-      const ch = CHARS[m[1].charCodeAt(0) - 65];
+      const ch = brushOf(m[1]);
       const n = m[2] ? Number(m[2]) : 1;
       if (!ch || n < 1 || cells.length + n > W * H) return;
       cells += ch.repeat(n);

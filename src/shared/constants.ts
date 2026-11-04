@@ -168,6 +168,14 @@ export const PORTAL_COLORS = [0x4fc3ff, 0xff5fd2];
 /** Tanks bigger than this (the boss) are too wide to squeeze through a portal. */
 export const PORTAL_MAX_R = 0.45;
 
+// ------------------------------------------------------------------ conveyor belts (iteration 16)
+/** Map characters of the four belt directions (a separate layer under the tiles: the cell itself stays floor). */
+export const BELT_CHARS = ['>', '<', '^', 'V'] as const;
+/** Direction of each belt code (1 → right, 2 → left, 3 → up, 4 → down), index 0 unused. */
+export const BELT_DIRS: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, -1], [0, 1]];
+/** How fast a belt carries tanks, mines and crates (tiles per second; a player drives at 3). */
+export const BELT_SPEED = 1.45;
+
 // ------------------------------------------------------------------ night
 /** At night the AI only makes out foes this close (tiles), unless they just gave themselves away by firing. */
 export const NIGHT_SIGHT = 4.5;
