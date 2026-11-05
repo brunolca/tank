@@ -1,7 +1,7 @@
 {
-  "iteration": 17,
+  "iteration": 18,
   "date": "2026-11-05",
-  "title": "Les rivaux",
+  "title": "Le Grondeur",
   "journal": [
     {
       "iteration": 1,
@@ -208,6 +208,19 @@
         "Les rivaux ont chacun leur canon, ramassent les caisses bonus, posent des mines et comptent leurs manches au tableau des scores comme tout le monde.",
         "On les reconnaît à leur antenne rouge et à la clé de jouet mécanique qui tourne dans leur dos. Un ami arrive ? Un rival lui cède sa place.",
         "Le fond animé de l’accueil montre parfois un versus entre quatre rivaux."
+      ]
+    },
+    {
+      "iteration": 18,
+      "date": "2026-11-05",
+      "title": "Le Grondeur",
+      "notes": [
+        "Un troisième boss arrive : le Grondeur, un tank bleu nuit avec un paratonnerre en cuivre et son propre petit nuage d’orage au-dessus de la tourelle.",
+        "Quand son nuage s’assombrit et que sa boule de cuivre s’allume, il appelle la foudre : un cercle crépite sous chacun de ses adversaires. Bouge vite !",
+        "À mi-vie, il se met en colère et frappe deux fois : sous tes chenilles, puis là où tu vas. Les petits tunnels de son arène sont les seuls abris.",
+        "Sa foudre ne le touche jamais, mais elle n’épargne pas ses propres alliés. Et quand il tombe, l’orage se déchaîne sur toute la table jusqu’à la fin de la mission.",
+        "Les boss se relaient maintenant à trois : le Colosse (missions 10, 40, 70…), le Foreur (20, 50, 80…) et le Grondeur (30, 60, 90…). Un Colosse sur deux se bat de nuit, dès la 40ᵉ.",
+        "L’atelier a un nouveau pinceau : pose le Grondeur dans tes propres missions."
       ]
     }
   ]

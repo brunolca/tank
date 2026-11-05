@@ -3,7 +3,7 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep } from '../src/shared/sim';
-import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
+import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, tunnelAxis } from '../src/shared/physics';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 
@@ -85,7 +85,7 @@ console.log('total', Date.now() - t0, 'ms');
   const fail = (m: string) => { console.error('BOSS:', m); process.exitCode = 1; };
   for (const mission of [10, 20, 30]) {
     const lvl = getMission(mission);
-    if (!isBossMission(mission) || !lvl.enemies.some((e) => e.kind === 'boss' || e.kind === 'drill')) fail(`la mission ${mission} n’a pas de boss`);
+    if (!isBossMission(mission) || !lvl.enemies.some((e) => isBossKind(e.kind))) fail(`la mission ${mission} n’a pas de boss`);
   }
   const lvl = getMission(10);
   const g = new Game(lvl.tiles, lvl.belts);
@@ -442,10 +442,11 @@ console.log('total', Date.now() - t0, 'ms');
 // the Foreur (iteration 11): the boss of even tens; it digs, burrows toward a foe, shakes the ground, then bursts out
 {
   const fail = (m: string) => { console.error('FOREUR:', m); process.exitCode = 1; };
-  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'boss'], [40, 'drill'], [60, 'drill']] as const) {
+  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'boss'], [50, 'drill'], [60, 'thunder'], [70, 'boss'], [90, 'thunder']] as const) {
     if (!getMission(mission).enemies.some((e) => e.kind === kind)) fail(`la mission ${mission} devrait opposer ${kind}`);
   }
-  if (getMission(20).night || getMission(40).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
+  if (getMission(20).night || getMission(50).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
+  if (!getMission(40).night || getMission(70).night) fail('un Colosse sur deux se bat de nuit, à partir du 40ᵉ');
   // the daily « Le Colosse attend » keeps its Colosse
   for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 14; day++) {
     if (dailyTwist(day) === 'colosse' && !dailyLevel(day, DAILY_STAGES).enemies.some((e) => e.kind === 'boss')) fail('le défi « Le Colosse attend » a perdu son Colosse');
@@ -520,7 +521,7 @@ console.log('total', Date.now() - t0, 'ms');
 {
   const fail = (m: string) => { console.error('MAÇON:', m); process.exitCode = 1; };
   if (getMission(21).name !== 'Le chantier' || getMission(21).enemies.filter((e) => e.kind === 'mason').length < 2) fail('« Le chantier » (21) devrait avoir des maçons');
-  if (!getMission(20).enemies.some((e) => e.kind === 'drill') || !getMission(30).enemies.some((e) => e.kind === 'boss')) fail('les boss ont bougé');
+  if (!getMission(20).enemies.some((e) => e.kind === 'drill') || !getMission(30).enemies.some((e) => e.kind === 'thunder')) fail('les boss ont bougé');
   const masonMissions: number[] = [];
   for (let mission = 1; mission <= 80; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'mason')) masonMissions.push(mission);
   if (masonMissions.some((m) => m < 21)) fail('maçon avant la 21ᵉ mission');
@@ -888,4 +889,71 @@ console.log('total', Date.now() - t0, 'ms');
   if (settled < rounds * 0.75) fail(`seulement ${settled}/${rounds} manches décidées en 2 minutes`);
   if (worst > 1) fail(`${worst.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`rivaux OK (${settled}/${rounds} manches décidées, ${(totalTicks / rounds / 30).toFixed(0)} s en moyenne, victoires novice/malin/redoutable ${wins.join('/')}, ${worst.toFixed(3)} ms/tick au pire)`);
+}
+
+// the Grondeur (iteration 18): the third boss calls the lightning on each foe; its own strikes never touch it
+{
+  const fail = (m: string) => { console.error('GRONDEUR : ' + m); process.exitCode = 1; };
+  for (const m of [30, 60, 90]) {
+    const lvl = getMission(m);
+    if (!lvl.storm || lvl.enemies.filter((e) => e.kind === 'thunder').length !== 1) fail(`la mission ${m} devrait opposer le Grondeur, sous l’orage`);
+    for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un ennemi part dans un mur`);
+  }
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  const p = g.addTank('player', 0, 4.5, 4.5, 0x3d7bff, 'p1', 'P');
+  const q = g.addTank('player', 0, 4.5, 12.5, 0x3d7bff, 'p2', 'Q');
+  const t = g.addTank('thunder', 99, 15.5, 8.5, 0);
+  const esc = g.addTank('ash', 99, 15.5, 4.5, 0);
+  g.storm = true;
+  g.frozen = false;
+  if (!t.boss || t.hp !== 8) fail('le Grondeur devrait être un boss à 8 PV');
+  t.boss!.volleyT = 0;
+  const saw: Record<string, number> = {};
+  const zaps: [number, number][] = [];
+  for (let i = 0; i < 30 * 3; i++) {
+    g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }], ['p2', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+    for (const e of g.events) { saw[e[0]] = (saw[e[0]] ?? 0) + 1; if (e[0] === 'zap') zaps.push([e[1], e[2]]); }
+    g.events = [];
+  }
+  if (!saw.call) fail(`il n’a pas appelé la foudre : ${JSON.stringify(saw)}`);
+  if (zaps.length !== 2) fail(`calme, une frappe par adversaire (${zaps.length}) ; l’orage naturel doit se taire tant qu’il est debout`);
+  for (const pl of [p, q]) if (!zaps.some(([x, y]) => Math.hypot(x - pl.x, y - pl.y) < 0.8)) fail('une frappe tombe loin de sa cible');
+  if (p.alive || q.alive) fail('deux joueurs immobiles sous la foudre devraient sauter');
+  // its own lightning: not a scratch on it, but its escort is fair game
+  g.strike({ x: t.x, y: t.y, t: 0 });
+  g.strike({ x: esc.x, y: esc.y, t: 0 });
+  if (!t.alive || t.hp !== 8) fail('sa propre foudre le blesse');
+  if (esc.alive) fail('la foudre épargne ses alliés');
+  // enraged: two strikes per foe (on the spot, and ahead)
+  const h = new Game(new Array(W * H).fill(Tile.Empty));
+  h.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const r = h.addTank('thunder', 99, 16.5, 8.5, 0);
+  h.setHp(r, 4, 8);
+  if (!r.boss!.rage) fail('pas de colère à mi-vie');
+  h.frozen = false;
+  r.boss!.volleyT = 0;
+  let n = 0;
+  for (let i = 0; i < 30 * 1.5; i++) { h.step(new Map()); n += h.events.filter((e) => e[0] === 'zap').length; h.events = []; }
+  if (n !== 2) fail(`en colère, deux frappes par adversaire (${n})`);
+  // a real fight stays cheap, and the storm wakes up once it falls
+  const lvl = getMission(30);
+  const s = new Game(lvl.tiles, lvl.belts);
+  s.storm = true;
+  for (const [x, y] of lvl.spawns) { const pl = s.addTank('player', 0, x, y, 0x3d7bff); s.enableAI(pl, { skill: 2 }); }
+  for (const en of lvl.enemies) { const e = s.addTank(en.kind, 99, en.x, en.y, 0); if (e.boss) e.boss.volleyT = 0.5; }
+  s.frozen = false;
+  let calls = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 60; i++) { s.step(new Map()); calls += s.events.filter((x) => x[0] === 'call').length; s.events = []; }
+  const per = (performance.now() - t1) / (30 * 60);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (!calls) fail('aucun appel de foudre en une minute de combat');
+  const k = new Game(new Array(W * H).fill(Tile.Empty));
+  k.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const dead = k.addTank('thunder', 99, 16.5, 8.5, 0);
+  dead.alive = false;
+  k.storm = true; k.stormNext = 0.01; k.frozen = false;
+  k.step(new Map());
+  if (!k.events.some((e) => e[0] === 'zap')) fail('l’orage ne revient pas quand le Grondeur tombe');
+  if (process.exitCode !== 1) console.log(`Grondeur OK (${calls} appel(s) en 60 s, ${per.toFixed(3)} ms/tick)`);
 }

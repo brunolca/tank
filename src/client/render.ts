@@ -171,6 +171,8 @@ interface TankView {
   crane?: THREE.Group; // the Maçon (iteration 12): its crane swings when it lays a block
   sack?: THREE.Group; // the Pilleur (iteration 15): its loot sack swells with each crate it steals
   key?: THREE.Group; // a versus rival (iteration 17): its wind-up key
+  cloud?: THREE.Group; // the Grondeur (iteration 18): its own little storm cloud, floating above
+  rodBall?: THREE.MeshStandardMaterial; // and the ball of its lightning rod, which glows as it calls
   under?: boolean;
 }
 
@@ -372,6 +374,16 @@ const rackMineMat = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness:
 const goldMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3, metalness: 0.75, emissive: 0x3a2400, emissiveIntensity: 0.4 });
 
 const treadMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.9 });
+// the Grondeur (iteration 18): a copper lightning rod on the turret, yellow lightning stripes, a cotton cloud above
+const thunderGeo = {
+  rod: new THREE.CylinderGeometry(0.022, 0.03, 0.56, 8),
+  ball: new THREE.SphereGeometry(0.075, 14, 10),
+  coil: new THREE.TorusGeometry(0.05, 0.014, 6, 14),
+  stripe: new THREE.BoxGeometry(0.16, 0.05, 0.02),
+  puff: new THREE.SphereGeometry(1, 16, 10),
+};
+const copperMat = new THREE.MeshStandardMaterial({ color: 0xd9824a, roughness: 0.3, metalness: 0.8, emissive: 0x2a1000, emissiveIntensity: 0.4 });
+const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.4, emissive: 0x5a4000, emissiveIntensity: 0.6 });
 // versus rivals (iteration 17): antenna, bead and wind-up key
 const rivalGeo = {
   post: new THREE.CylinderGeometry(0.012, 0.016, 0.3, 6),
@@ -584,6 +596,45 @@ function buildTank(info: TankInfo): TankView {
     root.add(mound);
     view.bit = bit;
     view.mound = mound;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'thunder') {
+    const rod = new THREE.Mesh(thunderGeo.rod, copperMat);
+    rod.position.set(-0.08, 0.36, 0);
+    turret.add(rod);
+    for (const h of [0.22, 0.32, 0.42]) {
+      const c = new THREE.Mesh(thunderGeo.coil, copperMat);
+      c.rotation.x = Math.PI / 2;
+      c.position.set(-0.08, h, 0);
+      turret.add(c);
+    }
+    const ballMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ff, roughness: 0.2, metalness: 0.3, emissive: 0x4f8dff, emissiveIntensity: 0.5 });
+    const ball = new THREE.Mesh(thunderGeo.ball, ballMat);
+    ball.position.set(-0.08, 0.68, 0);
+    turret.add(ball);
+    // zigzag stripes on both flanks: a lightning bolt painted on the toy
+    for (const z of [-0.305, 0.305]) {
+      [[-0.2, 0.26, 0.5], [-0.06, 0.22, -0.5], [0.08, 0.26, 0.5], [0.22, 0.22, -0.5]].forEach(([x, y, r]) => {
+        const st = new THREE.Mesh(thunderGeo.stripe, stripeMat);
+        st.position.set(x, y + 0.02, z);
+        st.rotation.z = r;
+        hull.add(st);
+      });
+    }
+    const cloud = new THREE.Group();
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xdde4f0, roughness: 1, transparent: true, opacity: 0.94 });
+    for (const [x, y, z, r] of [[0, 0, 0, 0.34], [0.3, -0.06, 0.08, 0.25], [-0.3, -0.05, -0.05, 0.27], [0.08, 0.1, -0.22, 0.22], [-0.1, -0.02, 0.25, 0.23]]) {
+      const p = new THREE.Mesh(thunderGeo.puff, cloudMat);
+      p.position.set(x, y, z);
+      p.scale.set(r, r * 0.8, r);
+      p.castShadow = true;
+      cloud.add(p);
+    }
+    cloud.position.y = 2.2;
+    cloud.userData.mat = cloudMat;
+    root.add(cloud);
+    view.cloud = cloud;
+    view.rodBall = ballMat;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (info.kind === 'mason') {
@@ -870,6 +921,46 @@ export class Renderer {
     this.zaps.push({ mesh, core, x, y, t: 0, max: warn });
   }
 
+  /** One jagged stroke of lightning (a thin core and its glow), from (x0, h0, z0) to (x1, h1, z1). */
+  private boltBranch(meshes: THREE.Mesh[], x0: number, h0: number, z0: number, x1: number, z1: number, h1: number, n: number, rad: number) {
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= n; k++) {
+      const u = k / n, j = k === 0 || k === n ? 0 : 0.45 * (1 - u * 0.5);
+      pts.push(new THREE.Vector3(x0 + (x1 - x0) * u + (Math.random() - 0.5) * j, h0 + (h1 - h0) * u, z0 + (z1 - z0) * u + (Math.random() - 0.5) * j));
+    }
+    const path = new THREE.CurvePath<THREE.Vector3>();
+    for (let k = 0; k < n; k++) path.add(new THREE.LineCurve3(pts[k], pts[k + 1]));
+    meshes.push(new THREE.Mesh(new THREE.TubeGeometry(path, n * 2, rad, 4, false), this.boltMat));
+    meshes.push(new THREE.Mesh(new THREE.TubeGeometry(path, n * 2, rad * 3.2, 5, false), this.boltGlowMat));
+    return pts;
+  }
+
+  /** The Grondeur calls the lightning (iteration 18): a stroke shoots up from its rod into its cloud, a blue shock wave. */
+  call(id: number, x: number, y: number) {
+    const v = this.tanks.get(id);
+    const meshes: THREE.Mesh[] = [];
+    this.boltBranch(meshes, x, 0.95, y, x + (Math.random() - 0.5) * 0.3, y + (Math.random() - 0.5) * 0.3, 2.15, 6, 0.035);
+    this.boltBranch(meshes, x, 2.3, y, x + (Math.random() - 0.5) * 4, y - 3 - Math.random() * 2, 14, 9, 0.03);
+    for (const m of meshes) this.scene.add(m);
+    this.bolts.push({ meshes, t: 0, max: 0.28 });
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0x8fc0ff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.08, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.45, size: 2 });
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.6;
+      this.glow.emit({ x, y: 2.1, z: y, vx: Math.cos(a) * sp, vy: 0.5 + Math.random() * 2, vz: Math.sin(a) * sp, life: 0.35 + Math.random() * 0.3, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: 0x6f9dff, grav: 4, drag: 1.5 });
+    }
+    if (v?.cloud) v.cloud.userData.boom = 1;
+    this.lightning = Math.max(this.lightning, 0.5);
+    this.flash.color.setHex(0xa9c8ff);
+    this.flash.position.set(x, 2, y);
+    this.flash.intensity = 40;
+    this.flashT = 0.2;
+    this.shake = Math.max(this.shake, 0.15);
+  }
+
   /** The lightning falls: a jagged bolt from the sky, a white flash over everything, a blast and a star-shaped scorch. */
   bolt(x: number, y: number) {
     for (let i = this.zaps.length - 1; i >= 0; i--) {
@@ -880,18 +971,7 @@ export class Renderer {
       this.zaps.splice(i, 1);
     }
     const meshes: THREE.Mesh[] = [];
-    const branch = (x0: number, h0: number, z0: number, x1: number, z1: number, h1: number, n: number, rad: number) => {
-      const pts: THREE.Vector3[] = [];
-      for (let k = 0; k <= n; k++) {
-        const u = k / n, j = k === 0 || k === n ? 0 : 0.45 * (1 - u * 0.5);
-        pts.push(new THREE.Vector3(x0 + (x1 - x0) * u + (Math.random() - 0.5) * j, h0 + (h1 - h0) * u, z0 + (z1 - z0) * u + (Math.random() - 0.5) * j));
-      }
-      const path = new THREE.CurvePath<THREE.Vector3>();
-      for (let k = 0; k < n; k++) path.add(new THREE.LineCurve3(pts[k], pts[k + 1]));
-      meshes.push(new THREE.Mesh(new THREE.TubeGeometry(path, n * 2, rad, 4, false), this.boltMat));
-      meshes.push(new THREE.Mesh(new THREE.TubeGeometry(path, n * 2, rad * 3.2, 5, false), this.boltGlowMat));
-      return pts;
-    };
+    const branch = (x0: number, h0: number, z0: number, x1: number, z1: number, h1: number, n: number, rad: number) => this.boltBranch(meshes, x0, h0, z0, x1, z1, h1, n, rad);
     const top = branch(x + (Math.random() - 0.5) * 3, 16, y - 4 - Math.random() * 2, x, y, 0, 12, 0.05);
     for (let b = 0; b < 2; b++) {
       const p = top[3 + Math.floor(Math.random() * 6)];
@@ -1457,6 +1537,7 @@ export class Renderer {
       v.turret.position.z = -Math.sin(t.turret) * v.recoil * 0.12;
       v.turret.position.y = 0.37 * v.scale;
       this.tankGlow(v, t, dt);
+      if (v.cloud) this.tankThunder(v, t, dt);
       if (v.ring) {
         (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(this.time * 4) * 0.25;
       }
@@ -1484,6 +1565,27 @@ export class Renderer {
       }
     }
     this.headlights(list);
+  }
+
+  /** The Grondeur: its cloud bobs and drifts; antenna up (charging), the cloud darkens, the rod ball blazes and sparks fly. */
+  private tankThunder(v: TankView, t: RTank, dt: number) {
+    const c = v.cloud!, charging = !!((t.fx ?? 0) & FLAG_CHARGING), rage = !!((t.fx ?? 0) & FLAG_RAGE);
+    const boom = (c.userData.boom as number | undefined) ?? 0;
+    c.position.y = 2.2 + Math.sin(this.time * 1.7 + t.id) * 0.08 + (charging ? 0.15 : 0);
+    c.rotation.y = this.time * 0.25; // the cloud does not turn with the hull
+    const k = 1 + boom * 0.25 + (charging ? Math.sin(this.time * 24) * 0.04 : 0);
+    c.scale.set(k, k, k);
+    if (boom > 0) c.userData.boom = Math.max(0, boom - dt * 3);
+    const dark = charging ? 1 : rage ? 0.45 : 0;
+    const cur = (c.userData.dark as number | undefined) ?? 0;
+    const nd = cur + (dark - cur) * Math.min(1, dt * 6);
+    c.userData.dark = nd;
+    (c.userData.mat as THREE.MeshStandardMaterial).color.setRGB(0.87 - nd * 0.55, 0.89 - nd * 0.53, 0.94 - nd * 0.46);
+    v.rodBall!.emissiveIntensity = charging ? 1.6 + Math.sin(this.time * 40) * 0.8 : 0.5 + Math.sin(this.time * 3) * 0.2;
+    if ((charging || rage) && Math.random() < (charging ? 40 : 6) * dt) {
+      const a = Math.random() * Math.PI * 2;
+      this.glow.emit({ x: t.x + Math.cos(a) * 0.35, y: c.position.y - 0.2, z: t.y + Math.sin(a) * 0.35, vx: Math.cos(a) * 0.3, vy: -2.5 - Math.random() * 2, vz: Math.sin(a) * 0.3, life: 0.25, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: 0x7fb2ff, drag: 1 });
+    }
   }
 
   /** The Foreur: the bit spins (wildly while it digs in); under the table only a bump of earth shows, ploughing a furrow. */
@@ -1649,11 +1751,11 @@ export class Renderer {
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
       glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
-      col = 0xff5a20;
+      col = v.cloud ? 0x4f8dff : 0xff5a20;
       if (Math.random() < 60 * dt) {
         // sparks sucked into the hull
         const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
-        this.glow.emit({ x: t.x + Math.cos(a) * d, y: 0.5, z: t.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.2, vz: -Math.sin(a) * d * 2.2, life: 0.4, s0: 0.03, s1: 0.1, c0: 0xffd060, c1: 0xff4010 });
+        this.glow.emit({ x: t.x + Math.cos(a) * d, y: 0.5, z: t.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.2, vz: -Math.sin(a) * d * 2.2, life: 0.4, s0: 0.03, s1: 0.1, c0: v.cloud ? 0xdcebff : 0xffd060, c1: v.cloud ? 0x3f7dff : 0xff4010 });
       }
     } else if (fx & FLAG_RAGE) {
       glow = Math.max(glow, 0.12 + Math.sin(this.time * 8) * 0.1);

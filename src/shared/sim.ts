@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, Tile, TUNNEL_SIGHT, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { angDiff, beltStep, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
@@ -206,7 +206,7 @@ export class Game {
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
       r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false,
     };
-    if (kind === 'boss' || kind === 'drill') t.boss = { volleyT: 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
+    if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
@@ -288,7 +288,8 @@ export class Game {
 
   stepStorm(dt: number) {
     if (this.flash > 0) this.flash -= dt;
-    if (this.storm) {
+    // the Grondeur owns the sky while it stands: the storm only strikes where it calls (iteration 18)
+    if (this.storm && !this.tanks.some((t) => t.alive && t.kind === 'thunder')) {
       this.stormNext -= dt;
       if (this.stormNext <= 0) {
         const [a, b] = BOLT_EVERY;
@@ -316,17 +317,23 @@ export class Game {
       } else {
         x = 1 + Math.random() * (W - 2); y = 1 + Math.random() * (H - 2);
       }
-      // rounded first: the announced spot is the one checked (a strike at 4.998 used to be sent as 5.00, on the wall next door)
-      x = r2(Math.max(0.6, Math.min(W - 0.6, x))); y = r2(Math.max(0.6, Math.min(H - 0.6, y)));
-      const tile = tileAt(this.tiles, Math.floor(x), Math.floor(y));
-      if (tile === Tile.Wall || tile === Tile.Tall || tile === Tile.Tunnel) continue;
-      if (this.bolts.some((o) => Math.hypot(o.x - x, o.y - y) < BOLT_R * 2)) continue;
-      const bo: Bolt = { x, y, t: 0 };
-      this.bolts.push(bo);
-      this.events.push(['zap', bo.x, bo.y, BOLT_WARN]);
-      return bo;
+      const bo = this.boltAt(x, y);
+      if (bo) return bo;
     }
     return undefined;
+  }
+
+  /** Announce a strike right there, unless the spot is a wall, a tunnel roof or too close to another strike. */
+  boltAt(x: number, y: number, gap = BOLT_R * 2): Bolt | undefined {
+    // rounded first: the announced spot is the one checked (a strike at 4.998 used to be sent as 5.00, on the wall next door)
+    x = r2(Math.max(0.6, Math.min(W - 0.6, x))); y = r2(Math.max(0.6, Math.min(H - 0.6, y)));
+    const tile = tileAt(this.tiles, Math.floor(x), Math.floor(y));
+    if (tile === Tile.Wall || tile === Tile.Tall || tile === Tile.Tunnel) return undefined;
+    if (this.bolts.some((o) => Math.hypot(o.x - x, o.y - y) < gap)) return undefined;
+    const bo: Bolt = { x, y, t: 0 };
+    this.bolts.push(bo);
+    this.events.push(['zap', bo.x, bo.y, BOLT_WARN]);
+    return bo;
   }
 
   /** The lightning falls: tanks, shells and cork in reach are gone, mines go off, and the whole table lights up. */
@@ -334,8 +341,8 @@ export class Game {
     this.events.push(['bolt', bo.x, bo.y]);
     this.flash = BOLT_FLASH;
     for (const t of this.tanks) {
-      // a tank hiding in a tunnel is under a roof (iteration 13)
-      if (t.alive && !this.inTunnel(t) && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined);
+      // a tank hiding in a tunnel is under a roof (iteration 13); the Grondeur's lightning rod takes the hit for it (iteration 18)
+      if (t.alive && !this.inTunnel(t) && t.kind !== 'thunder' && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - bo.x, b.y - bo.y) < BOLT_R) b.dead = true;
@@ -418,16 +425,41 @@ export class Game {
 
   updateBoss(t: Tank) {
     const bs = t.boss!;
+    const thunder = t.kind === 'thunder';
     if (bs.warn > 0) {
       bs.warn -= DT;
-      if (bs.warn <= 0) this.bossVolley(t);
+      if (bs.warn <= 0) { if (thunder) this.thunderCall(t); else this.bossVolley(t); }
       return;
     }
     bs.volleyT -= DT;
     if (bs.volleyT <= 0) {
-      bs.warn = BOSS_VOLLEY_WARN;
-      bs.volleyT = BOSS_VOLLEY_EVERY[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
+      // the Grondeur only raises its rod when someone is out there to strike
+      if (thunder && !this.tanks.some((o) => o.alive && o.team !== t.team && !under(o))) { bs.volleyT = 0.5; return; }
+      bs.warn = thunder ? THUNDER_WARN : BOSS_VOLLEY_WARN;
+      bs.volleyT = (thunder ? THUNDER_EVERY : BOSS_VOLLEY_EVERY)[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
     }
+  }
+
+  /**
+   * The Grondeur (iteration 18) calls the lightning: a strike announced under each foe (a little off the mark),
+   * and enraged a second one where the foe is heading. Strikes fall BOLT_WARN later, like the storm's: there is time to run.
+   */
+  thunderCall(t: Tank) {
+    const per = THUNDER_PER_FOE[t.boss!.rage ? 1 : 0];
+    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team && !under(o));
+    let n = 0;
+    for (const f of foes) {
+      for (let k = 0; k < per && n < THUNDER_MAX; k++) {
+        for (let tries = 0; tries < 6; tries++) {
+          const a = Math.random() * Math.PI * 2, off = tries ? 0.4 + Math.random() * 1.2 : Math.random() * 0.45;
+          const lead = k ? 1.9 : 0; // ahead along its hull
+          const x = f.x + Math.cos(f.body) * lead + Math.cos(a) * off, y = f.y + Math.sin(f.body) * lead + Math.sin(a) * off;
+          if (Math.hypot(x - t.x, y - t.y) < t.r + 0.5) continue; // never right on itself
+          if (this.boltAt(x, y, BOLT_R * 1.4)) { n++; break; }
+        }
+      }
+    }
+    if (n) this.events.push(['call', r2(t.x), r2(t.y), t.id, n]);
   }
 
   /** A ring of shells all around the hull, rotated a little more each time. */
@@ -1219,6 +1251,7 @@ export class Game {
     }
     // announced lightning strikes: get out of the ring (everyone notices the crackling, even simple tanks)
     for (const bo of this.bolts) {
+      if (t.kind === 'thunder') break; // its own lightning never touches it
       const dx = t.x - bo.x, dy = t.y - bo.y;
       const d = Math.hypot(dx, dy);
       if (d < BOLT_R + t.r + 0.45) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }

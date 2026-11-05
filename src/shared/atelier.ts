@@ -44,6 +44,8 @@ export const BRUSHES: Brush[] = [
   { ch: '<', label: 'Tapis ←', group: 'sol' },
   { ch: '^', label: 'Tapis ↑', group: 'sol' },
   { ch: 'V', label: 'Tapis ↓', group: 'sol' },
+  // iteration 18: the third boss (share-code letter c)
+  { ch: 'G', label: 'Grondeur', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

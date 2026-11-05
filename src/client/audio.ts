@@ -234,6 +234,15 @@ export const sfx = {
     for (let i = 0; i < 6; i++) noise(t + i * 0.2, 0.06, 5000 + i * 600, 4, 0.05 + i * 0.03, 'bandpass');
     tone(t, 1.3, 90, 260, 0.05, 'sawtooth');
   },
+  /** The Grondeur calls the lightning (iteration 18): a deep growl that climbs, an electric snap at the top. */
+  call() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.5, 60, 140, 0.35, 'sawtooth');
+    tone(t, 0.5, 90, 210, 0.15, 'square');
+    noise(t + 0.38, 0.12, 7000, 0.8, 0.6, 'highpass');
+    noise(t + 0.4, 0.6, 1800, 0.7, 0.4, 'lowpass', 200);
+  },
   /** The lightning falls: a sharp crack, then the thunder rolls. */
   thunder() {
     if (!ctx) return;

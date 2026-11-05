@@ -7,11 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { versus: [0, [2, 2, 2, 2]], seconds: 20, caption: 'Nouveau : les rivaux', sub: 'Des tanks pilotés par l’ordinateur complètent le versus' },
-  { rivals: 7, seconds: 7, caption: 'Seul ou à deux ? Ajoute jusqu’à trois rivaux', sub: 'Novice, Malin ou Redoutable : un clic change leur niveau' },
-  { versus: [7, [2, 1, 2, 1]], arms: ['fusee', 'sapeur', 'ricochet', 'canon'], seconds: 16, caption: 'Manche de nuit, sous l’orage', sub: 'Les rivaux ramassent les caisses et posent des mines eux aussi' },
-  { versus: [10, [2, 2, 2, 2]], seconds: 12, caption: 'Sur toutes les arènes du versus', sub: 'Tunnels et tapis roulants compris' },
-  { mission: 26, arms: ['canon', 'ricochet'], seconds: 8, caption: 'Et toujours la campagne coop', sub: 'Tapis roulants, Pilleurs, tunnels et boss' },
+  { mission: 30, arms: ['canon', 'ricochet'], volley: true, seconds: 22, caption: 'Nouveau : le Grondeur', sub: 'Le troisième boss appelle la foudre sur ses ennemis' },
+  { mission: 60, arms: ['fusee', 'sapeur'], bossHp: 4, volley: true, seconds: 18, caption: 'En colère, il frappe deux fois', sub: 'Sous tes chenilles, puis là où tu vas : seuls les tunnels t’abritent' },
+  { mission: 20, arms: ['canon', 'fusee'], digs: [2], seconds: 10, caption: 'Colosse, Foreur, Grondeur', sub: 'Un boss toutes les dix missions, chacun son tour' },
+  { versus: [3, [2, 1, 2, 1]], seconds: 10, caption: 'Et toujours les rivaux du versus', sub: 'Jusqu’à trois tanks pilotés par l’ordinateur' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();

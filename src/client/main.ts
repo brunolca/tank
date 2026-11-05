@@ -318,6 +318,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
+  const thunderFight = enemies.some((e) => e.kind === 'thunder');
   if (coopLike(msg.mode)) {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
     if (msg.daily) {
@@ -328,7 +329,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
     } else if (msg.mode === 'atelier') {
       banner(`Atelier · mission maison${wx}`, msg.name, `Tanks ennemis : ${enemies.length} · ${ATELIER_LIVES} vies`, `intro atelier${wxCls}${bossFight ? ' boss' : ''}`);
-    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', 'intro boss');
+    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, thunderFight ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !' : drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', `intro boss${thunderFight ? ' storm' : ''}`);
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
@@ -336,6 +337,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
+  else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
@@ -584,7 +586,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
         renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
-        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : 0xf2c14e), i * 180);
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : 0xf2c14e), i * 180);
         floater(e[1], e[2], `${specOf(kind).label} vaincu !`, 0xf2c14e);
         if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
         if (online && bossFight) setMusicIntensity(1);
@@ -689,6 +691,11 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1], e[2], 'Broum !', 0xd9822b);
       if (audible) sfx.erupt();
       break;
+    case 'call':
+      renderer.call(e[3], e[1], e[2]);
+      floater(e[1], e[2], 'Il appelle la foudre !', 0x8fc0ff);
+      if (audible) sfx.call();
+      break;
     case 'rage':
       renderer.hurt(e[3], e[1], e[2]);
       floater(e[1], e[2], 'En colère !', 0xff3b2f);
@@ -738,7 +745,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   const bar = $('#boss-bar');
   for (const t of tanks) {
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
-    if (on && !charging.has(t.id) && online && renderer.tankKind(t.id) !== 'drill') sfx.bossCharge();
+    if (on && !charging.has(t.id) && online && renderer.tankKind(t.id) === 'boss') sfx.bossCharge();
     if (on) charging.add(t.id); else charging.delete(t.id);
     const seen = !!((t.fx ?? 0) & FLAG_ALERT) && t.alive;
     if (seen && !alerted.has(t.id) && online && performance.now() - lastAlert > 400) { sfx.alert(); lastAlert = performance.now(); }
@@ -757,6 +764,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   const bossKind = renderer.tankKind(boss.id) ?? 'boss';
   $('#boss-name').textContent = specOf(bossKind).label;
   bar.classList.toggle('drill', bossKind === 'drill');
+  bar.classList.toggle('thunder', bossKind === 'thunder');
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }

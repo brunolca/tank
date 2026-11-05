@@ -324,6 +324,9 @@ body.demo #boss-bar { top: 18px; }
 #boss-bar.drill .boss-top b { color: #ffad5a; }
 #boss-bar.drill .boss-top b::before { content: '⛏ '; }
 #boss-bar.drill #boss-fill { background: linear-gradient(180deg, #ffb46a, #b5651d); box-shadow: 0 0 12px rgba(255, 150, 60, 0.55); }
+#boss-bar.thunder .boss-top b { color: #9cc6ff; }
+#boss-bar.thunder .boss-top b::before { content: '⚡ '; }
+#boss-bar.thunder #boss-fill { background: linear-gradient(180deg, #bcdcff, #3f6fd8); box-shadow: 0 0 12px rgba(110, 160, 255, 0.6); }
 #banner.boss .b-kicker { color: #ff5d4c; }
 #banner.boss .b-title { color: #f2c14e; }
 #banner.night .b-kicker { color: #9db4ff; }

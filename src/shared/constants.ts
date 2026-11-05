@@ -7,6 +7,7 @@ export const SUBSTEPS = 2;
 export const TANK_R = 0.36;
 export const BOSS_R = 0.62;
 export const DRILL_R = 0.56;
+export const THUNDER_R = 0.58;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
 export const MINE_BLAST = 1.55;
@@ -41,7 +42,8 @@ export type TankKind =
   | 'steel'
   | 'drill'
   | 'mason'
-  | 'thief';
+  | 'thief'
+  | 'thunder';
 
 export interface TankSpec {
   speed: number;
@@ -80,6 +82,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   mason: { speed: 1.6, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.7, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.55, aimError: 0.08, label: 'Maçon' },
   // iteration 15: it races the players to the bonus crates and keeps them for itself (see THIEF_*)
   thief: { speed: 2.5, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2.6, mines: 0, skill: 1, reaction: 0.5, aimError: 0.09, label: 'Pilleur' },
+  // iteration 18: the third boss, it calls lightning down on its foes (see THUNDER_*)
+  thunder: { speed: 1.15, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.2, turretSpeed: 2.3, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: THUNDER_R, label: 'Grondeur' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -110,6 +114,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   drill: 0xd9822b,
   mason: 0x7b7430,
   thief: 0x8e2a4e,
+  thunder: 0x34508f,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -144,8 +149,18 @@ export const DRILL_BLAST = 1.45;
 export const DRILL_RING_SHOTS = 8;
 /** Flags bit: the Foreur is under the table (nothing can touch it, it touches nothing). */
 export const FLAG_BURROW = 512;
-/** The two bosses that take turns every ten missions. */
-export const isBossKind = (k: string) => k === 'boss' || k === 'drill';
+/** The three bosses that take turns every ten missions. */
+export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder';
+
+// ------------------------------------------------------------------ the Grondeur (iteration 18): the boss that calls the lightning
+/** Seconds between two calls (calm, then enraged). */
+export const THUNDER_EVERY: [number, number] = [6.2, 4.3];
+/** Seconds it holds still, antenna up, before the strikes are announced (flag FLAG_CHARGING meanwhile). */
+export const THUNDER_WARN = 0.85;
+/** Strikes called on each foe (calm, then enraged: one on the spot, one where it is heading). */
+export const THUNDER_PER_FOE: [number, number] = [1, 2];
+/** Most strikes of one call. */
+export const THUNDER_MAX = 5;
 
 // ------------------------------------------------------------------ the Maçon (iteration 12): the tank that builds cork walls
 /** Seconds between two blocks (min, max); the first one comes MASON_FIRST seconds into the mission. */
