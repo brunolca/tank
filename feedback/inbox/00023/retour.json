@@ -1,0 +1,410 @@
+{
+  "id": 23,
+  "created": "2026-11-05T20:23:14.509Z",
+  "category": "idee",
+  "text": "Arbre de compétences avec xp gagné au fur et à mesure de la campagne.",
+  "context": {
+    "game": {
+      "iteration": 18,
+      "iterationTitle": "Le Grondeur",
+      "screen": "lobby",
+      "online": false,
+      "room": "55ECM",
+      "mode": "démo",
+      "players": [
+        {
+          "name": "JozuhaKimmisch",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "Panzer59",
+          "host": false,
+          "connected": true,
+          "me": true
+        },
+        {
+          "name": "Bruno",
+          "host": false,
+          "connected": true
+        }
+      ],
+      "me": {
+        "x": 1.98,
+        "y": 5.85,
+        "alive": true,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "x": 3.06,
+          "y": 1.5,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "Panzer59",
+          "team": 0,
+          "me": true,
+          "x": 1.98,
+          "y": 5.85,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "x": 18.21,
+          "y": 5.61,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "white",
+          "label": "Blanc",
+          "team": 99,
+          "x": 2.66,
+          "y": 6.57,
+          "alive": true
+        },
+        {
+          "id": 5,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 99,
+          "x": 14.39,
+          "y": 8.21,
+          "alive": true
+        }
+      ],
+      "bullets": 2,
+      "mines": 1,
+      "recentEvents": [
+        [
+          229,
+          "mboom",
+          11.81,
+          8.5
+        ],
+        [
+          237,
+          "shot",
+          3.61,
+          1.95,
+          0.11,
+          1,
+          3
+        ],
+        [
+          239,
+          "shot",
+          7.39,
+          3.32,
+          0.26,
+          0,
+          4
+        ],
+        [
+          246,
+          "bounce",
+          16.87,
+          9.07
+        ],
+        [
+          247,
+          "mineSet",
+          4.62,
+          10.02
+        ],
+        [
+          255,
+          "pop",
+          17.12,
+          0.1
+        ],
+        [
+          259,
+          "shot",
+          3.5,
+          1.2,
+          0.68,
+          1,
+          3
+        ],
+        [
+          265,
+          "boom",
+          12.99,
+          4.64,
+          1
+        ],
+        [
+          265,
+          "bounce",
+          21.85,
+          3.9
+        ],
+        [
+          269,
+          "shot",
+          1.72,
+          8.22,
+          0.32,
+          0,
+          2
+        ],
+        [
+          269,
+          "pop",
+          18.32,
+          0.12
+        ],
+        [
+          269,
+          "bounce",
+          1.82,
+          8.29
+        ],
+        [
+          271,
+          "shot",
+          2.25,
+          1.12,
+          0.52,
+          1,
+          3
+        ],
+        [
+          272,
+          "boom",
+          0.96,
+          8.25,
+          2
+        ],
+        [
+          272,
+          "ff",
+          0.96,
+          8.25,
+          2,
+          2
+        ],
+        [
+          273,
+          "pop",
+          8.11,
+          4.84
+        ],
+        [
+          289,
+          "pop",
+          21.88,
+          4
+        ],
+        [
+          291,
+          "shot",
+          0.96,
+          1.7,
+          0,
+          1,
+          3
+        ],
+        [
+          291,
+          "pop",
+          8.92,
+          4.87
+        ],
+        [
+          304,
+          "shot",
+          0.95,
+          3.11,
+          -0.15,
+          1,
+          3
+        ],
+        [
+          308,
+          "shot",
+          5.69,
+          2.97,
+          -3.18,
+          0,
+          4
+        ],
+        [
+          313,
+          "bounce",
+          3.14,
+          9.66
+        ],
+        [
+          314,
+          "shot",
+          1.33,
+          2.71,
+          -0.04,
+          1,
+          3
+        ],
+        [
+          320,
+          "mboom",
+          4.62,
+          10.02
+        ],
+        [
+          332,
+          "crate",
+          7.5,
+          8.5,
+          2
+        ],
+        [
+          333,
+          "bounce",
+          0.12,
+          3.17
+        ],
+        [
+          347,
+          "shot",
+          5.42,
+          2.28,
+          -2.55,
+          0,
+          4
+        ],
+        [
+          349,
+          "pop",
+          21.78,
+          1.76
+        ],
+        [
+          350,
+          "pop",
+          4.31,
+          4.91
+        ],
+        [
+          360,
+          "shot",
+          4.45,
+          0.97,
+          1.23,
+          1,
+          3
+        ],
+        [
+          362,
+          "pop",
+          21.03,
+          0.1
+        ],
+        [
+          366,
+          "bounce",
+          2.07,
+          0.1
+        ],
+        [
+          371,
+          "shot",
+          5.31,
+          1,
+          1.48,
+          1,
+          3
+        ],
+        [
+          372,
+          "pop",
+          21.79,
+          1.96
+        ],
+        [
+          372,
+          "pop",
+          5.86,
+          4.76
+        ],
+        [
+          379,
+          "pop",
+          0.1,
+          1.48
+        ],
+        [
+          381,
+          "shot",
+          6.22,
+          1,
+          1.64,
+          1,
+          3
+        ],
+        [
+          382,
+          "pop",
+          5.67,
+          4.83
+        ],
+        [
+          384,
+          "shot",
+          6.73,
+          1.24,
+          -1.83,
+          0,
+          4
+        ],
+        [
+          385,
+          "boom",
+          6.66,
+          0.42,
+          3
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 28,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 34
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "language": "fr-FR",
+      "viewport": "2048x991",
+      "screen": "2048x1152",
+      "dpr": 1.25,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 8,
+      "cores": 4,
+      "gl": {
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 630 (0x00005912) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "pixelRatio": 1.25
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/55ECM",
+    "time": "2026-11-05T20:22:51.471Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}
