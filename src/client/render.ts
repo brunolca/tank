@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { BELT_SPEED, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
+import { isRivalId } from '../shared/rivals';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
@@ -169,6 +170,7 @@ interface TankView {
   mound?: THREE.Group; // the Foreur under the table: a moving bump of earth
   crane?: THREE.Group; // the Maçon (iteration 12): its crane swings when it lays a block
   sack?: THREE.Group; // the Pilleur (iteration 15): its loot sack swells with each crate it steals
+  key?: THREE.Group; // a versus rival (iteration 17): its wind-up key
   under?: boolean;
 }
 
@@ -370,6 +372,15 @@ const rackMineMat = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness:
 const goldMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3, metalness: 0.75, emissive: 0x3a2400, emissiveIntensity: 0.4 });
 
 const treadMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.9 });
+// versus rivals (iteration 17): antenna, bead and wind-up key
+const rivalGeo = {
+  post: new THREE.CylinderGeometry(0.012, 0.016, 0.3, 6),
+  bead: new THREE.SphereGeometry(0.05, 12, 8),
+  shaft: new THREE.CylinderGeometry(0.022, 0.022, 0.14, 8),
+  loop: new THREE.TorusGeometry(0.06, 0.018, 6, 14),
+};
+const rivalMetalMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.3, metalness: 0.8 });
+const rivalBeadMat = new THREE.MeshStandardMaterial({ color: 0xff4d3d, roughness: 0.3, emissive: 0xff2a1a, emissiveIntensity: 0.9 });
 
 function buildTank(info: TankInfo): TankView {
   const color = info.kind === 'player' ? info.color : enemyColor(info.kind);
@@ -442,12 +453,34 @@ function buildTank(info: TankInfo): TankView {
   lamp.position.set(0.2, 0.1, 0.12);
   lamp.visible = false;
   turret.add(dome, cap, barrel, muzzle, lamp);
+  let rivalKey: THREE.Group | undefined;
+  if (info.kind === 'player' && isRivalId(info.pid)) {
+    // a versus rival driven by the computer (iteration 17): a wind-up robot's antenna with a glowing bead, and a key in its back
+    const post = new THREE.Mesh(rivalGeo.post, rivalMetalMat);
+    post.position.set(-0.08, 0.32, 0);
+    const bead = new THREE.Mesh(rivalGeo.bead, rivalBeadMat);
+    bead.position.set(-0.08, 0.5, 0);
+    turret.add(post, bead);
+    const key = new THREE.Group();
+    const shaft = new THREE.Mesh(rivalGeo.shaft, rivalMetalMat);
+    shaft.rotation.z = Math.PI / 2;
+    shaft.position.x = -0.06;
+    key.add(shaft);
+    for (const s of [-1, 1]) {
+      const loop = new THREE.Mesh(rivalGeo.loop, rivalMetalMat);
+      loop.position.set(-0.14, 0, s * 0.08);
+      key.add(loop);
+    }
+    key.position.set(-0.46, 0.3, 0);
+    hull.add(key);
+    rivalKey = key;
+  }
   root.add(hull, turret);
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
   const scale = tankRadius(info.kind) / TANK_R;
-  const view: TankView = { info, root, hull, turret, lastMarkX: NaN, lastMarkY: NaN, wasAlive: true, recoil: 0, materials: [bodyMat, topMat, barrelMat], scale, hit: 0, lamp, lampMat, alertT: 0 };
+  const view: TankView = { info, root, hull, turret, lastMarkX: NaN, lastMarkY: NaN, wasAlive: true, recoil: 0, materials: [bodyMat, topMat, barrelMat], scale, hit: 0, lamp, lampMat, alertT: 0, key: rivalKey };
   if (info.kind !== 'player') {
     const alert = new THREE.Sprite(alertMat);
     alert.position.y = 0.95 * scale + 0.35;
@@ -1352,6 +1385,7 @@ export class Renderer {
       if (u >= 1) this.rising.splice(i, 1);
     }
     for (const v of this.tanks.values()) {
+      if (v.key) v.key.rotation.x += dt * 3.2; // the rival's wind-up key turns
       const sk = v.sack;
       if (sk) {
         // it wobbles as it drives, and gulps (a quick swell) each time it steals a crate

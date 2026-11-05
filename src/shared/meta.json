@@ -1,7 +1,7 @@
 {
-  "iteration": 16,
-  "date": "2026-11-04",
-  "title": "L’usine à jouets",
+  "iteration": 17,
+  "date": "2026-11-05",
+  "title": "Les rivaux",
   "journal": [
     {
       "iteration": 1,
@@ -196,6 +196,18 @@
         "Mission 26, « Le carrousel » : une ronde de tapis promène des tourelles autour de la cour. Elles ne restent jamais au même endroit !",
         "L’atelier gagne quatre pinceaux de tapis (un par direction), le miroir les retourne, et les liens de partage les gardent. Une arène de versus en a aussi.",
         "La manette vibre quand ton tank est détruit ou que ton bouclier cède ; sur téléphone, c’est l’appareil qui vibre."
+      ]
+    },
+    {
+      "iteration": 17,
+      "date": "2026-11-05",
+      "title": "Les rivaux",
+      "notes": [
+        "Nouveau : les rivaux. Dans le salon du versus, l’hôte ajoute jusqu’à trois tanks pilotés par l’ordinateur. Seul, tu peux enfin jouer un vrai chacun pour soi !",
+        "Trois niveaux : Novice tire droit et réagit lentement, Malin joue les ricochets, Redoutable vise juste et anticipe. Un clic sur l’étiquette change de niveau, la croix renvoie le rival au garage.",
+        "Les rivaux ont chacun leur canon, ramassent les caisses bonus, posent des mines et comptent leurs manches au tableau des scores comme tout le monde.",
+        "On les reconnaît à leur antenne rouge et à la clé de jouet mécanique qui tourne dans leur dos. Un ami arrive ? Un rival lui cède sa place.",
+        "Le fond animé de l’accueil montre parfois un versus entre quatre rivaux."
       ]
     }
   ]

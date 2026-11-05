@@ -5,6 +5,7 @@ import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '..
 import { Game, driveStep } from '../src/shared/sim';
 import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, tunnelAxis } from '../src/shared/physics';
+import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 
 for (const def of Object.values(EXTRA_LEVELS)) {
   const bad = def.map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
@@ -851,4 +852,40 @@ console.log('total', Date.now() - t0, 'ms');
     if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
     if (process.exitCode !== 1) console.log(`tapis OK (missions : ${beltMissions.join(', ')}, ${per.toFixed(3)} ms/tick)`);
   }
+}
+
+// versus rivals (iteration 17): four AI tanks, one team each, must settle a round on every arena, quickly
+{
+  const fail = (m: string) => { console.error('rivaux : ' + m); process.exitCode = 1; };
+  if (rivalLevel(-3) !== 0 || rivalLevel(9) !== RIVAL_LEVELS.length - 1 || rivalLevel('x') !== 1) fail('rivalLevel ne borne pas les niveaux');
+  let settled = 0, rounds = 0, worst = 0, totalTicks = 0;
+  const wins = [0, 0, 0];
+  for (let round = 0; round < 24; round++) {
+    const lvl = versusArena(round);
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.bonusOn = true; g.bonusNext = 5; g.bonusEvery = [8, 12];
+    g.night = !!lvl.night; g.storm = !!lvl.storm;
+    const levels = [round % 3, (round + 1) % 3, (round + 2) % 3, round % 3];
+    lvl.spawns.forEach(([x, y], i) => {
+      const t = g.addTank('player', i + 1, x, y, 0x3d7bff, `ia:${i + 1}`, `R${i}`);
+      g.arm(t, WEAPONS[(round + i) % WEAPONS.length]);
+      makeRival(g, t, levels[i]);
+    });
+    g.frozen = false;
+    let ticks = 0;
+    const t1 = performance.now();
+    for (; ticks < 30 * 120 && g.tanks.filter((t) => t.alive).length > 1; ticks++) { g.step(new Map()); g.events = []; }
+    const per = (performance.now() - t1) / Math.max(1, ticks);
+    worst = Math.max(worst, per);
+    totalTicks += ticks;
+    rounds++;
+    const alive = g.tanks.filter((t) => t.alive);
+    if (alive.length <= 1) settled++;
+    if (alive.length === 1) wins[levels[alive[0].team - 1]]++;
+    // the cannon keeps its ammo and speed: the brain only changes how it aims
+    for (const t of g.tanks) if (t.spec.speed !== playerSpec(t.weapon ?? 'canon').speed) fail('un rival roule plus vite que son canon');
+  }
+  if (settled < rounds * 0.75) fail(`seulement ${settled}/${rounds} manches décidées en 2 minutes`);
+  if (worst > 1) fail(`${worst.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`rivaux OK (${settled}/${rounds} manches décidées, ${(totalTicks / rounds / 30).toFixed(0)} s en moyenne, victoires novice/malin/redoutable ${wins.join('/')}, ${worst.toFixed(3)} ms/tick au pire)`);
 }

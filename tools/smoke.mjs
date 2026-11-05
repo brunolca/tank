@@ -69,6 +69,29 @@ try {
   await a.context().close();
   await b.context().close();
 
+  // versus alone against AI rivals (iteration 17): add two, start, they must have their tanks
+  const solo = await page('solo', server.url + '/');
+  await sleep(1500);
+  await solo.click('#btn-create');
+  await solo.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1000);
+  await solo.click('#mode-select button[data-mode="versus"]');
+  await solo.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  await solo.click('#btn-rival');
+  await sleep(500);
+  await solo.click('#btn-rival');
+  await sleep(1000);
+  const seats = await solo.locator('#lobby-players li.rival').count();
+  if (seats !== 2) fail(`le salon devrait afficher 2 rivaux, il en affiche ${seats}`);
+  if (await solo.locator('#btn-start').isDisabled()) fail('impossible de lancer un versus seul contre des rivaux');
+  await solo.click('#btn-start');
+  await sleep(6500); // intro, then the rivals start fighting
+  const vs = await state(solo);
+  if (!vs.online || vs.myTankId < 0) fail(`versus contre les rivaux : pas en partie (écran ${vs.screen}, phase ${vs.phase})`);
+  if (vs.tanks !== 3) fail(`versus contre les rivaux : ${vs.tanks} tank(s) au lieu de 3`);
+  if (vs.moved < 0.3) fail(`les rivaux ne bougent pas (${vs.moved})`);
+  await solo.context().close();
+
   const d = await page('démo', server.url + '/?demo=1&mission=3');
   await sleep(1500);
   const t0 = (await d.evaluate(() => window.__demo.state)).tick;
@@ -83,5 +106,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, feedback, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, feedback, versus contre les rivaux, mode démo).');
 process.exit(0);

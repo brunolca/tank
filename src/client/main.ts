@@ -1,7 +1,8 @@
 import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
-import { getMission, type ParsedLevel } from '../shared/levels';
+import { getMission, versusArena, type ParsedLevel } from '../shared/levels';
+import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, makeRival, rivalLevel } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep } from '../shared/physics';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
@@ -888,7 +889,7 @@ function renderHud() {
     sb.innerHTML = lobbyPlayers
       .filter((p) => scores[p.id] !== undefined)
       .sort((a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0))
-      .map((p) => `<div class="sb-row"><i style="--c:${hex(p.color)}"></i><span>${escapeHtml(p.name)}</span><b>${scores[p.id] ?? 0}</b></div>`)
+      .map((p) => `<div class="sb-row"><i style="--c:${hex(p.color)}"></i><span>${escapeHtml(p.name)}${p.bot !== undefined ? ' <em>IA</em>' : ''}</span><b>${scores[p.id] ?? 0}</b></div>`)
       .join('');
   } else sb.innerHTML = '';
   const isHost = lobbyPlayers.find((p) => p.id === pid)?.host;
@@ -903,8 +904,19 @@ function renderLobby() {
     const p = lobbyPlayers[i];
     if (!p) return `<li class="empty"><i></i><span>En attente d'un joueur…</span></li>`;
     const w = p.id === pid ? myWeapon : p.weapon ?? 'canon';
+    if (p.bot !== undefined) {
+      // a versus rival (iteration 17): the host changes its level with a click, or sends it home
+      const lvl = RIVAL_LEVELS[rivalLevel(p.bot)];
+      return `<li style="--c:${hex(p.color)}" class="rival"><i></i><span>${escapeHtml(p.name)} <em>(IA)</em></span><b class="wpn">${WEAPON_INFO[w].label}</b>`
+        + `<button class="rival-lvl lv${rivalLevel(p.bot)}" data-rival-lvl="${escapeHtml(p.id)}" ${isHost ? '' : 'disabled'} title="${lvl.desc}${isHost ? ' (clique pour changer)' : ''}">${lvl.label}</button>`
+        + (isHost ? `<button class="rival-del" data-rival-del="${escapeHtml(p.id)}" title="Retirer ce rival" aria-label="Retirer ce rival">×</button>` : '') + '</li>';
+    }
     return `<li style="--c:${hex(p.color)}" class="${p.connected ? '' : 'off'}"><i></i><span>${escapeHtml(p.name)}${p.id === pid ? ' <em>(toi)</em>' : ''}</span><b class="wpn">${WEAPON_INFO[w].label}</b>${p.host ? '<b class="host">Hôte</b>' : ''}</li>`;
   }).join('');
+  const rivalBox = $('#rival-select');
+  rivalBox.hidden = lobbyMode !== 'versus' || !isHost;
+  const full = lobbyPlayers.filter((p) => p.connected).length >= 4 || lobbyPlayers.filter((p) => p.bot !== undefined).length >= MAX_RIVALS;
+  $<HTMLButtonElement>('#btn-rival').disabled = full || phase !== 'lobby';
   document.querySelectorAll<HTMLButtonElement>('#mode-select button').forEach((b) => {
     b.classList.toggle('on', b.dataset.mode === lobbyMode);
     b.disabled = !isHost;
@@ -916,7 +928,7 @@ function renderLobby() {
   const need = lobbyMode === 'versus' ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
   const noMap = lobbyMode === 'atelier' && !lobbyAtelier;
   start.disabled = n < need || noMap;
-  start.textContent = n < need ? `Il faut ${need} joueurs` : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
+  start.textContent = n < need ? (lobbyMode === 'versus' ? 'Ajoute un rival ou invite un ami' : `Il faut ${need} joueurs`) : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   renderLobbyAtelier(isHost);
   const today = dayNumber();
   $('#mode-desc').textContent = lobbyMode === 'daily'
@@ -929,7 +941,7 @@ function renderLobby() {
       : 'Atelier : l’hôte dessine sa propre mission (murs, liège, trous, tunnels, portails, ennemis et même un boss), puis vous la jouez en coop.')
     : lobbyMode === 'coop'
     ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
-    : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher !';
+    : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
   renderWeapons();
   renderCheckpoints(isHost);
   renderHud();
@@ -961,6 +973,16 @@ $('#weapon-select').addEventListener('click', (e) => {
   try { localStorage.setItem('tanks.weapon', myWeapon); } catch {}
   send({ t: 'arm', w: myWeapon });
   renderLobby();
+});
+
+// versus rivals (iteration 17): add one, change its level, send it home
+$('#btn-rival').addEventListener('click', () => { sfx.click(); send({ t: 'rival', op: 'add' }); });
+$('#lobby-players').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-rival-lvl], button[data-rival-del]');
+  if (!b || b.disabled) return;
+  sfx.click();
+  if (b.dataset.rivalLvl) send({ t: 'rival', op: 'lvl', id: b.dataset.rivalLvl });
+  else send({ t: 'rival', op: 'del', id: b.dataset.rivalDel });
 });
 
 /** Coop checkpoints (mission 1, 6, 11…): the host picks among those reached on their browser. */
@@ -1127,7 +1149,7 @@ function showResults(r: Results) {
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
-          return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}</td>${
+          return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}${p.bot !== undefined ? ` <em class="ia">IA ${RIVAL_LEVELS[rivalLevel(p.bot)].label.toLowerCase()}</em>` : ''}</td>${
             coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
           }${ff ? `<td>${p.ff || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
@@ -1142,7 +1164,9 @@ let attract: Game | undefined;
 let attractEnd = 0;
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
-interface AttractOpts { atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
+/** A versus of AI rivals (iteration 17): the videos, and now and then the home-screen background. */
+interface AttractVersus { round: number; levels?: number[]; scores?: number[]; chain?: boolean }
+interface AttractOpts { versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -1154,6 +1178,13 @@ function attractMission() {
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
+  // now and then, the home-screen background is a versus of AI rivals (iteration 17)
+  if (!opts.versus && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && Math.random() < 0.1) {
+    startAttractVersus({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] });
+    return;
+  }
+  if (opts.versus) { startAttractVersus(opts.versus, opts.arms); return; }
+  if (document.body.classList.contains('vs-demo')) { document.body.classList.remove('vs-demo'); $('#hud').hidden = true; }
   const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
   const g = new Game(lvl.tiles, lvl.belts);
   g.bonusOn = true;
@@ -1192,6 +1223,62 @@ function stopAttract() {
   attract = undefined;
 }
 
+const VS_ARMS: Weapon[] = ['ricochet', 'canon', 'fusee', 'sapeur'];
+let attractVs: (AttractVersus & { scores: number[]; names: string[] }) | undefined;
+
+/** Four rivals, one team each, on a versus arena: the last one standing scores (and, in the videos, the next round follows). */
+function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
+  const lvl = versusArena(vs.round);
+  const g = new Game(lvl.tiles, lvl.belts);
+  g.bonusOn = true;
+  g.bonusNext = 3; g.bonusEvery = [6, 9];
+  g.night = !!lvl.night;
+  g.storm = !!lvl.storm;
+  const names = [0, 1, 2, 3].map((i) => RIVAL_NAMES[(vs.round + i * 3) % RIVAL_NAMES.length]);
+  lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
+    const t = g.addTank('player', i + 1, x, y, PLAYER_COLORS[i], `ia:${i + 1}`, names[i]);
+    g.arm(t, (arms?.length ? arms : VS_ARMS)[i % (arms?.length || VS_ARMS.length)]);
+    t.body = t.turret = Math.atan2(8.5 - y, 11 - x);
+    makeRival(g, t, vs.levels?.[i] ?? 2);
+  });
+  g.frozen = false;
+  attract = g;
+  attractOpts = { versus: vs, arms };
+  attractVs = { ...vs, scores: vs.scores ?? [0, 0, 0, 0], names };
+  attractEnd = 0;
+  attractPrev.clear();
+  renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
+  renderer.setNight(g.night);
+  renderer.setStorm(g.storm);
+  renderVsBoard();
+}
+
+function renderVsBoard() {
+  const vs = attractVs;
+  if (!vs || !document.body.classList.contains('demo') || screen !== 'game') return;
+  document.body.classList.add('vs-demo');
+  $('#hud').hidden = false;
+  $('#hud-enemies').textContent = `Manche ${vs.round + 1} · premier à 5`;
+  $('#scoreboard').innerHTML = vs.names
+    .map((n, i) => ({ n, i, s: vs.scores[i] }))
+    .sort((a, b) => b.s - a.s)
+    .map((e) => `<div class="sb-row"><i style="--c:${hex(PLAYER_COLORS[e.i])}"></i><span>${escapeHtml(e.n)} <em>IA</em></span><b>${e.s}</b></div>`)
+    .join('');
+}
+
+/** End of a rivals' round: the winner scores, then the next round (videos) or another background. */
+function endAttractVersus(g: Game) {
+  const vs = attractVs!;
+  const alive = g.tanks.filter((t) => t.alive && t.kind === 'player');
+  const w = alive.length === 1 ? alive[0].team - 1 : -1;
+  if (w >= 0) vs.scores[w]++;
+  renderVsBoard();
+  if (document.body.classList.contains('demo') && screen === 'game') {
+    banner(`Versus · manche ${vs.round + 1}`, w >= 0 ? `${vs.names[w]} gagne la manche !` : 'Égalité !', w >= 0 ? `${vs.scores[w]} point${vs.scores[w] > 1 ? 's' : ''}` : '', 'intro');
+    setTimeout(hideBanner, 2200);
+  }
+}
+
 let attractAcc = 0;
 let attractState: Record<string, unknown> = {};
 function attractFrame(dt: number) {
@@ -1219,16 +1306,29 @@ function attractFrame(dt: number) {
   }), dt);
   renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 })));
   renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
-  if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) attractEnd = g.tick + TICK_RATE * 2.5;
-  if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
+  if (attractOpts.versus) {
+    const alive = g.tanks.filter((t) => t.alive && t.kind === 'player').length;
+    if (!attractEnd && (alive <= 1 || g.tick > TICK_RATE * 60)) { attractEnd = g.tick + TICK_RATE * 2.5; endAttractVersus(g); }
+    if (attractEnd && g.tick > attractEnd) {
+      const vs = attractVs!;
+      attract = undefined;
+      if (vs.chain && Math.max(...vs.scores) < 5) startAttract({ versus: { ...vs, round: vs.round + 1, scores: vs.scores }, arms: attractOpts.arms });
+      else { attractOpts = {}; startAttract({}); }
+    }
+  } else {
+    if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) attractEnd = g.tick + TICK_RATE * 2.5;
+    if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
+  }
   attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission };
 }
 
 // ------------------------------------------------------------------ main loop
 
 let lastT = performance.now();
+const demoMode = new URLSearchParams(location.search).has('demo');
 let acc = 0;
 function frame(now: number) {
+  const lastT0 = lastT;
   const dt = Math.min(0.05, (now - lastT) / 1000);
   if (now > lastT) fps += (1000 / (now - lastT) - fps) * 0.05;
   lastT = now;
@@ -1241,7 +1341,8 @@ function frame(now: number) {
     updateClock();
     updateCouncilTimer();
   } else if (attract) {
-    attractFrame(dt);
+    // the videos are filmed on machines without a GPU: let the demo catch up on slow frames so it plays in real time
+    attractFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt);
     updateNameTags([]);
   }
   renderer.render(dt);
@@ -1456,9 +1557,20 @@ const screen_ = window.screen;
 // ------------------------------------------------------------------ debug + demo hooks (smoke tests and videos)
 
 const params = new URLSearchParams(location.search);
+/** How far the other tanks went over the buffered snapshots (about a second): the smoke test checks that the rivals drive. */
+function debugMoved() {
+  const a = snaps[0], b = snaps[snaps.length - 1];
+  if (!a || !b) return 0;
+  let best = 0;
+  for (const [id, t] of b.T) {
+    const o = a.T.get(id);
+    if (o && id !== myTankId) best = Math.max(best, Math.hypot(t[1] - o[1], t[2] - o[2]));
+  }
+  return r2(best);
+}
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y } };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved() };
   },
 };
 if (params.has('demo')) {
@@ -1469,6 +1581,35 @@ if (params.has('demo')) {
     play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean, arms?: Weapon[], storm?: boolean) {
       attract = undefined;
       startAttract({ mission, heroes, rich, bossHp, night, arms: arms?.filter(isWeapon), storm });
+    },
+    /**
+     * Versus with AI rivals (iteration 17): four rivals on the arena of that round, one team each.
+     * `levels`: their level (0 Novice, 1 Malin, 2 Redoutable), `chain`: the next rounds follow, with the scores.
+     */
+    versus(round = 0, levels?: number[], arms?: Weapon[], chain = true) {
+      show('game');
+      attract = undefined;
+      startAttract({ versus: { round, levels, chain }, arms: arms?.filter(isWeapon) });
+      return attractVs?.names;
+    },
+    /** Show a versus lobby with a player and AI rivals for a moment, the host adding them one by one (for the videos). */
+    rivals(ms = 6000) {
+      const keep = { players: lobbyPlayers, mode: lobbyMode, room: roomCode, phase };
+      const me: PlayerInfo = { id: pid, name: myName, color: PLAYER_COLORS[0], host: true, connected: true, score: 0, weapon: myWeapon };
+      const bots: PlayerInfo[] = [0, 1, 2].map((i) => ({ id: `ia:${i + 1}`, name: RIVAL_NAMES[i * 3], color: PLAYER_COLORS[i + 1], host: false, connected: true, score: 0, weapon: VS_ARMS[i], bot: i }));
+      lobbyPlayers = [me];
+      lobbyMode = 'versus';
+      roomCode = 'SOLO7';
+      phase = 'lobby';
+      renderLobby();
+      show('lobby');
+      const step = Math.max(600, ms / 5);
+      bots.forEach((b, i) => setTimeout(() => { lobbyPlayers = [...lobbyPlayers, b]; renderLobby(); sfx.click(); }, step * (i + 0.6)));
+      setTimeout(() => {
+        lobbyPlayers = keep.players; lobbyMode = keep.mode; roomCode = keep.room; phase = keep.phase;
+        show('game');
+        if (attractOpts.versus) renderVsBoard(); else $('#hud').hidden = true;
+      }, ms);
     },
     /** Storm: announce a lightning strike right next to the first enemy still standing (or any tank). */
     bolt() {

@@ -732,3 +732,23 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 18
   .at-brushes button span { display: none; }
   .at-help { display: none; }
 }
+
+/* versus rivals (iteration 17) */
+#lobby-players li.rival { border-style: dashed; }
+#lobby-players .rival-lvl {
+  margin-left: 8px; font: inherit; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06); color: var(--text); cursor: pointer;
+}
+#lobby-players .rival-lvl.lv0 { color: #8fd68a; }
+#lobby-players .rival-lvl.lv1 { color: var(--accent); }
+#lobby-players .rival-lvl.lv2 { color: #ff7a6b; }
+#lobby-players .rival-lvl:disabled { cursor: default; }
+#lobby-players .rival-del {
+  width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted);
+  font: inherit; font-size: 16px; line-height: 1; cursor: pointer; flex: none;
+}
+#lobby-players .rival-del:hover { color: var(--text); border-color: var(--text); }
+#btn-rival { padding: 8px 14px; font-size: 14px; }
+#btn-rival:disabled { opacity: 0.45; cursor: default; }
+.sb-row em, #results em.ia { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+body.vs-demo .hud-left, body.vs-demo .hud-right { visibility: hidden; }

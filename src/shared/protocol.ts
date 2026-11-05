@@ -16,6 +16,7 @@ export interface PlayerInfo {
   connected: boolean;
   score: number;
   weapon?: Weapon; // cannon picked in the lobby (iteration 7)
+  bot?: number; // versus rival driven by the AI (iteration 17): its level, index in RIVAL_LEVELS
 }
 
 export interface TankInfo {
@@ -108,7 +109,7 @@ export interface Results {
   taupe?: TaupeResult & { cleared: number; stages: number };
   atelier?: { name: string; won: boolean }; // workshop mission (iteration 14)
   // ff: teammates destroyed (coop-like modes, iteration 8)
-  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number }[];
+  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number }[];
   winner?: string;
 }
 
@@ -145,6 +146,7 @@ export type ClientMsg =
   | { t: 'arm'; w: Weapon } // pick a cannon (iteration 7, applies from the next mission)
   | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
   | { t: 'atelier'; name: string; map: string[]; night?: boolean; storm?: boolean } // host: the workshop mission to play (iteration 14; also switches to that mode)
+  | { t: 'rival'; op: 'add' | 'del' | 'lvl'; id?: string } // host, versus lobby: add an AI rival, remove one, or change its level (iteration 17)
   | { t: 'vote'; who: string } // mole mode, during a council: the pid accused ('' = nobody)
   | { t: 'start' }
   | { t: 'stop' }

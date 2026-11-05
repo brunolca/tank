@@ -6,6 +6,7 @@ import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumbe
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
+import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon } from '../shared/rivals';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
 interface Attachment {
@@ -29,12 +30,26 @@ interface Player extends Attachment {
   inGame: boolean;
 }
 
+/** An AI rival of the versus mode (iteration 17): scored like a player, driven by the shared AI. */
+interface Rival {
+  pid: string;
+  name: string;
+  color: number;
+  level: number;
+  weapon: Weapon;
+  score: number;
+  kills: Partial<Record<TankKind, number>>;
+  deaths: number;
+}
+type StoredRival = Pick<Rival, 'pid' | 'name' | 'color' | 'level' | 'weapon'>;
+
 const MAX_PLAYERS = 4;
 const VERSUS_TARGET = 5;
 const EMPTY_INPUT: Input = { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 };
 
 export class Room extends DurableObject<Env> {
   private players = new Map<string, Player>();
+  private rivals: Rival[] = []; // versus only (iteration 17); cleared when the host picks another mode
   private mode: Mode = 'coop';
   private phase: Phase = 'lobby';
   private game?: Game;
@@ -72,6 +87,8 @@ export class Room extends DurableObject<Env> {
       this.mode = (await ctx.storage.get<Mode>('mode')) ?? 'coop';
       this.roomCode = (await ctx.storage.get<string>('code')) ?? '';
       this.atelier = await ctx.storage.get<AtelierMap>('atelier');
+      const stored = (await ctx.storage.get<StoredRival[]>('rivals')) ?? [];
+      this.rivals = this.mode === 'versus' ? stored.slice(0, MAX_RIVALS).map((r) => ({ ...r, score: 0, kills: {}, deaths: 0 })) : [];
     });
   }
 
@@ -82,7 +99,8 @@ export class Room extends DurableObject<Env> {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
-    const pid = (url.searchParams.get('pid') ?? '').slice(0, 64) || crypto.randomUUID();
+    const asked = (url.searchParams.get('pid') ?? '').slice(0, 64);
+    const pid = asked && !isRivalId(asked) ? asked : crypto.randomUUID(); // rival ids are the room's own
     const code = url.searchParams.get('room') ?? '';
     if (code && !this.roomCode) {
       this.roomCode = code;
@@ -111,6 +129,8 @@ export class Room extends DurableObject<Env> {
     } else {
       this.players.set(pid, this.makePlayer(att, server));
     }
+    // a newcomer takes the seat of a rival (in the lobby; during a game, they watch and the rival leaves afterwards)
+    if (this.phase === 'lobby') this.trimRivals();
     this.send(server, { t: 'welcome', id: pid, room: this.roomCode, v: META.iteration });
     // a tab opened before iteration 10 does not say its version: tell it to reload (it shows errors as a message)
     if (!v) this.send(server, { t: 'error', msg: 'Une nouvelle version de Tanks! est en ligne : recharge la page.' });
@@ -130,7 +150,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private freeColor() {
-    const used = new Set([...this.players.values()].map((p) => p.color));
+    const used = new Set([...this.players.values(), ...this.rivals].map((p) => p.color));
     return PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[0];
   }
 
@@ -163,7 +183,12 @@ export class Room extends DurableObject<Env> {
         p.name = String(msg.name ?? '').trim().slice(0, 16) || 'Joueur';
         const wanted = Number(msg.color);
         const taken = [...this.players.values()].some((o) => o !== p && o.ws && o.color === wanted);
-        if (PLAYER_COLORS.includes(wanted) && !taken) p.color = wanted;
+        if (PLAYER_COLORS.includes(wanted) && !taken) {
+          p.color = wanted;
+          // a rival wearing that colour hands it over (it only wears it to tell the tanks apart)
+          for (const r of this.rivals) if (r.color === wanted) r.color = this.freeColor();
+          void this.saveRivals();
+        }
         this.saveAttachment(p, ws);
         this.broadcastLobby();
         break;
@@ -184,7 +209,9 @@ export class Room extends DurableObject<Env> {
       case 'mode':
         if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier')) {
           this.mode = msg.mode;
+          if (this.mode !== 'versus') this.rivals = [];
           await this.ctx.storage.put('mode', this.mode);
+          await this.saveRivals();
           this.broadcastLobby();
         }
         break;
@@ -194,11 +221,16 @@ export class Room extends DurableObject<Env> {
         if (why) { this.send(ws, { t: 'error', msg: `Atelier : ${why}` }); break; }
         this.atelier = { name: cleanName(msg.name) || 'Mission maison', map: (msg.map as string[]).slice(), night: msg.night === true || undefined, storm: msg.storm === true || undefined };
         this.mode = 'atelier';
+        this.rivals = [];
+        void this.saveRivals();
         await this.ctx.storage.put('atelier', this.atelier);
         await this.ctx.storage.put('mode', this.mode);
         this.broadcastLobby();
         break;
       }
+      case 'rival':
+        if (p.pid === this.hostId() && this.phase === 'lobby' && this.mode === 'versus') this.onRival(msg.op, String(msg.id ?? ''));
+        break;
       case 'vote':
         this.onVote(p, String(msg.who ?? ''));
         break;
@@ -257,12 +289,59 @@ export class Room extends DurableObject<Env> {
     this.broadcastLobby();
   }
 
+  // ---------------------------------------------------------------- versus rivals (iteration 17)
+
+  private onRival(op: string, id: string) {
+    if (op === 'add') {
+      if (this.rivals.length >= MAX_RIVALS || this.connectedCount() + this.rivals.length >= MAX_PLAYERS) return;
+      const taken = new Set([...[...this.players.values()].map((p) => p.name), ...this.rivals.map((r) => r.name)]);
+      const names = RIVAL_NAMES.filter((n) => !taken.has(n));
+      const name = names[Math.floor(Math.random() * names.length)] ?? `Robot ${this.rivals.length + 1}`;
+      let k = 1;
+      while (this.rivals.some((r) => r.pid === RIVAL_PREFIX + k)) k++;
+      // a new rival copies the level of the last one (the host usually wants them all alike)
+      const level = this.rivals.length ? this.rivals[this.rivals.length - 1].level : 1;
+      this.rivals.push({ pid: RIVAL_PREFIX + k, name, color: this.freeColor(), level, weapon: randomWeapon(), score: 0, kills: {}, deaths: 0 });
+    } else if (op === 'del') {
+      this.rivals = this.rivals.filter((r) => r.pid !== id);
+    } else if (op === 'lvl') {
+      const r = this.rivals.find((o) => o.pid === id);
+      if (r) r.level = (r.level + 1) % RIVAL_LEVELS.length;
+    } else return;
+    void this.saveRivals();
+    this.broadcastLobby();
+  }
+
+  /** Never more than 4 tanks: rivals give their seat to players. */
+  private trimRivals() {
+    const room = Math.max(0, MAX_PLAYERS - this.connectedCount());
+    if (this.rivals.length > room) {
+      this.rivals = this.rivals.slice(0, room);
+      void this.saveRivals();
+    }
+  }
+
+  private async saveRivals() {
+    const list: StoredRival[] = this.rivals.map(({ pid, name, color, level, weapon }) => ({ pid, name, color, level, weapon }));
+    try { await this.ctx.storage.put('rivals', list); } catch {}
+  }
+
+  /** A player or a rival, by id (scores, kills and round wins are counted the same way). */
+  private entrant(pid: string | undefined): { score: number; kills: Partial<Record<TankKind, number>>; deaths: number; name: string } | undefined {
+    if (!pid) return undefined;
+    return this.players.get(pid) ?? this.rivals.find((r) => r.pid === pid);
+  }
+
+  private versusRivals() {
+    return this.mode === 'versus' ? this.rivals : [];
+  }
+
   // ---------------------------------------------------------------- game flow
 
   private startGame() {
     const active = [...this.players.values()].filter((p) => p.ws);
-    if (this.mode === 'versus' && active.length < 2) {
-      for (const p of active) this.send(p.ws!, { t: 'error', msg: 'Il faut au moins 2 joueurs pour le mode versus.' });
+    if (this.mode === 'versus' && active.length + this.versusRivals().length < 2) {
+      for (const p of active) this.send(p.ws!, { t: 'error', msg: 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
       return;
     }
     if (this.mode === 'atelier' && !this.atelier) {
@@ -276,6 +355,7 @@ export class Room extends DurableObject<Env> {
     for (const p of this.players.values()) {
       p.score = 0; p.kills = {}; p.deaths = 0; p.ff = 0; p.inGame = !!p.ws;
     }
+    for (const r of this.rivals) { r.score = 0; r.kills = {}; r.deaths = 0; }
     this.mission = this.mode === 'coop' ? this.from : 1;
     this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : this.mode === 'atelier' ? ATELIER_LIVES : 3;
     this.atelierWon = false;
@@ -305,7 +385,12 @@ export class Room extends DurableObject<Env> {
     const game = new Game(this.level.tiles, this.level.belts);
     const spawns = this.level.spawns.slice();
     const used: [number, number][] = [];
-    participants.forEach((p, i) => {
+    const rivals = this.versusRivals().slice(0, Math.max(0, MAX_PLAYERS - participants.length));
+    const entrants: { pid: string; name: string; color: number; weapon?: Weapon; rival?: number; player?: Player }[] = [
+      ...participants.map((p) => ({ pid: p.pid, name: p.name, color: p.color, weapon: p.weapon, player: p })),
+      ...rivals.map((r) => ({ pid: r.pid, name: r.name, color: r.color, weapon: r.weapon, rival: r.level })),
+    ];
+    entrants.forEach((p, i) => {
       let pos: [number, number];
       if (spawns[i]) pos = spawns[i];
       else {
@@ -319,8 +404,13 @@ export class Room extends DurableObject<Env> {
       if (this.mode === 'versus') {
         t.body = t.turret = Math.atan2(8.5 - pos[1], 11 - pos[0]);
       }
-      p.queue = [];
-      p.last = { ...EMPTY_INPUT, a: t.turret };
+      if (p.rival !== undefined) {
+        makeRival(game, t, p.rival);
+      }
+      if (p.player) {
+        p.player.queue = [];
+        p.player.last = { ...EMPTY_INPUT, a: t.turret };
+      }
     });
     this.enemyIndexByTank.clear();
     this.level.enemies.forEach((e, idx) => {
@@ -374,7 +464,7 @@ export class Room extends DurableObject<Env> {
 
   private onKill(victim: { pid?: string; kind: TankKind; id: number; team: number; x: number; y: number }, killer?: { pid?: string; team: number; id: number }) {
     if (victim.pid) {
-      const vp = this.players.get(victim.pid);
+      const vp = this.entrant(victim.pid);
       if (vp) vp.deaths++;
       if (killer?.pid && this.mode !== 'versus') {
         // friendly fire is public: everyone sees who hit whom (the mole has to make it look like an accident)
@@ -387,9 +477,9 @@ export class Room extends DurableObject<Env> {
       if (idx !== undefined) this.killedEnemies.add(idx);
     }
     if (killer?.pid) {
-      const kp = this.players.get(killer.pid);
+      const kp = this.entrant(killer.pid);
       const coop = this.mode !== 'versus';
-      if (kp && kp.pid !== victim.pid && !(coop && victim.pid)) {
+      if (kp && killer.pid !== victim.pid && !(coop && victim.pid)) {
         const key: TankKind = victim.kind;
         kp.kills[key] = (kp.kills[key] ?? 0) + 1;
         if (coop) kp.score++;
@@ -406,6 +496,7 @@ export class Room extends DurableObject<Env> {
   private phaseMsg(): ServerMsg {
     const scores: Record<string, number> = {};
     for (const p of this.players.values()) scores[p.pid] = p.score;
+    if (this.game) for (const r of this.versusRivals()) scores[r.pid] = r.score;
     return {
       t: 'phase',
       phase: this.phase,
@@ -455,7 +546,8 @@ export class Room extends DurableObject<Env> {
   private results(): Results {
     const players = [...this.players.values()]
       .filter((p) => p.inGame)
-      .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score, ff: this.mode === 'versus' ? undefined : p.ff }))
+      .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score, ff: this.mode === 'versus' ? undefined : p.ff } as Results['players'][number]))
+      .concat(this.versusRivals().map((r) => ({ id: r.pid, name: r.name, color: r.color, kills: r.kills, deaths: r.deaths, score: r.score, bot: r.level })))
       .sort((a, b) => b.score - a.score);
     const daily = this.mode === 'daily' ? { state: this.dailyState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
     const taupe = this.mode === 'taupe' && this.taupeEnd
@@ -539,7 +631,7 @@ export class Room extends DurableObject<Env> {
         break;
       case 'roundEnd':
         if (this.phaseTimer <= 0) {
-          const best = Math.max(...[...this.players.values()].map((p) => p.score));
+          const best = Math.max(...[...this.players.values(), ...this.versusRivals()].map((p) => p.score));
           if (best >= VERSUS_TARGET) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else { this.round++; this.loadStage(); }
         }
@@ -639,7 +731,7 @@ export class Room extends DurableObject<Env> {
         game.bolts = []; // the last tank standing won't be struck after the fact
       }
       if (alive.length <= 1 && (game.bullets.length === 0 || this.settle >= SETTLE_MAX)) {
-        const w = alive[0]?.pid ? this.players.get(alive[0].pid) : undefined;
+        const w = this.entrant(alive[0]?.pid);
         if (w) w.score++;
         this.setPhase('roundEnd', 3.5);
         this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: w ? `${w.name} gagne la manche !` : 'Égalité !' });
@@ -657,6 +749,7 @@ export class Room extends DurableObject<Env> {
       p.inGame = false;
       if (!p.ws) this.players.delete(id);
     }
+    this.trimRivals();
     this.broadcastPhase();
     this.broadcastLobby();
   }
@@ -688,7 +781,8 @@ export class Room extends DurableObject<Env> {
     const host = this.hostId();
     return [...this.players.values()]
       .sort((a, b) => a.joined - b.joined)
-      .map((p) => ({ id: p.pid, name: p.name, color: p.color, host: p.pid === host, connected: !!p.ws, score: p.score, weapon: p.weapon }));
+      .map((p): PlayerInfo => ({ id: p.pid, name: p.name, color: p.color, host: p.pid === host, connected: !!p.ws, score: p.score, weapon: p.weapon }))
+      .concat(this.versusRivals().map((r) => ({ id: r.pid, name: r.name, color: r.color, host: false, connected: true, score: r.score, weapon: r.weapon, bot: r.level })));
   }
 
   private broadcastLobby() {

@@ -7,10 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 26, arms: ['canon', 'ricochet'], seconds: 16, caption: 'Nouveau terrain : les tapis roulants', sub: 'Le carrousel promène ses tourelles autour de la cour' },
-  { mission: 25, arms: ['sapeur', 'canon'], beltCrates: [1.5, 4.5, 8], seconds: 16, caption: 'Tout ce qui roule y passe', sub: 'Tanks, mines et caisses bonus suivent le courant' },
-  { mission: 25, arms: ['fusee', 'ricochet'], rich: true, beltCrates: [1], seconds: 13, caption: 'La chaîne de montage', sub: 'Remonter le courant ralentit : traverse au bon moment' },
-  { mission: 24, arms: ['canon', 'sapeur'], baits: [1.2, 5], seconds: 10, caption: 'Et toujours Pilleurs, tunnels et boss', sub: 'Les tapis aussi dans l’atelier et en versus' },
+  { versus: [0, [2, 2, 2, 2]], seconds: 20, caption: 'Nouveau : les rivaux', sub: 'Des tanks pilotés par l’ordinateur complètent le versus' },
+  { rivals: 7, seconds: 7, caption: 'Seul ou à deux ? Ajoute jusqu’à trois rivaux', sub: 'Novice, Malin ou Redoutable : un clic change leur niveau' },
+  { versus: [7, [2, 1, 2, 1]], arms: ['fusee', 'sapeur', 'ricochet', 'canon'], seconds: 16, caption: 'Manche de nuit, sous l’orage', sub: 'Les rivaux ramassent les caisses et posent des mines eux aussi' },
+  { versus: [10, [2, 2, 2, 2]], seconds: 12, caption: 'Sur toutes les arènes du versus', sub: 'Tunnels et tapis roulants compris' },
+  { mission: 26, arms: ['canon', 'ricochet'], seconds: 8, caption: 'Et toujours la campagne coop', sub: 'Tapis roulants, Pilleurs, tunnels et boss' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -55,6 +56,8 @@ try {
       else if (shot.atelier) d.atelier(shot.atelier * 1000);
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
+      else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
+      else if (shot.rivals) d.rivals(shot.rivals * 1000); // the versus goes on behind the lobby
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
       else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm);
