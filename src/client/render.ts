@@ -899,7 +899,13 @@ export class Renderer {
 
     this.resize();
     addEventListener('resize', () => this.resize());
+    // iPhone (player feedback #24): after a rotation, the resize event can come before the page has its new size,
+    // and the table stayed stretched; the frame loop also checks the canvas size (see render)
+    addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
+    visualViewport?.addEventListener('resize', () => this.resize());
   }
+  private sizeW = 0;
+  private sizeH = 0;
 
   private resetDrop(i: number, h: number) {
     const x = -1 + Math.random() * (W + 2), z = -1 + Math.random() * (H + 2);
@@ -1081,6 +1087,7 @@ export class Renderer {
 
   resize() {
     const w = this.canvas.clientWidth || innerWidth, h = this.canvas.clientHeight || innerHeight;
+    this.sizeW = w; this.sizeH = h;
     this.renderer.setSize(w, h, false);
     const aspect = w / h;
     this.camera.aspect = aspect;
@@ -2128,6 +2135,7 @@ export class Renderer {
   // ---------------------------------------------------------------- frame
 
   render(dt: number) {
+    if ((this.canvas.clientWidth || innerWidth) !== this.sizeW || (this.canvas.clientHeight || innerHeight) !== this.sizeH) this.resize();
     this.time += dt;
     this.glow.update(dt);
     this.smoke.update(dt);

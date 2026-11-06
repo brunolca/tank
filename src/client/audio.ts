@@ -243,6 +243,14 @@ export const sfx = {
     noise(t + 0.38, 0.12, 7000, 0.8, 0.6, 'highpass');
     noise(t + 0.4, 0.6, 1800, 0.7, 0.4, 'lowpass', 200);
   },
+  /** « Suis-moi ! » (iteration 20): two cheerful toots of a toy horn. */
+  rally() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.12, 520, 540, 0.18, 'square');
+    tone(t + 0.15, 0.2, 700, 720, 0.18, 'square');
+    tone(t + 0.15, 0.2, 350, 360, 0.08, 'triangle');
+  },
   /** The lightning falls: a sharp crack, then the thunder rolls. */
   thunder() {
     if (!ctx) return;

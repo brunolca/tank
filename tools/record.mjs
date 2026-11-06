@@ -7,11 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 7, arms: ['canon', 'ricochet'], skills: [9, [1, 0, 0], 7, [2, 0, 1, 2]], seconds: 10, caption: 'Nouveau : l’arbre des galons', sub: 'Chaque ennemi détruit rapporte de l’XP ; entre deux missions, on dépense ses galons' },
-  { mission: 3, arms: ['canon', 'ricochet'], ranks: [3, 0, 1], seconds: 15, caption: 'Canon : chargeur, ricochet, brise-liège', sub: 'Les galons d’or sur le capot disent qui s’est entraîné' },
-  { mission: 5, arms: ['sapeur', 'canon'], ranks: [0, 3, 3], buffs: ['turbo'], seconds: 13, caption: 'Génie et blindage', sub: 'Mines plus larges, sang-froid, bouclier de départ qui revient' },
-  { mission: 30, arms: ['canon', 'fusee'], ranks: [2, 2, 2], volley: true, seconds: 13, caption: 'Contre les boss, ça compte', sub: 'Le Grondeur n’a qu’à bien se tenir' },
-  { versus: [3, [2, 1, 2, 1]], seconds: 8, caption: 'Et toujours les rivaux du versus', sub: 'Jusqu’à trois tanks pilotés par l’ordinateur' },
+  { rivals: 6, lobby: 'coop', seconds: 6.5, caption: 'Nouveau : les coéquipiers', sub: 'Seul en campagne ? Ajoute jusqu’à trois tanks pilotés par l’ordinateur' },
+  { mission: 7, arms: ['canon', 'ricochet', 'fusee'], rallies: [3.5, 10], seconds: 15, caption: '« Suis-moi ! »', sub: 'Touche T, bouton Y ou 📣 : tes coéquipiers accourent sans cesser de tirer' },
+  { mission: 12, arms: ['ricochet', 'canon', 'sapeur'], ranks: [1, 1, 1], rallies: [5], seconds: 13, caption: 'Ils jouent les ricochets avec toi', sub: 'Novice, Malin ou Redoutable : l’hôte choisit leur niveau' },
+  { mission: 30, arms: ['canon', 'fusee', 'ricochet'], ranks: [2, 2, 2], volley: true, rallies: [6], seconds: 13, caption: 'Tous ensemble contre les boss', sub: 'Chaque coéquipier rend le boss plus coriace : à vous de jouer serré' },
+  { mission: 5, arms: ['sapeur', 'canon'], skills: [8, [1, 0, 0], 7, [2, 0, 1, 2]], seconds: 9, caption: 'Et toujours l’arbre des galons', sub: 'De l’XP à chaque ennemi détruit' },
+  { versus: [3, [2, 1, 2, 1]], seconds: 8, caption: 'Les rivaux du versus', sub: 'Même cerveau, autre camp' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -57,7 +58,7 @@ try {
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
-      else if (shot.rivals) d.rivals(shot.rivals * 1000); // the versus goes on behind the lobby
+      else if (shot.rivals) d.rivals(shot.rivals * 1000, shot.lobby); // the game goes on behind the lobby (versus, or coop teammates)
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
       else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm, shot.ranks);
@@ -74,6 +75,7 @@ try {
       for (const s of shot.tunnels ?? []) setTimeout(() => d.tunnel?.(), s * 1000);
       for (const s of shot.baits ?? []) setTimeout(() => d.bait?.(), s * 1000);
       for (const s of shot.beltCrates ?? []) setTimeout(() => d.beltCrate?.(), s * 1000);
+      for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

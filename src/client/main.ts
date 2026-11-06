@@ -2,7 +2,7 @@ import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, versusArena, type ParsedLevel } from '../shared/levels';
-import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, makeRival, rivalLevel } from '../shared/rivals';
+import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep } from '../shared/physics';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
@@ -462,6 +462,18 @@ function predictStep(x: number, y: number, body: number, mx: number, my: number,
   return [x, y, body];
 }
 
+/** AI teammates in the coop campaign (iteration 20): in the lobby list, they are the players with a level. */
+function hasMates() {
+  return online && currentMode === 'coop' && lobbyPlayers.some((p) => p.bot !== undefined);
+}
+
+/** « Suis-moi ! »: the AI teammates come to my tank for a few seconds (the room answers with a 'rally' event). */
+function callRally() {
+  if (!hasMates() || phase !== 'playing') return;
+  send({ t: 'order' });
+}
+$('#hud-rally').addEventListener('click', (e) => { (e.currentTarget as HTMLElement).blur(); callRally(); });
+
 function clientTick() {
   const s = controls.sample();
   localFireCd -= DT;
@@ -472,6 +484,7 @@ function clientTick() {
   if (s.aimAng !== null) aimAng = s.aimAng;
   else if (s.aimX !== null && s.aimY !== null) aimAng = Math.atan2(s.aimY - py, s.aimX - px);
   const playing = phase === 'playing';
+  if (s.rally && playing) callRally();
   if (playing && !tunnelHinted && isTunnel(tiles[Math.floor(py) * W + Math.floor(px)] ?? 0)) {
     tunnelHinted = true;
     toast('Caché dans le tunnel : l’ennemi te perd de vue… mais ton canon touche le plafond.', 3200);
@@ -703,6 +716,19 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1], e[2], 'Broum !', 0xd9822b);
       if (audible) sfx.erupt();
       break;
+    case 'rally': {
+      // « Suis-moi ! » (iteration 20): a horn, a ring around the leader, and the teammates answer
+      // the demo has no tank list from a room: its own game knows the teams
+      const who = (id: number): { team: number; pid?: string; color: number } | undefined => attract?.tanks.find((t) => t.id === id) ?? infos.get(id);
+      const lead = who(e[3]);
+      rallies++;
+      floater(e[1], e[2], 'Suis-moi !', lead?.color ?? 0xffd23a);
+      renderer.bonusBurst(e[1], e[2], lead?.color ?? 0xffd23a, false);
+      if (audible || attract) sfx.rally();
+      const mates = lastTanks.filter((t) => t.id !== e[3] && t.alive && who(t.id)?.team === lead?.team && isRivalId(who(t.id)?.pid));
+      mates.forEach((t, k) => setTimeout(() => floater(t.x, t.y - 0.3, MATE_LINES[(e[4] + k + e[3]) % MATE_LINES.length], who(t.id)?.color ?? 0xffffff), 380 + k * 220));
+      break;
+    }
     case 'call':
       renderer.call(e[3], e[1], e[2]);
       floater(e[1], e[2], 'Il appelle la foudre !', 0x8fc0ff);
@@ -720,6 +746,9 @@ function handleEvent(e: GameEvent, audible: boolean) {
 // ------------------------------------------------------------------ bonus: floating labels and HUD chips
 
 const floatLayer = $('#floaters');
+let rallies = 0; // « Suis-moi ! » calls seen (the smoke test checks the round trip)
+const MATE_LINES = ['Compris !', 'J’arrive !', 'Je te couvre !', 'En route !', 'À tes ordres !'];
+
 function floater(x: number, y: number, text: string, color: number) {
   const p = renderer.arenaToScreen(x, y, 1.1);
   const el = document.createElement('div');
@@ -1005,6 +1034,7 @@ function renderHud() {
   const livesEl = $('#hud-lives');
   livesEl.innerHTML = coopLike(currentMode) ? `<span class="tank-ico"></span> × ${lives}` : '';
   renderRole();
+  $('#hud-rally').hidden = !hasMates();
   const sb = $('#scoreboard');
   if (currentMode === 'versus') {
     sb.innerHTML = lobbyPlayers
@@ -1026,16 +1056,20 @@ function renderLobby() {
     if (!p) return `<li class="empty"><i></i><span>En attente d'un joueur…</span></li>`;
     const w = p.id === pid ? myWeapon : p.weapon ?? 'canon';
     if (p.bot !== undefined) {
-      // a versus rival (iteration 17): the host changes its level with a click, or sends it home
+      // a versus rival (iteration 17) or a coop teammate (iteration 20): the host changes its level with a click, or sends it home
       const lvl = RIVAL_LEVELS[rivalLevel(p.bot)];
+      const who = lobbyMode === 'coop' ? 'ce coéquipier' : 'ce rival';
       return `<li style="--c:${hex(p.color)}" class="rival"><i></i><span>${escapeHtml(p.name)} <em>(IA)</em></span><b class="wpn">${WEAPON_INFO[w].label}</b>`
         + `<button class="rival-lvl lv${rivalLevel(p.bot)}" data-rival-lvl="${escapeHtml(p.id)}" ${isHost ? '' : 'disabled'} title="${lvl.desc}${isHost ? ' (clique pour changer)' : ''}">${lvl.label}</button>`
-        + (isHost ? `<button class="rival-del" data-rival-del="${escapeHtml(p.id)}" title="Retirer ce rival" aria-label="Retirer ce rival">×</button>` : '') + '</li>';
+        + (isHost ? `<button class="rival-del" data-rival-del="${escapeHtml(p.id)}" title="Retirer ${who}" aria-label="Retirer ${who}">×</button>` : '') + '</li>';
     }
     return `<li style="--c:${hex(p.color)}" class="${p.connected ? '' : 'off'}"><i></i><span>${escapeHtml(p.name)}${p.id === pid ? ' <em>(toi)</em>' : ''}</span><b class="wpn">${WEAPON_INFO[w].label}</b>${p.host ? '<b class="host">Hôte</b>' : ''}</li>`;
   }).join('');
   const rivalBox = $('#rival-select');
-  rivalBox.hidden = lobbyMode !== 'versus' || !isHost;
+  rivalBox.hidden = !rivalMode(lobbyMode) || !isHost;
+  const mates = lobbyMode === 'coop';
+  rivalBox.querySelector('.kicker')!.textContent = mates ? 'Coéquipiers' : 'Rivaux';
+  $('#btn-rival').textContent = mates ? '+ Ajouter un coéquipier (IA)' : '+ Ajouter un rival (IA)';
   const full = lobbyPlayers.filter((p) => p.connected).length >= 4 || lobbyPlayers.filter((p) => p.bot !== undefined).length >= MAX_RIVALS;
   $<HTMLButtonElement>('#btn-rival').disabled = full || phase !== 'lobby';
   document.querySelectorAll<HTMLButtonElement>('#mode-select button').forEach((b) => {
@@ -1061,7 +1095,7 @@ function renderLobby() {
       ? `Atelier : « ${lobbyAtelier.name} », une mission dessinée par l’hôte, à jouer en coop avec ${ATELIER_LIVES} vies.${lobbyAtelier.night ? ' De nuit.' : ''}${lobbyAtelier.storm ? ' Sous l’orage.' : ''}`
       : 'Atelier : l’hôte dessine sa propre mission (murs, liège, trous, tunnels, portails, ennemis et même un boss), puis vous la jouez en coop.')
     : lobbyMode === 'coop'
-    ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions.'
+    ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions. Pas assez de monde ? Ajoute jusqu’à 3 coéquipiers pilotés par l’ordinateur.'
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
   renderWeapons();
   renderCheckpoints(isHost);
@@ -1695,7 +1729,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, rallyBtn: !$('#hud-rally').hidden };
   },
 };
 if (params.has('demo')) {
@@ -1730,13 +1764,29 @@ if (params.has('demo')) {
       startAttract({ versus: { round, levels, chain }, arms: arms?.filter(isWeapon) });
       return attractVs?.names;
     },
-    /** Show a versus lobby with a player and AI rivals for a moment, the host adding them one by one (for the videos). */
-    rivals(ms = 6000) {
+    /**
+     * « Suis-moi ! » (iteration 20): the first hero of the demo calls the others, who drop everything and come along
+     * (they become AI teammates for the occasion). Returns how many answered.
+     */
+    rally() {
+      const g = attract;
+      if (!g) return 0;
+      const heroes = g.tanks.filter((t) => t.kind === 'player' && t.alive && t.team === 1);
+      if (heroes.length < 2) return 0;
+      for (const t of heroes.slice(1)) {
+        t.pid ??= `ia:h${t.id}`;
+        const info = infos.get(t.id);
+        if (info) info.pid = t.pid;
+      }
+      return g.rally(heroes[0]);
+    },
+    /** Show a versus lobby (or, iteration 20, a coop one) with a player and AI tanks for a moment, the host adding them one by one (for the videos). */
+    rivals(ms = 6000, mode: Mode = 'versus') {
       const keep = { players: lobbyPlayers, mode: lobbyMode, room: roomCode, phase };
       const me: PlayerInfo = { id: pid, name: myName, color: PLAYER_COLORS[0], host: true, connected: true, score: 0, weapon: myWeapon };
       const bots: PlayerInfo[] = [0, 1, 2].map((i) => ({ id: `ia:${i + 1}`, name: RIVAL_NAMES[i * 3], color: PLAYER_COLORS[i + 1], host: false, connected: true, score: 0, weapon: VS_ARMS[i], bot: i }));
       lobbyPlayers = [me];
-      lobbyMode = 'versus';
+      lobbyMode = mode === 'coop' ? 'coop' : 'versus';
       roomCode = 'SOLO7';
       phase = 'lobby';
       renderLobby();

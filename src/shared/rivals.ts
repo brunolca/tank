@@ -1,9 +1,12 @@
 // Rivals (iteration 17): AI-driven tanks that fill the versus mode, so a lone player (or two) can still play a full free-for-all.
 // The room owns them like players (name, colour, cannon, score), but their tank gets a brain from the shared AI.
 import { WEAPONS, type TankSpec, type Weapon } from './constants';
+import type { Mode } from './protocol';
 import type { Game, Tank } from './sim';
 
 export const MAX_RIVALS = 3;
+/** Modes that take AI tanks: rivals in versus, teammates in the coop campaign (iteration 20, « Les coéquipiers »). */
+export const rivalMode = (m: Mode | undefined) => m === 'versus' || m === 'coop';
 /** Rival ids start with this prefix (never a real player's id: those are UUIDs or the client's own random ids). */
 export const RIVAL_PREFIX = 'ia:';
 export const isRivalId = (pid: string | undefined) => !!pid && pid.startsWith(RIVAL_PREFIX);

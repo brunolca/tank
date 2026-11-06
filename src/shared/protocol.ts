@@ -74,7 +74,8 @@ export type GameEvent =
   | ['erupt', number, number, number] // x y tankId: it bursts out (older clients ignore all three and just see the damage)
   | ['build', number, number, number] // cx cy tankId: the Maçon lays a cork block on that cell (iteration 12; older tabs are told to reload)
   | ['loot', number, number, number] // x y bonusKind: a Pilleur is destroyed and drops a crate of what it stole (iteration 15)
-  | ['call', number, number, number, number]; // x y tankId strikes: the Grondeur calls the lightning (iteration 18; older clients ignore it, the strikes are plain 'zap')
+  | ['call', number, number, number, number] // x y tankId strikes: the Grondeur calls the lightning (iteration 18; older clients ignore it, the strikes are plain 'zap')
+  | ['rally', number, number, number, number]; // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
 export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean }
@@ -153,6 +154,7 @@ export type ClientMsg =
   | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
   | { t: 'atelier'; name: string; map: string[]; night?: boolean; storm?: boolean } // host: the workshop mission to play (iteration 14; also switches to that mode)
   | { t: 'rival'; op: 'add' | 'del' | 'lvl'; id?: string } // host, versus lobby: add an AI rival, remove one, or change its level (iteration 17)
+  | { t: 'order' } // coop campaign (iteration 20): « Suis-moi ! », the AI teammates come to the sender's tank
   | { t: 'skill'; b: number } // coop campaign (iteration 19): buy the next rank of branch b (0 to 2), or -1 « ready » at the end of a mission
   | { t: 'vote'; who: string } // mole mode, during a council: the pid accused ('' = nobody)
   | { t: 'start' }

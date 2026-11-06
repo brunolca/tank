@@ -688,7 +688,8 @@ console.log('total', Date.now() - t0, 'ms');
   close.alive = false;
   p.x = 10.5; // deep inside: at the mouth its hull sticks out, and a ricochet there is fair game
   let hits = 0;
-  g.onKill = (v) => { if (v === p) hits++; };
+  // only a hit while still inside counts: an enemy driving into the tunnel may shove the player out of the mouth first (fair game)
+  g.onKill = (v) => { if (v === p && g.inTunnel(p)) hits++; };
   const t1 = performance.now();
   let roamed = 0; // furthest the enemy went from its post (its prowl may bring it back by chance: judge the whole trip)
   for (let i = 0; i < 30 * 20; i++) { g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]])); g.events = []; roamed = Math.max(roamed, Math.hypot(e.x - 10.5, e.y - 3.5)); }
@@ -1024,4 +1025,49 @@ console.log('total', Date.now() - t0, 'ms');
   if (b.alive || !foe2.alive) fail('une mine ordinaire a changé');
   if (killXp('thunder') <= killXp('steel') || killXp('steel') <= killXp('brown')) fail('XP des ennemis');
   if (process.exitCode !== 1) console.log('galons OK (arbre, bouclier qui revient, brise-liège, grand souffle, sang-froid)');
+}
+
+// ---------------------------------------------------------------- coop teammates and « Suis-moi ! » (iteration 20)
+{
+  const fails = () => process.exitCode === 1;
+  let cleared = 0, came = 0, spent = 0, steps = 0;
+  const missions = [2, 4, 7, 12];
+  for (const mission of missions) {
+    const lvl = getMission(mission);
+    const g = new Game(lvl.tiles, lvl.belts);
+    // a human standing still at the spawn, two AI teammates of the room
+    const me = g.addTank('player', 0, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'Moi');
+    me.buffs.invuln = 1e9; // the human never dies: the teammates do the work
+    for (let i = 1; i <= 2; i++) {
+      const sp = lvl.spawns[i] ?? lvl.spawns[0];
+      const t = g.addTank('player', 0, sp[0], sp[1] + (lvl.spawns[i] ? 0 : i), 0xe8473f, `ia:${i}`, `Robot ${i}`);
+      makeRival(g, t, 2);
+    }
+    for (const e of lvl.enemies) g.addTank(e.kind, 99, e.x, e.y, 0);
+    g.frozen = false;
+    const inputs = new Map([['p1', { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]);
+    let ticks = 0;
+    for (; ticks < 30 * 120 && g.aliveCount(99) > 0; ticks++) {
+      const t0 = performance.now();
+      g.step(inputs);
+      spent += performance.now() - t0; steps++;
+      g.events = [];
+    }
+    if (g.aliveCount(99) === 0) cleared++;
+    // the call: the teammates still standing come to the human
+    const mates = g.tanks.filter((t) => t.alive && t.pid?.startsWith('ia:'));
+    for (const t of mates) { t.x = 19.5; t.y = 14.5; } // far away (the walls don't matter: they plan a path)
+    const free = mates.filter((t) => !g.tiles[Math.floor(t.y) * W + Math.floor(t.x)]);
+    const n = g.rally(me);
+    if (n !== mates.length) { console.error(`Suis-moi : ${n} réponse(s) pour ${mates.length} coéquipier(s)`); process.exitCode = 1; }
+    if (mates.length && !g.events.some((e) => e[0] === 'rally')) { console.error('Suis-moi : pas d’événement'); process.exitCode = 1; }
+    for (let k = 0; k < 30 * 8; k++) { g.step(inputs); g.events = []; }
+    if (free.length) came += free.filter((t) => Math.hypot(t.x - me.x, t.y - me.y) < 4.5).length;
+    if (g.rally({ ...me, alive: false })) { console.error('Suis-moi : un tank détruit ne peut pas appeler'); process.exitCode = 1; }
+  }
+  if (cleared < 2) { console.error(`coéquipiers : seulement ${cleared}/${missions.length} missions gagnées par deux coéquipiers redoutables`); process.exitCode = 1; }
+  if (came === 0) { console.error('Suis-moi : aucun coéquipier n’est venu'); process.exitCode = 1; }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) { console.error(`coéquipiers : ${per.toFixed(3)} ms/tick, trop lent`); process.exitCode = 1; }
+  if (!fails()) console.log(`coéquipiers OK (${cleared}/${missions.length} missions gagnées par les coéquipiers, ${came} venu(s) au « Suis-moi ! », ${per.toFixed(3)} ms/tick)`);
 }

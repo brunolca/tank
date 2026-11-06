@@ -8,6 +8,7 @@ export interface InputSample {
   aimAng: number | null; // direct angle (gamepad)
   fire: boolean;
   mine: boolean;
+  rally: boolean; // « Suis-moi ! » to the AI teammates (iteration 20): T, or Y on a gamepad
 }
 
 export class Controls {
@@ -17,6 +18,8 @@ export class Controls {
   private mouse: { x: number; y: number } | null = null;
   private padFireHeld = false;
   private padMineHeld = false;
+  private padRallyHeld = false;
+  private rallyLatch = false;
   private lastPadAim: number | null = null;
   usingPad = false;
   suspended = false; // a modal (feedback) is open
@@ -33,6 +36,7 @@ export class Controls {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || this.suspended) return;
       this.keys.add(e.code);
       if (e.code === 'Space' && !e.repeat) { this.mineLatch = true; e.preventDefault(); }
+      if (e.code === 'KeyT' && !e.repeat) this.rallyLatch = true;
       // several fire keys, for those who aim with the mouse but would rather not click (iteration 13)
       if ((e.code === 'Enter' || e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) this.fireLatch = true;
     });
@@ -116,8 +120,8 @@ export class Controls {
 
   sample(): InputSample {
     if (this.suspended) {
-      this.fireLatch = this.mineLatch = false;
-      return { mx: 0, my: 0, aimX: null, aimY: null, aimAng: null, fire: false, mine: false };
+      this.fireLatch = this.mineLatch = this.rallyLatch = false;
+      return { mx: 0, my: 0, aimX: null, aimY: null, aimAng: null, fire: false, mine: false, rally: false };
     }
     let mx = 0, my = 0;
     const k = this.keys;
@@ -126,8 +130,8 @@ export class Controls {
     if (k.has('KeyA') || k.has('ArrowLeft')) mx -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) mx += 1;
     let aimAng: number | null = null;
-    let fire = this.fireLatch, mine = this.mineLatch;
-    this.fireLatch = this.mineLatch = false;
+    let fire = this.fireLatch, mine = this.mineLatch, rally = this.rallyLatch;
+    this.fireLatch = this.mineLatch = this.rallyLatch = false;
 
     const pads = navigator.getGamepads?.() ?? [];
     for (const p of pads) {
@@ -143,6 +147,9 @@ export class Controls {
       if (mineBtn && !this.padMineHeld) mine = true;
       this.padFireHeld = fireBtn;
       this.padMineHeld = mineBtn;
+      const rallyBtn = !!p.buttons[3]?.pressed;
+      if (rallyBtn && !this.padRallyHeld) rally = true;
+      this.padRallyHeld = rallyBtn;
       if (this.usingPad) aimAng = this.lastPadAim;
       break;
     }
@@ -159,6 +166,6 @@ export class Controls {
       const p = this.toArena(pt.x, pt.y);
       if (p) { aimX = p.x; aimY = p.y; }
     }
-    return { mx, my, aimX, aimY, aimAng, fire, mine };
+    return { mx, my, aimX, aimY, aimAng, fire, mine, rally };
   }
 }

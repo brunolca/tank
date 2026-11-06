@@ -6,7 +6,7 @@ import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumbe
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
-import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon } from '../shared/rivals';
+import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon, rivalMode } from '../shared/rivals';
 import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
@@ -52,7 +52,8 @@ const EMPTY_INPUT: Input = { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 };
 
 export class Room extends DurableObject<Env> {
   private players = new Map<string, Player>();
-  private rivals: Rival[] = []; // versus only (iteration 17); cleared when the host picks another mode
+  private lastOrder = new Map<string, number>(); // « Suis-moi ! »: when each player last called (iteration 20)
+  private rivals: Rival[] = []; // versus rivals (iteration 17) and coop teammates (iteration 20); cleared when the host picks another mode
   private mode: Mode = 'coop';
   private phase: Phase = 'lobby';
   private game?: Game;
@@ -92,7 +93,7 @@ export class Room extends DurableObject<Env> {
       this.roomCode = (await ctx.storage.get<string>('code')) ?? '';
       this.atelier = await ctx.storage.get<AtelierMap>('atelier');
       const stored = (await ctx.storage.get<StoredRival[]>('rivals')) ?? [];
-      this.rivals = this.mode === 'versus' ? stored.slice(0, MAX_RIVALS).map((r) => ({ ...r, score: 0, kills: {}, deaths: 0 })) : [];
+      this.rivals = rivalMode(this.mode) ? stored.slice(0, MAX_RIVALS).map((r) => ({ ...r, score: 0, kills: {}, deaths: 0 })) : [];
     });
   }
 
@@ -213,7 +214,7 @@ export class Room extends DurableObject<Env> {
       case 'mode':
         if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier')) {
           this.mode = msg.mode;
-          if (this.mode !== 'versus') this.rivals = [];
+          if (!rivalMode(this.mode)) this.rivals = [];
           await this.ctx.storage.put('mode', this.mode);
           await this.saveRivals();
           this.broadcastLobby();
@@ -233,11 +234,21 @@ export class Room extends DurableObject<Env> {
         break;
       }
       case 'rival':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && this.mode === 'versus') this.onRival(msg.op, String(msg.id ?? ''));
+        if (p.pid === this.hostId() && this.phase === 'lobby' && rivalMode(this.mode)) this.onRival(msg.op, String(msg.id ?? ''));
         break;
       case 'skill':
         this.onSkill(p, Math.floor(Number(msg.b)));
         break;
+      case 'order': {
+        // « Suis-moi ! » (iteration 20): the AI teammates come to the caller's tank (once a second at most)
+        if (this.mode !== 'coop' || this.phase !== 'playing' || !this.game) break;
+        const now = Date.now();
+        if (now - (this.lastOrder.get(p.pid) ?? 0) < 1000) break;
+        this.lastOrder.set(p.pid, now);
+        const me = this.game.tanks.find((t) => t.pid === p.pid && t.alive);
+        if (me) this.game.rally(me);
+        break;
+      }
       case 'vote':
         this.onVote(p, String(msg.who ?? ''));
         break;
@@ -339,8 +350,9 @@ export class Room extends DurableObject<Env> {
     return this.players.get(pid) ?? this.rivals.find((r) => r.pid === pid);
   }
 
+  /** The AI tanks that play this mode: rivals in versus, teammates in the coop campaign (iteration 20). */
   private versusRivals() {
-    return this.mode === 'versus' ? this.rivals : [];
+    return rivalMode(this.mode) ? this.rivals : [];
   }
 
   // ---------------------------------------------------------------- game flow
@@ -436,7 +448,7 @@ export class Room extends DurableObject<Env> {
       const t = game.addTank(e.kind, 99, e.x, e.y, 0);
       if (t.maxHp > 1) {
         // only the boss grows tougher with a crowd; steel tanks always have their two hits
-        const max = t.boss ? t.maxHp + BOSS_HP_PER_PLAYER * Math.max(0, participants.length - 1) : t.maxHp;
+        const max = t.boss ? t.maxHp + BOSS_HP_PER_PLAYER * Math.max(0, participants.length + rivals.length - 1) : t.maxHp; // teammates count too
         game.setHp(t, this.enemyHp.get(idx) ?? max, max);
       }
       this.enemyIndexByTank.set(t.id, idx);

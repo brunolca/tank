@@ -1,7 +1,7 @@
 {
-  "iteration": 19,
+  "iteration": 20,
   "date": "2026-11-06",
-  "title": "Les galons",
+  "title": "Les coéquipiers",
   "journal": [
     {
       "iteration": 1,
@@ -233,6 +233,17 @@
         "Au programme : un obus de plus, un rebond de plus, des obus qui font sauter le liège, une mine de plus, des mines plus larges, l’immunité à ses propres mines, un bouclier au départ de chaque mission, des bonus qui durent plus longtemps et un bouclier qui revient tout seul.",
         "Touche K, ou le bouton ★ en haut de l’écran, pour ouvrir l’arbre à tout moment ; les touches 1, 2 et 3 achètent dans chaque branche. Les compétences comptent dès la mission suivante.",
         "Les tanks entraînés portent des galons d’or sur le capot, et le tableau de fin de partie compte les galons de chacun. Commencer à un palier donne une avance de deux galons par tranche de cinq missions."
+      ]
+    },
+    {
+      "iteration": 20,
+      "date": "2026-11-06",
+      "title": "Les coéquipiers",
+      "notes": [
+        "Seul en campagne ? Dans le salon, l’hôte ajoute jusqu’à trois coéquipiers pilotés par l’ordinateur, Novice, Malin ou Redoutable. Ils combattent à tes côtés et marquent leurs propres points.",
+        "« Suis-moi ! » : touche T, bouton Y de la manette ou bouton 📣. Tes coéquipiers te rejoignent quelques secondes sans cesser de tirer, et ils te répondent.",
+        "Les vies restent partagées : tant qu’un coéquipier tient debout, la mission continue. Les boss deviennent un peu plus coriaces pour chaque coéquipier.",
+        "Sur iPhone, le plateau ne reste plus étiré après avoir tourné l’écran : l’image se recale toute seule."
       ]
     }
   ]

@@ -34,6 +34,7 @@ export interface Tank {
   build?: MasonState; // the Maçon (iteration 12)
   loot?: BonusKind; // the Pilleur (iteration 15): the last bonus it stole, dropped when it is destroyed
   ranks?: Ranks; // player tanks in the coop campaign (iteration 19): skills bought with galons
+  follow?: { id: number; t: number }; // an AI teammate answering « Suis-moi ! » (iteration 20): the leader's tank id, seconds left
   reshield?: number; // « Bouclier qui revient »: seconds until the broken shield grows back
 }
 
@@ -147,6 +148,9 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 
 /** The Foreur under the table: out of reach of shells, mines, lightning and other tanks. */
 export const under = (t: Tank) => !!t.boss && t.boss.dig >= 2;
+/** « Suis-moi ! » (iteration 20): how long AI teammates stick to the player who called them, and how close they come. */
+export const RALLY_SECONDS = 9;
+export const RALLY_NEAR = 2.6;
 
 /** Shared by the server simulation and client-side prediction. */
 export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: number, mx: number, my: number, speed: number, dt: number, r = TANK_R): [number, number, number] {
@@ -1052,6 +1056,34 @@ export class Game {
     return this.tanks.find((t) => t.id === id);
   }
 
+  /**
+   * « Suis-moi ! » (iteration 20): the AI teammates of that tank (same team, player-coloured, driven by the AI) come
+   * to it for a few seconds, still shooting on the way. Returns how many answered.
+   */
+  rally(leader: Tank): number {
+    if (!leader.alive) return 0;
+    let n = 0;
+    for (const o of this.tanks) {
+      if (o === leader || !o.alive || !o.ai || !o.pid || o.team !== leader.team) continue;
+      o.follow = { id: leader.id, t: RALLY_SECONDS };
+      o.ai.path = []; // head off at once
+      o.ai.pathT = 0;
+      n++;
+    }
+    if (n) this.events.push(['rally', r2(leader.x), r2(leader.y), leader.id, n]);
+    return n;
+  }
+
+  /** Where a teammate answering « Suis-moi ! » heads: its leader, while still far enough (undefined: fight as usual). */
+  private followSpot(t: Tank): Tank | undefined {
+    const f = t.follow;
+    if (!f) return undefined;
+    f.t -= DT;
+    const l = this.tanks.find((o) => o.id === f.id);
+    if (f.t <= 0 || !l || !l.alive) { t.follow = undefined; return undefined; }
+    return Math.hypot(l.x - t.x, l.y - t.y) > RALLY_NEAR ? l : undefined;
+  }
+
   aliveCount(team: number) {
     return this.tanks.filter((t) => t.alive && t.team === team).length;
   }
@@ -1139,6 +1171,7 @@ export class Game {
     if (!foe) {
       // nobody in sight (night, or everyone hiding in tunnels): go and look for them
       if (this.tanks.some((o) => o.alive && o.team !== t.team && !under(o))) this.aiProwl(t);
+      else if (t.follow) { const l = this.followSpot(t); if (l && spec.speed > 0) this.aiMove(t, l); } // the table is clear: still come along
       return;
     }
     ai.seenX = foe.x; ai.seenY = foe.y; ai.seenT = 5;
@@ -1201,7 +1234,7 @@ export class Game {
       }
     }
 
-    if (spec.speed > 0) this.aiMove(t, foe);
+    if (spec.speed > 0) this.aiMove(t, (t.follow && this.followSpot(t)) || foe);
   }
 
   /** Night, nobody in sight: sweep the turret and creep toward the last sighting, or prowl around. */
@@ -1231,7 +1264,7 @@ export class Game {
       ai.wanderAim = Math.atan2(spot.y - t.y, spot.x - t.x) + (Math.random() - 0.5) * 2.4;
     }
     t.turret = rotateToward(t.turret, ai.wanderAim, t.spec.turretSpeed * 0.6 * DT);
-    if (t.spec.speed > 0) this.aiMove(t, spot);
+    if (t.spec.speed > 0) this.aiMove(t, (t.follow && this.followSpot(t)) || spot);
   }
 
   private aiThinkAim(t: Tank, foe: Tank) {

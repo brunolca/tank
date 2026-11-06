@@ -105,6 +105,26 @@ try {
   if (vs.moved < 0.3) fail(`les rivaux ne bougent pas (${vs.moved})`);
   await solo.context().close();
 
+  // coop campaign alone with an AI teammate (iteration 20): add one, start, call it with T
+  const mate = await page('coéquipier', server.url + '/');
+  await sleep(1500);
+  await mate.click('#btn-create');
+  await mate.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await mate.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  await mate.click('#btn-rival');
+  await sleep(1000);
+  if ((await mate.locator('#lobby-players li.rival').count()) !== 1) fail('le salon coop devrait afficher 1 coéquipier');
+  await mate.click('#btn-start');
+  await sleep(4500); // intro
+  await mate.keyboard.press('KeyT');
+  await sleep(1500);
+  const co = await state(mate);
+  if (!co.online || co.myTankId < 0) fail(`coop avec un coéquipier : pas en partie (écran ${co.screen}, phase ${co.phase})`);
+  if (co.tanks < 3) fail(`coop avec un coéquipier : ${co.tanks} tank(s) seulement`);
+  if (!co.rallyBtn) fail('le bouton « Suis-moi » n’apparaît pas en coop avec un coéquipier');
+  if (co.phase === 'playing' && !co.rallies) fail('la touche T n’a pas appelé le coéquipier (« Suis-moi ! »)');
+  await mate.context().close();
+
   const d = await page('démo', server.url + '/?demo=1&mission=3');
   await sleep(1500);
   const t0 = (await d.evaluate(() => window.__demo.state)).tick;
@@ -119,5 +139,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, coop avec un coéquipier, mode démo).');
 process.exit(0);
