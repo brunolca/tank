@@ -1,7 +1,7 @@
 {
-  "iteration": 18,
-  "date": "2026-11-05",
-  "title": "Le Grondeur",
+  "iteration": 19,
+  "date": "2026-11-06",
+  "title": "Les galons",
   "journal": [
     {
       "iteration": 1,
@@ -221,6 +221,18 @@
         "Sa foudre ne le touche jamais, mais elle n’épargne pas ses propres alliés. Et quand il tombe, l’orage se déchaîne sur toute la table jusqu’à la fin de la mission.",
         "Les boss se relaient maintenant à trois : le Colosse (missions 10, 40, 70…), le Foreur (20, 50, 80…) et le Grondeur (30, 60, 90…). Un Colosse sur deux se bat de nuit, dès la 40ᵉ.",
         "L’atelier a un nouveau pinceau : pose le Grondeur dans tes propres missions."
+      ]
+    },
+    {
+      "iteration": 19,
+      "date": "2026-11-06",
+      "title": "Les galons",
+      "notes": [
+        "La campagne coopérative a son arbre de compétences, demandé par un joueur : chaque ennemi détruit rapporte de l’expérience (davantage pour les blindés, les malins et surtout les boss), et chaque mission réussie en donne à toute l’équipe.",
+        "Tous les 5 points d’expérience, on gagne un galon. Entre deux missions, l’arbre des galons s’ouvre tout seul : trois branches, Canon, Génie et Blindage, de trois rangs chacune.",
+        "Au programme : un obus de plus, un rebond de plus, des obus qui font sauter le liège, une mine de plus, des mines plus larges, l’immunité à ses propres mines, un bouclier au départ de chaque mission, des bonus qui durent plus longtemps et un bouclier qui revient tout seul.",
+        "Touche K, ou le bouton ★ en haut de l’écran, pour ouvrir l’arbre à tout moment ; les touches 1, 2 et 3 achètent dans chaque branche. Les compétences comptent dès la mission suivante.",
+        "Les tanks entraînés portent des galons d’or sur le capot, et le tableau de fin de partie compte les galons de chacun. Commencer à un palier donne une avance de deux galons par tranche de cinq missions."
       ]
     }
   ]

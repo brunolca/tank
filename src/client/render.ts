@@ -394,6 +394,10 @@ const rivalGeo = {
 const rivalMetalMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.3, metalness: 0.8 });
 const rivalBeadMat = new THREE.MeshStandardMaterial({ color: 0xff4d3d, roughness: 0.3, emissive: 0xff2a1a, emissiveIntensity: 0.9 });
 
+// the stripes of the coop campaign (iteration 19): gold chevrons on the front deck, one per three skills bought
+const chevronGeo = new THREE.BoxGeometry(0.15, 0.03, 0.045);
+const chevronMat = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.3, metalness: 0.4, emissive: 0xc08a00, emissiveIntensity: 0.9 });
+
 function buildTank(info: TankInfo): TankView {
   const color = info.kind === 'player' ? info.color : enemyColor(info.kind);
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.08 });
@@ -457,6 +461,15 @@ function buildTank(info: TankInfo): TankView {
       const m = new THREE.Mesh(geo.rackMine, rackMineMat);
       m.position.set(-0.3, 0.39, z);
       hull.add(m);
+    }
+  }
+  const ranks = info.kind === 'player' && Array.isArray(info.sk) ? info.sk.reduce((a, b) => a + (Number(b) || 0), 0) : 0;
+  for (let i = 0; i < Math.min(3, Math.ceil(ranks / 3)); i++) {
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(chevronGeo, chevronMat);
+      arm.rotation.y = s * 0.7;
+      arm.position.set(0.25 + i * 0.065, 0.385, s * 0.05);
+      hull.add(arm);
     }
   }
   let armorGroup: THREE.Group | undefined;

@@ -7,6 +7,7 @@ import { getMission, nearestFree, versusArena, type ParsedLevel } from '../share
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon } from '../shared/rivals';
+import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
 interface Attachment {
@@ -28,6 +29,8 @@ interface Player extends Attachment {
   deaths: number;
   ff: number; // teammates destroyed (coop-like modes)
   inGame: boolean;
+  prog?: Progress; // coop campaign (iteration 19): experience, galons and skills, for this run
+  galonBase: number; // galons given at the start (checkpoint head start)
 }
 
 /** An AI rival of the versus mode (iteration 17): scored like a player, driven by the shared AI. */
@@ -73,6 +76,7 @@ export class Room extends DurableObject<Env> {
   private taupeEnd?: TaupeResult; // mole mode: outcome, once the game is over
   private atelier?: AtelierMap; // workshop mode (iteration 14): the mission the host drew, already checked
   private atelierWon = false;
+  private training = new Set<string>(); // coop, end of a mission: players still picking skills (iteration 19)
   private loop?: ReturnType<typeof setInterval>;
   private roomCode = '';
 
@@ -93,7 +97,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private makePlayer(att: Attachment, ws?: WebSocket): Player {
-    return { ...att, ws, queue: [], last: { ...EMPTY_INPUT }, ack: 0, score: 0, kills: {}, deaths: 0, ff: 0, inGame: false };
+    return { ...att, ws, queue: [], last: { ...EMPTY_INPUT }, ack: 0, score: 0, kills: {}, deaths: 0, ff: 0, inGame: false, galonBase: 0 };
   }
 
   async fetch(req: Request): Promise<Response> {
@@ -231,6 +235,9 @@ export class Room extends DurableObject<Env> {
       case 'rival':
         if (p.pid === this.hostId() && this.phase === 'lobby' && this.mode === 'versus') this.onRival(msg.op, String(msg.id ?? ''));
         break;
+      case 'skill':
+        this.onSkill(p, Math.floor(Number(msg.b)));
+        break;
       case 'vote':
         this.onVote(p, String(msg.who ?? ''));
         break;
@@ -354,7 +361,9 @@ export class Room extends DurableObject<Env> {
     }
     for (const p of this.players.values()) {
       p.score = 0; p.kills = {}; p.deaths = 0; p.ff = 0; p.inGame = !!p.ws;
+      p.prog = undefined; // the skill tree starts over with every campaign
     }
+    this.training.clear();
     for (const r of this.rivals) { r.score = 0; r.kills = {}; r.deaths = 0; }
     this.mission = this.mode === 'coop' ? this.from : 1;
     this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : this.mode === 'atelier' ? ATELIER_LIVES : 3;
@@ -375,7 +384,15 @@ export class Room extends DurableObject<Env> {
 
   private loadStage() {
     const participants = [...this.players.values()].filter((p) => p.ws).sort((a, b) => a.joined - b.joined);
-    for (const p of participants) p.inGame = true;
+    for (const p of participants) {
+      p.inGame = true;
+      if (this.mode === 'coop' && !p.prog) {
+        // a newcomer to the campaign (at the start, or joining later): the head start of the mission they arrive at
+        p.galonBase = startGalons(this.mission);
+        p.prog = { xp: 0, g: p.galonBase, r: [0, 0, 0] };
+      }
+    }
+    this.training.clear();
     this.level = this.mode === 'coop' ? getMission(this.mission)
       : this.mode === 'daily' ? dailyLevel(this.day, this.mission)
       : this.mode === 'taupe' ? taupeLevel(this.taupeSeed, this.mission)
@@ -401,6 +418,7 @@ export class Room extends DurableObject<Env> {
       const team = this.mode === 'versus' ? i + 1 : 0;
       const t = game.addTank('player', team, pos[0], pos[1], p.color, p.pid, p.name);
       game.arm(t, p.weapon ?? 'canon');
+      if (this.mode === 'coop' && p.player?.prog) game.train(t, p.player.prog.r);
       if (this.mode === 'versus') {
         t.body = t.turret = Math.atan2(8.5 - pos[1], 11 - pos[0]);
       }
@@ -483,8 +501,46 @@ export class Room extends DurableObject<Env> {
         const key: TankKind = victim.kind;
         kp.kills[key] = (kp.kills[key] ?? 0) + 1;
         if (coop) kp.score++;
+        if (this.mode === 'coop') this.addXp(this.players.get(killer.pid), killXp(victim.kind));
       }
     }
+  }
+
+  // ---------------------------------------------------------------- coop campaign: experience and skill tree (iteration 19)
+
+  private addXp(p: Player | undefined, n: number) {
+    if (!p?.prog) return;
+    p.prog.xp += n;
+    p.prog.g = p.galonBase + Math.floor(p.prog.xp / XP_PER_GALON);
+  }
+
+  /** Buy the next rank of a branch (b = 0 to 2), or say « ready » (b = -1) at the end of a mission. Effective from the next mission. */
+  private onSkill(p: Player, b: number) {
+    if (this.mode !== 'coop' || this.phase === 'lobby' || this.phase === 'gameover' || !p.inGame || !p.prog) return;
+    if (b >= 0 && b <= 2) {
+      if (!canBuy(p.prog, b)) return;
+      p.prog.r[b]++;
+      if (!canBuyAny(p.prog)) this.training.delete(p.pid);
+    } else if (b === -1) this.training.delete(p.pid);
+    else return;
+    if (this.phase === 'cleared' && !this.training.size) this.phaseTimer = Math.min(this.phaseTimer, 0.8);
+    this.broadcastPhase();
+  }
+
+  /** A mission cleared: everyone in it gets a little experience, then those with galons to spend get time to choose. */
+  private clearedTraining(): number {
+    if (this.mode !== 'coop') return 3.5;
+    for (const p of this.players.values()) if (p.inGame) this.addXp(p, XP_CLEAR);
+    this.training.clear();
+    for (const p of this.players.values()) if (p.inGame && p.ws && p.prog && canBuyAny(p.prog)) this.training.add(p.pid);
+    return this.training.size ? TRAINING_SECONDS : 3.5;
+  }
+
+  private progress(): Record<string, Progress> | undefined {
+    if (this.mode !== 'coop' || this.phase === 'lobby') return undefined;
+    const out: Record<string, Progress> = {};
+    for (const p of this.players.values()) if (p.prog) out[p.pid] = p.prog;
+    return out;
   }
 
   private setPhase(phase: Phase, seconds: number) {
@@ -508,6 +564,8 @@ export class Room extends DurableObject<Env> {
       daily: this.dailyState(),
       council: this.council && this.phase === 'council' ? { ...this.council, left: Math.max(0, +this.phaseTimer.toFixed(1)) } : undefined,
       stages: this.mode === 'taupe' ? TAUPE_STAGES : undefined,
+      prog: this.progress(),
+      training: this.phase === 'cleared' && this.training.size ? [...this.training] : undefined,
     };
   }
 
@@ -546,7 +604,7 @@ export class Room extends DurableObject<Env> {
   private results(): Results {
     const players = [...this.players.values()]
       .filter((p) => p.inGame)
-      .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score, ff: this.mode === 'versus' ? undefined : p.ff } as Results['players'][number]))
+      .map((p) => ({ id: p.pid, name: p.name, color: p.color, kills: p.kills, deaths: p.deaths, score: p.score, ff: this.mode === 'versus' ? undefined : p.ff, g: this.mode === 'coop' ? p.prog?.g : undefined } as Results['players'][number]))
       .concat(this.versusRivals().map((r) => ({ id: r.pid, name: r.name, color: r.color, kills: r.kills, deaths: r.deaths, score: r.score, bot: r.level })))
       .sort((a, b) => b.score - a.score);
     const daily = this.mode === 'daily' ? { state: this.dailyState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
@@ -707,7 +765,7 @@ export class Room extends DurableObject<Env> {
         this.settle += DT;
         game.storm = false; // the sky calms down once the mission is won (strikes already announced still fall)
         if (game.bullets.length === 0 || this.settle >= SETTLE_MAX) {
-          this.setPhase('cleared', 3.5);
+          this.setPhase('cleared', this.clearedTraining());
           this.broadcastPhase();
         } else if (this.lastEnemyCount !== 0) this.broadcastPhase();
       } else if (playersAlive === 0) {

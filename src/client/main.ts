@@ -7,6 +7,8 @@ import META from '../shared/meta.json';
 import { angDiff, beltStep } from '../shared/physics';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep } from '../shared/sim';
+import { BRANCHES, TRAINING_SECONDS, XP_PER_GALON, canBuy, cleanRanks, canBuyAny, freeGalons, trainSpec, type Progress, type Ranks } from '../shared/skills';
+import { renderTree } from './skills';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
 import { initAudio, isMusicOn, setMusicIntensity, setRain, sfx, startMusic, toggleMusic } from './audio';
 import { setupFeedback, type Region } from './feedback';
@@ -220,6 +222,13 @@ let myRole: boolean | undefined; // mole mode: true when this player is the mole
 let council: CouncilState | undefined; // mole mode: the vote in progress
 let councilAt = 0; // performance.now() when the council state arrived (its timer runs locally)
 let myVote: string | undefined; // our ballot in the council in progress
+let prog: Record<string, Progress> = {}; // coop campaign (iteration 19): everyone's experience, galons and skills
+let training: string[] = []; // end of a mission: players still choosing their skills
+let treeOpen = false; // the skill tree card is on screen
+let treeAuto = false; // it opened by itself at the end of a mission (and closes with it)
+let treeEnd = 0; // performance.now() when the end-of-mission choice runs out
+let treeFlash: number | undefined; // branch just bought, for a little pop
+let treeDemo: Progress | undefined; // the demo shows a made-up tree
 
 function onMessage(msg: ServerMsg) {
   switch (msg.t) {
@@ -280,7 +289,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   belts = Array.isArray(msg.belts) && msg.belts.length === W * H ? msg.belts.map((b) => b | 0) : [];
   infos = new Map(msg.tanks.map((t) => [t.id, t]));
   myTankId = msg.tanks.find((t) => t.pid === pid)?.id ?? -1;
-  mySpec = playerSpec(msg.tanks.find((t) => t.id === myTankId)?.w ?? 'canon');
+  const myInfo = msg.tanks.find((t) => t.id === myTankId);
+  mySpec = trainSpec(playerSpec(myInfo?.w ?? 'canon'), myInfo?.sk); // skills of the campaign tree count too (more shells)
   enemiesLeft = -1;
   if (msg.mode === 'coop' && msg.mission > bestMission) {
     bestMission = msg.mission;
@@ -355,6 +365,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   if (msg.scores) scores = msg.scores;
   if (msg.daily) { dailyState = msg.daily; dailyK = latestK; }
   enemiesLeft = msg.enemies;
+  onProgress(msg, prev);
   renderHud();
   if (msg.phase === 'council' && msg.council) {
     if (!council || prev !== 'council') myVote = undefined;
@@ -379,6 +390,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
     case 'cleared':
       setMusicIntensity(0);
       sfx.jingle('clear');
+      if (treeOpen && treeAuto) break; // the skill tree card opened instead of the banner (iteration 19)
       if (msg.daily) {
         const last = msg.daily.stage >= msg.daily.stages;
         banner('Bravo !', last ? 'Défi relevé !' : `Étape ${msg.daily.stage} réussie`, `Chrono : ${formatTicks(msg.daily.ticks)}`, 'good');
@@ -888,7 +900,108 @@ addEventListener('keydown', (e) => {
   else if (council.voters[n - 1]) castVote(council.voters[n - 1]);
 });
 
+// ------------------------------------------------------------------ coop campaign: galons and the skill tree (iteration 19)
+
+function myProg(): Progress | undefined {
+  return treeDemo ?? prog[pid];
+}
+
+function onProgress(msg: Extract<ServerMsg, { t: 'phase' }>, prev: Phase) {
+  const before = prog[pid];
+  prog = msg.prog ?? {};
+  training = msg.training ?? [];
+  const now = prog[pid];
+  if (now && before && now.g > before.g) {
+    const free = freeGalons(now);
+    floaterOnMe(now.g - before.g > 1 ? `+${now.g - before.g} galons !` : '+1 galon !');
+    if (msg.phase === 'playing') toast(`Nouveau galon ! ${free} à dépenser : touche K ou bouton ★ (effet à la mission suivante).`, 3200);
+    sfx.bonus();
+  }
+  if (!now && !treeDemo) { if (treeOpen) closeTree(); return; }
+  if (msg.phase === 'cleared' && training.includes(pid) && prev !== 'cleared') {
+    treeEnd = performance.now() + TRAINING_SECONDS * 1000;
+    openTree(true);
+  } else if (msg.phase !== 'cleared' && treeAuto) closeTree();
+  else if (treeOpen) drawTree();
+}
+
+function floaterOnMe(text: string) {
+  const me = lastTanks.find((t) => t.id === myTankId);
+  if (me) floater(me.x, me.y - 0.4, text, 0xffd23a);
+}
+
+function drawTree() {
+  const p = myProg();
+  if (!p) return;
+  const isTraining = treeAuto && (training.includes(pid) || !!treeDemo) && (phase === 'cleared' || !!treeDemo);
+  renderTree($('#skills'), { prog: p, training: isTraining, left: Math.max(0, (treeEnd - performance.now()) / 1000), total: TRAINING_SECONDS, flash: treeFlash });
+  treeFlash = undefined;
+}
+
+function openTree(auto = false) {
+  if (!myProg()) return;
+  treeOpen = true;
+  treeAuto = auto;
+  if (auto) hideBanner(); // the card says « Mission réussie » itself
+  drawTree();
+  if (!auto) sfx.click();
+}
+
+function closeTree() {
+  treeOpen = false;
+  treeAuto = false;
+  $('#skills').hidden = true;
+}
+
+function buySkill(b: number) {
+  const p = myProg();
+  if (!p || !canBuy(p, b)) return;
+  sfx.build();
+  treeFlash = b;
+  if (treeDemo) { treeDemo.r[b]++; drawTree(); return; }
+  send({ t: 'skill', b });
+}
+
+function treeReady() {
+  if (!treeDemo && training.includes(pid)) send({ t: 'skill', b: -1 });
+  closeTree();
+}
+
+function updateTreeTimer() {
+  if (!treeOpen || !treeAuto) return;
+  const bar = document.querySelector<HTMLElement>('#skills .s-timer i');
+  if (bar) bar.style.width = `${(100 * Math.max(0, treeEnd - performance.now())) / (TRAINING_SECONDS * 1000)}%`;
+}
+
+$('#skills').addEventListener('click', (e) => {
+  const el = e.target as HTMLElement;
+  const node = el.closest<HTMLButtonElement>('button[data-b]');
+  if (node && !node.disabled) { buySkill(Number(node.dataset.b)); return; }
+  if (el.closest('button[data-ready]')) treeReady();
+});
+$('#hud-galons').addEventListener('click', () => (treeOpen ? treeReady() : openTree()));
+addEventListener('keydown', (e) => {
+  const tag = (e.target as HTMLElement)?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || council) return;
+  if (e.code === 'KeyK' && !e.repeat && (online && currentMode === 'coop' || treeDemo)) { if (treeOpen) treeReady(); else openTree(); return; }
+  if (!treeOpen) return;
+  const m = e.code.match(/^(?:Digit|Numpad)([1-3])$/);
+  if (m) buySkill(Number(m[1]) - 1);
+});
+
+function renderGalons() {
+  const el = $<HTMLButtonElement>('#hud-galons');
+  const p = prog[pid];
+  el.hidden = !(online && currentMode === 'coop' && p);
+  if (!p || el.hidden) return;
+  const free = freeGalons(p);
+  el.classList.toggle('has', canBuyAny(p));
+  el.innerHTML = `★ <b>${free}</b><i style="width:${(100 * (p.xp % XP_PER_GALON)) / XP_PER_GALON}%"></i>`;
+  el.title = `${free} galon${free > 1 ? 's' : ''} à dépenser · ${p.xp} XP (touche K : l’arbre des galons)`;
+}
+
 function renderHud() {
+  renderGalons();
   const livesEl = $('#hud-lives');
   livesEl.innerHTML = coopLike(currentMode) ? `<span class="tank-ico"></span> × ${lives}` : '';
   renderRole();
@@ -1150,16 +1263,17 @@ function showResults(r: Results) {
     : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
   const coop = coopLike(r.mode);
   const ff = coop && r.players.some((p) => p.ff !== undefined);
+  const gal = r.players.some((p) => p.g !== undefined);
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
           return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}${p.bot !== undefined ? ` <em class="ia">IA ${RIVAL_LEVELS[rivalLevel(p.bot)].label.toLowerCase()}</em>` : ''}</td>${
             coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
-          }${ff ? `<td>${p.ff || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
+          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
     </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
@@ -1174,7 +1288,7 @@ let attractPrev = new Map<number, { x: number; y: number; body: number; turret: 
 
 /** A versus of AI rivals (iteration 17): the videos, and now and then the home-screen background. */
 interface AttractVersus { round: number; levels?: number[]; scores?: number[]; chain?: boolean }
-interface AttractOpts { versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number } }
+interface AttractOpts { versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -1207,6 +1321,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
     lvl.spawns.forEach(([x, y], i) => {
       const t = g.addTank('player', 1, x, y, PLAYER_COLORS[i % PLAYER_COLORS.length]);
       if (opts.arms?.length) g.arm(t, opts.arms[i % opts.arms.length]);
+      if (opts.ranks) g.train(t, opts.ranks); // skills of the campaign tree (iteration 19): chevrons, starting shield…
       g.enableAI(t, { skill: 2, turretSpeed: 5, fireCd: Math.max(0.4, t.spec.fireCd) });
     });
   } else {
@@ -1348,7 +1463,9 @@ function frame(now: number) {
     onlineFrame(dt);
     updateClock();
     updateCouncilTimer();
+    updateTreeTimer();
   } else if (attract) {
+    updateTreeTimer();
     // the videos are filmed on machines without a GPU: let the demo catch up on slow frames so it plays in real time
     attractFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt);
     updateNameTags([]);
@@ -1422,7 +1539,7 @@ $('#menu-resume').addEventListener('click', () => toggleMenu(false));
 $('#menu-lobby').addEventListener('click', () => { send({ t: 'stop' }); toggleMenu(false); });
 $('#menu-quit').addEventListener('click', () => leaveRoom());
 addEventListener('keydown', (e) => {
-  if (e.code === 'Escape') toggleMenu();
+  if (e.code === 'Escape') { if (treeOpen) { treeReady(); return; } toggleMenu(); }
   if (e.code === 'KeyM' && (e.target as HTMLElement)?.tagName !== 'INPUT') updateMusicBtn(toggleMusic());
 });
 function updateMusicBtn(on = isMusicOn()) {
@@ -1578,7 +1695,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved() };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen };
   },
 };
 if (params.has('demo')) {
@@ -1586,9 +1703,22 @@ if (params.has('demo')) {
   const demo = {
     meta: META,
     /** `night`: force the mission into the dark (true) or daylight (false); its own setting when omitted. Same for `storm`. */
-    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean, arms?: Weapon[], storm?: boolean) {
+    play(mission: number, heroes = true, rich = false, bossHp?: number, night?: boolean, arms?: Weapon[], storm?: boolean, ranks?: number[]) {
       attract = undefined;
-      startAttract({ mission, heroes, rich, bossHp, night, arms: arms?.filter(isWeapon), storm });
+      startAttract({ mission, heroes, rich, bossHp, night, arms: arms?.filter(isWeapon), storm, ranks: ranks ? cleanRanks(ranks) : undefined });
+    },
+    /**
+     * The skill tree of the campaign (iteration 19), as it opens between two missions: a made-up player with galons
+     * to spend buys `buys` (branch indices) one by one, then the card closes after `ms`.
+     */
+    skills(ms = 8000, start: number[] = [1, 0, 0], galons = 7, buys: number[] = [2, 0, 1, 2]) {
+      treeDemo = { xp: 5 * galons - 2 + 3, g: galons, r: cleanRanks(start) };
+      treeEnd = performance.now() + ms;
+      openTree(true);
+      const step = (ms * 0.7) / Math.max(1, buys.length);
+      buys.forEach((b, k) => setTimeout(() => buySkill(b), step * (k + 0.8)));
+      setTimeout(() => { closeTree(); treeDemo = undefined; }, ms);
+      return BRANCHES.map((b) => b.label);
     },
     /**
      * Versus with AI rivals (iteration 17): four rivals on the arena of that round, one team each.

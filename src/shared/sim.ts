@@ -5,6 +5,7 @@ import {
 } from './constants';
 import { angDiff, beltStep, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
+import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
 export interface Tank {
   id: number;
@@ -32,6 +33,8 @@ export interface Tank {
   weapon?: Weapon; // player tanks: the cannon picked in the lobby (canon when omitted)
   build?: MasonState; // the Maçon (iteration 12)
   loot?: BonusKind; // the Pilleur (iteration 15): the last bonus it stole, dropped when it is destroyed
+  ranks?: Ranks; // player tanks in the coop campaign (iteration 19): skills bought with galons
+  reshield?: number; // « Bouclier qui revient »: seconds until the broken shield grows back
 }
 
 /** The Maçon: when it lays its next block, and the cells of the blocks it laid. */
@@ -82,6 +85,7 @@ export interface Bullet {
   rocket: boolean;
   dead: boolean;
   volley?: number; // shells fired together (fan shot) never collide with one another
+  cork?: boolean; // « Brise-liège » (iteration 19): the shell blows up the cork it hits instead of bouncing off it
 }
 
 /** A lightning strike announced on the floor (storm missions): it falls when t reaches BOLT_WARN. */
@@ -100,6 +104,7 @@ export interface Mine {
   t: number;
   fuse: number;
   dead: boolean;
+  blast?: number; // radius of its blast (MINE_BLAST when omitted; « Grand souffle » makes it wider)
 }
 
 interface AIState {
@@ -233,8 +238,16 @@ export class Game {
     t.spec = playerSpec(weapon);
   }
 
+  /** Skills bought in the campaign skill tree (iteration 19), on top of the cannon: call after `arm`. */
+  train(t: Tank, r: Ranks | undefined) {
+    if (!r || !totalRanks(r)) { t.ranks = undefined; return; }
+    t.ranks = [r[0], r[1], r[2]];
+    t.spec = trainSpec(t.spec, r);
+    if (r[2] >= 1) t.buffs.shield = true; // « Bouclier de départ »
+  }
+
   tankInfos(): TankInfo[] {
-    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color, hp: t.maxHp > 1 ? t.maxHp : undefined, w: t.weapon }));
+    return this.tanks.map((t) => ({ id: t.id, kind: t.kind, team: t.team, pid: t.pid, name: t.name, color: t.color, hp: t.maxHp > 1 ? t.maxHp : undefined, w: t.weapon, sk: t.ranks }));
   }
 
   /** Set a tough tank's hit points (the room scales the boss with the number of players). */
@@ -264,6 +277,15 @@ export class Game {
       if (bf.fan > 0) bf.fan -= DT;
       if (bf.invuln > 0) bf.invuln -= DT;
       if (t.reveal > 0) t.reveal -= DT;
+      if (t.reshield !== undefined && !bf.shield) {
+        t.reshield -= DT;
+        if (t.reshield <= 0) {
+          // « Bouclier qui revient »: the shield grows back (shown like a picked-up one)
+          t.reshield = undefined;
+          bf.shield = true;
+          this.events.push(['bonus', r2(t.x), r2(t.y), BONUS_KINDS.indexOf('shield'), t.id]);
+        }
+      }
       if (t.boss && t.kind === 'drill') {
         if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
       } else if (t.boss) this.updateBoss(t);
@@ -414,7 +436,7 @@ export class Game {
 
   giveBonus(t: Tank, kind: BonusKind) {
     if (kind === 'shield') t.buffs.shield = true;
-    else t.buffs[kind] = BONUS_INFO[kind].duration;
+    else t.buffs[kind] = BONUS_INFO[kind].duration * (t.ranks && t.ranks[2] >= 2 ? LONG_BUFFS : 1);
   }
 
   speedOf(t: Tank) {
@@ -770,7 +792,8 @@ export class Game {
       return true;
     }
     const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0) + (t.kind === 'player' ? this.playerBounces : 0);
-    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false };
+    const cork = t.ranks && t.ranks[0] >= 3 ? true : undefined;
+    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, cork };
     this.bullets.push(main);
     if (t.buffs.fan > 0) {
       main.volley = main.id;
@@ -779,7 +802,7 @@ export class Game {
         const a = t.turret + da, ex = Math.cos(a), ey = Math.sin(a);
         const fx = t.x + ex * tip, fy = t.y + ey * tip;
         if (bulletBlocked(this.tiles, fx, fy, BULLET_R)) continue;
-        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id });
+        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id, cork });
       }
     }
     return true;
@@ -789,7 +812,8 @@ export class Game {
     if (t.mineCd > 0 || this.ownMines(t) >= t.spec.mines) return false;
     for (const m of this.mines) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) < MINE_R * 3) return false;
     t.mineCd = 0.6;
-    this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: t.x, y: t.y, t: 0, fuse: -1, dead: false });
+    const blast = t.ranks && t.ranks[1] >= 2 ? MINE_BLAST * BIG_BLAST : undefined;
+    this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: t.x, y: t.y, t: 0, fuse: -1, dead: false, blast });
     this.events.push(['mineSet', r2(t.x), r2(t.y)]);
     return true;
   }
@@ -822,9 +846,15 @@ export class Game {
       let bounced = false;
       const ox = b.x, oy = b.y;
       const nx = b.x + b.vx * dt;
-      if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) { b.vx = -b.vx; bounced = true; } else b.x = nx;
+      if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
+        if (b.cork && this.breakCork(nx, b.y)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+        b.vx = -b.vx; bounced = true;
+      } else b.x = nx;
       const ny = b.y + b.vy * dt;
-      if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) { b.vy = -b.vy; bounced = true; } else b.y = ny;
+      if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) {
+        if (b.cork && this.breakCork(b.x, ny)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+        b.vy = -b.vy; bounced = true;
+      } else b.y = ny;
       if (bounced) {
         b.bounces--;
         if (b.bounces < 0) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
@@ -899,28 +929,44 @@ export class Game {
     this.mines = this.mines.filter((m) => !m.dead);
   }
 
+  /** « Brise-liège »: the cork cells a shell at (x, y) touches are blown away; false when it touched no cork. */
+  breakCork(x: number, y: number): boolean {
+    let hit = false;
+    for (let cy = Math.floor(y - BULLET_R); cy <= Math.floor(y + BULLET_R); cy++) {
+      for (let cx = Math.floor(x - BULLET_R); cx <= Math.floor(x + BULLET_R); cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        this.tiles[cy * W + cx] = Tile.Empty;
+        this.events.push(['block', cx, cy]);
+        hit = true;
+      }
+    }
+    return hit;
+  }
+
   explodeMine(m: Mine) {
     if (m.dead) return;
     m.dead = true;
+    const R = m.blast ?? MINE_BLAST;
     this.events.push(['mboom', r2(m.x), r2(m.y)]);
     const owner = this.tankById(m.owner);
     for (const t of this.tanks) {
-      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < MINE_BLAST + t.r * 0.4) this.killTank(t, owner);
+      if (t === owner && t.ranks && t.ranks[1] >= 3) continue; // « Sang-froid »: one's own mines spare one
+      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, owner);
     }
     for (const b of this.bullets) {
-      if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < MINE_BLAST) b.dead = true;
+      if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
     }
     for (const o of this.mines) {
-      if (!o.dead && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < MINE_BLAST + 0.3) {
+      if (!o.dead && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < R + 0.3) {
         if (o.fuse < 0 || o.fuse > 0.12) o.fuse = 0.12;
       }
     }
-    const minX = Math.floor(m.x - MINE_BLAST - 1), maxX = Math.floor(m.x + MINE_BLAST + 1);
-    const minY = Math.floor(m.y - MINE_BLAST - 1), maxY = Math.floor(m.y + MINE_BLAST + 1);
+    const minX = Math.floor(m.x - R - 1), maxX = Math.floor(m.x + R + 1);
+    const minY = Math.floor(m.y - R - 1), maxY = Math.floor(m.y + R + 1);
     for (let cy = minY; cy <= maxY; cy++) {
       for (let cx = minX; cx <= maxX; cx++) {
         if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
-        if (Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < MINE_BLAST + 0.35) {
+        if (Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < R + 0.35) {
           this.tiles[cy * W + cx] = Tile.Empty;
           this.events.push(['block', cx, cy]);
         }
@@ -942,6 +988,7 @@ export class Game {
     if (t.buffs.shield) {
       t.buffs.shield = false;
       t.buffs.invuln = 0.5;
+      if (t.ranks && t.ranks[2] >= 3) t.reshield = RESHIELD_SECONDS; // « Bouclier qui revient »
       this.events.push(['shield', r2(t.x), r2(t.y), t.id]);
       return;
     }

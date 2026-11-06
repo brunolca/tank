@@ -6,6 +6,7 @@ import { Game, driveStep } from '../src/shared/sim';
 import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, tunnelAxis } from '../src/shared/physics';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
+import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
 
 for (const def of Object.values(EXTRA_LEVELS)) {
   const bad = def.map.map((r, y) => [y, r.length]).filter(([, l]) => l !== W);
@@ -956,4 +957,71 @@ console.log('total', Date.now() - t0, 'ms');
   k.step(new Map());
   if (!k.events.some((e) => e[0] === 'zap')) fail('l’orage ne revient pas quand le Grondeur tombe');
   if (process.exitCode !== 1) console.log(`Grondeur OK (${calls} appel(s) en 60 s, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the stripes (iteration 19): experience, galons and the skill tree of the coop campaign
+{
+  const fail = (m: string) => { console.error('GALONS : ' + m); process.exitCode = 1; };
+  const p0: Progress = { xp: 0, g: 3, r: [0, 0, 0] };
+  if (!canBuy(p0, 0) || canBuy(p0, 3)) fail('achat du rang I');
+  p0.r = [1, 0, 0];
+  if (freeGalons(p0) !== 2 || !canBuy(p0, 0)) fail('rang II à 2 galons');
+  p0.r = [2, 0, 0];
+  if (freeGalons(p0) !== 0 || canBuyAny(p0)) fail('plus rien à acheter sans galon');
+  if (spentGalons([3, 3, 3]) !== 18) fail('l’arbre complet coûte 18 galons');
+  if (cleanRanks([9, -2, 'x']).join() !== '3,0,0') fail('cleanRanks');
+  if (startGalons(1) !== 0 || startGalons(11) !== 4) fail('avance des paliers');
+  const base = playerSpec('canon');
+  const sp = trainSpec(base, [2, 1, 0]);
+  if (sp.maxBullets !== base.maxBullets + 1 || sp.bounces !== base.bounces + 1 || sp.mines !== base.mines + 1 || sp.speed !== base.speed) fail('trainSpec');
+  const empty = () => new Array(W * H).fill(Tile.Empty);
+  // starting shield, longer bonuses, shield that grows back
+  const g = new Game(empty());
+  const t = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.arm(t, 'canon');
+  g.train(t, [0, 0, 3]);
+  if (!t.buffs.shield) fail('pas de bouclier de départ');
+  if (g.tankInfos()[0].sk?.join() !== '0,0,3') fail('les compétences ne voyagent pas dans TankInfo');
+  g.giveBonus(t, 'turbo');
+  if (Math.abs(t.buffs.turbo - 15) > 1e-6) fail('bonus prolongés');
+  g.frozen = false;
+  g.killTank(t, undefined);
+  if (!t.alive || t.buffs.shield) fail('le bouclier de départ n’encaisse pas');
+  for (let i = 0; i < 30 * 20 + 5; i++) g.step(new Map());
+  if (!t.buffs.shield) fail('le bouclier ne revient pas au bout de 20 s');
+  // an untrained tank has none of it
+  const u = g.addTank('player', 0, 8.5, 8.5, 0x3d7bff, 'p2', 'Q');
+  g.arm(u, 'canon'); g.train(u, [0, 0, 0]);
+  if (u.buffs.shield || u.ranks || g.tankInfos()[1].sk) fail('un tank sans compétence en a');
+  // cork breaker: the shell blows the cork away instead of bouncing
+  const tiles = empty();
+  tiles[8 * W + 8] = Tile.Cork;
+  const c = new Game(tiles);
+  const s = c.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  c.arm(s, 'canon'); c.train(s, [3, 0, 0]);
+  c.frozen = false;
+  c.step(new Map([['p1', { s: 1, mx: 0, my: 0, a: 0, f: 1, m: 0 }]]));
+  let broke = false;
+  for (let i = 0; i < 40; i++) { c.step(new Map()); if (c.events.some((e) => e[0] === 'block')) broke = true; c.events = []; }
+  if (!broke || c.tiles[8 * W + 8] !== Tile.Empty) fail('le brise-liège ne casse pas le liège');
+  // wider blast, and one's own mines spare one
+  const m = new Game(empty());
+  const a = m.addTank('player', 0, 6.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const foe = m.addTank('ash', 99, 6.5 + 1.75, 8.5, 0);
+  m.arm(a, 'canon'); m.train(a, [0, 3, 0]);
+  m.frozen = false;
+  if (!m.tryMine(a)) fail('pas de mine posée');
+  m.explodeMine(m.mines[0]);
+  if (!a.alive) fail('sang-froid : sa propre mine le détruit');
+  if (foe.alive) fail('grand souffle : la mine devrait porter plus loin');
+  const plain = new Game(empty());
+  const b = plain.addTank('player', 0, 6.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const foe2 = plain.addTank('ash', 99, 6.5 + 1.75, 8.5, 0);
+  plain.arm(b, 'canon');
+  plain.frozen = false;
+  plain.tryMine(b);
+  plain.explodeMine(plain.mines[0]);
+  if (b.alive || !foe2.alive) fail('une mine ordinaire a changé');
+  if (killXp('thunder') <= killXp('steel') || killXp('steel') <= killXp('brown')) fail('XP des ennemis');
+  if (process.exitCode !== 1) console.log('galons OK (arbre, bouclier qui revient, brise-liège, grand souffle, sang-froid)');
 }

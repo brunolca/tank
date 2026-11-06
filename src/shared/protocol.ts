@@ -1,5 +1,6 @@
 import type { TankKind, Weapon } from './constants';
 import type { DailyTwist } from './daily';
+import type { Progress, Ranks } from './skills';
 import type { CouncilState, TaupeResult } from './taupe';
 
 // 'daily' (the daily challenge) came with iteration 6: older tabs show it like the coop campaign at worst.
@@ -28,6 +29,7 @@ export interface TankInfo {
   color: number;
   hp?: number; // max hit points, only sent for tanks that take more than one hit (the boss)
   w?: Weapon; // player tanks: the cannon picked in the lobby (canon when omitted; older clients draw a plain cannon)
+  sk?: Ranks; // player tanks, coop campaign (iteration 19): skills bought in each branch of the tree
 }
 
 export interface Input {
@@ -110,7 +112,8 @@ export interface Results {
   taupe?: TaupeResult & { cleared: number; stages: number };
   atelier?: { name: string; won: boolean }; // workshop mission (iteration 14)
   // ff: teammates destroyed (coop-like modes, iteration 8)
-  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number }[];
+  // g: galons earned in the coop campaign (iteration 19)
+  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number }[];
   winner?: string;
 }
 
@@ -135,6 +138,8 @@ export type ServerMsg =
       t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState;
       council?: CouncilState; // mole mode: the vote after each mission
       stages?: number; // mole mode: number of stages
+      prog?: Record<string, Progress>; // coop campaign (iteration 19): experience, galons and skills of each player
+      training?: string[]; // coop campaign, end of a mission: players still choosing their skills
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
   | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[] }
@@ -148,6 +153,7 @@ export type ClientMsg =
   | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
   | { t: 'atelier'; name: string; map: string[]; night?: boolean; storm?: boolean } // host: the workshop mission to play (iteration 14; also switches to that mode)
   | { t: 'rival'; op: 'add' | 'del' | 'lvl'; id?: string } // host, versus lobby: add an AI rival, remove one, or change its level (iteration 17)
+  | { t: 'skill'; b: number } // coop campaign (iteration 19): buy the next rank of branch b (0 to 2), or -1 « ready » at the end of a mission
   | { t: 'vote'; who: string } // mole mode, during a council: the pid accused ('' = nobody)
   | { t: 'start' }
   | { t: 'stop' }

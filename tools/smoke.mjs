@@ -50,6 +50,19 @@ try {
     if (!['playing', 'failed', 'cleared'].includes(s.phase)) fail(`${name} : phase inattendue ${s.phase}`);
   }
 
+  // the skill tree of the campaign (iteration 19): both players have their progress, K opens and closes the card
+  for (const [name, p] of [['A', a], ['B', b]]) {
+    const s = await state(p);
+    if (!s.galons || !Array.isArray(s.galons.r)) fail(`${name} : pas de progression de campagne (galons)`);
+  }
+  await a.keyboard.press('KeyK');
+  await sleep(300);
+  if (!(await a.locator('#skills:not([hidden])').count())) fail('la touche K n’ouvre pas l’arbre des galons');
+  if ((await a.locator('#skills .node').count()) !== 9) fail('l’arbre des galons devrait avoir 9 compétences');
+  await a.keyboard.press('KeyK');
+  await sleep(300);
+  if (await a.locator('#skills:not([hidden])').count()) fail('la touche K ne referme pas l’arbre des galons');
+
   // feedback: open with F, highlight a zone, send
   await a.keyboard.press('KeyF');
   await a.waitForSelector('#feedback:not([hidden])');
@@ -106,5 +119,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, feedback, versus contre les rivaux, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, mode démo).');
 process.exit(0);

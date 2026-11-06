@@ -7,10 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 30, arms: ['canon', 'ricochet'], volley: true, seconds: 22, caption: 'Nouveau : le Grondeur', sub: 'Le troisième boss appelle la foudre sur ses ennemis' },
-  { mission: 60, arms: ['fusee', 'sapeur'], bossHp: 4, volley: true, seconds: 18, caption: 'En colère, il frappe deux fois', sub: 'Sous tes chenilles, puis là où tu vas : seuls les tunnels t’abritent' },
-  { mission: 20, arms: ['canon', 'fusee'], digs: [2], seconds: 10, caption: 'Colosse, Foreur, Grondeur', sub: 'Un boss toutes les dix missions, chacun son tour' },
-  { versus: [3, [2, 1, 2, 1]], seconds: 10, caption: 'Et toujours les rivaux du versus', sub: 'Jusqu’à trois tanks pilotés par l’ordinateur' },
+  { mission: 7, arms: ['canon', 'ricochet'], skills: [9, [1, 0, 0], 7, [2, 0, 1, 2]], seconds: 10, caption: 'Nouveau : l’arbre des galons', sub: 'Chaque ennemi détruit rapporte de l’XP ; entre deux missions, on dépense ses galons' },
+  { mission: 3, arms: ['canon', 'ricochet'], ranks: [3, 0, 1], seconds: 15, caption: 'Canon : chargeur, ricochet, brise-liège', sub: 'Les galons d’or sur le capot disent qui s’est entraîné' },
+  { mission: 5, arms: ['sapeur', 'canon'], ranks: [0, 3, 3], buffs: ['turbo'], seconds: 13, caption: 'Génie et blindage', sub: 'Mines plus larges, sang-froid, bouclier de départ qui revient' },
+  { mission: 30, arms: ['canon', 'fusee'], ranks: [2, 2, 2], volley: true, seconds: 13, caption: 'Contre les boss, ça compte', sub: 'Le Grondeur n’a qu’à bien se tenir' },
+  { versus: [3, [2, 1, 2, 1]], seconds: 8, caption: 'Et toujours les rivaux du versus', sub: 'Jusqu’à trois tanks pilotés par l’ordinateur' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -59,7 +60,8 @@ try {
       else if (shot.rivals) d.rivals(shot.rivals * 1000); // the versus goes on behind the lobby
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
-      else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm);
+      else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm, shot.ranks);
+      if (shot.skills) d.skills(shot.skills[0] * 1000, shot.skills[1], shot.skills[2], shot.skills[3]); // the skill tree over the table (iteration 19)
       if (shot.role) setTimeout(() => d.role(true, 4000), 400); // after the title banner has gone
       if (shot.council) d.council(shot.council[0] * 1000, shot.council[1], shot.council[2], shot.council[3]);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
