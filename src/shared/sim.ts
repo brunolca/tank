@@ -1,9 +1,9 @@
 import {
-  BELT_DIRS, BELT_SPEED, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
-import { angDiff, beltStep, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
@@ -36,6 +36,9 @@ export interface Tank {
   ranks?: Ranks; // player tanks in the coop campaign (iteration 19): skills bought with galons
   follow?: { id: number; t: number }; // an AI teammate answering « Suis-moi ! » (iteration 20): the leader's tank id, seconds left
   reshield?: number; // « Bouclier qui revient »: seconds until the broken shield grows back
+  vx: number; // speed the tank carries (tiles/s), only used on tables with ice (iteration 21)
+  vy: number;
+  slid?: boolean; // drove this tick (tables with ice): if not, it still slides on
 }
 
 /** The Maçon: when it lays its next block, and the cells of the blocks it laid. */
@@ -172,6 +175,38 @@ export function driveStep(tiles: ArrayLike<number>, x: number, y: number, body: 
   return [x, y, body];
 }
 
+/** Turn the hull toward the stick (forwards or backwards, whichever is closer), as driveStep does. */
+function turnBody(body: number, mx: number, my: number, dt: number) {
+  const target = Math.atan2(my, mx);
+  const alt = target + Math.PI;
+  const goal = Math.abs(angDiff(body, target)) <= Math.abs(angDiff(body, alt)) ? target : alt;
+  return rotateToward(body, goal, 11 * dt);
+}
+
+/**
+ * One drive step on a table with ice (iteration 21): off the ice, the usual driveStep, and the tank remembers the
+ * speed it drove at; on the ice, the hull still turns toward the stick but the tank slides (glideStep).
+ * Shared by the server and the client prediction. Returns [x, y, body, vx, vy].
+ */
+export function slideDrive(
+  tiles: ArrayLike<number>, floor: ArrayLike<number>, x: number, y: number, body: number, vx: number, vy: number,
+  mx: number, my: number, speed: number, dt: number, r = TANK_R,
+): [number, number, number, number, number] {
+  let len = Math.hypot(mx, my);
+  if (len > 1) { mx /= len; my /= len; len = 1; }
+  if (!onIce(floor, x, y)) {
+    if (len < 0.05) return [x, y, body, 0, 0];
+    const [nx, ny, nb] = driveStep(tiles, x, y, body, mx, my, speed, dt, r);
+    const ddx = nx - x, ddy = ny - y;
+    if (ddx * ddx + ddy * ddy > 1) return [nx, ny, nb, mx * speed, my * speed]; // through a portal
+    return [nx, ny, nb, ddx / dt, ddy / dt];
+  }
+  if (len >= 0.05) body = turnBody(body, mx, my, dt);
+  const want = len < 0.05 ? 0 : speed;
+  const [nx, ny, nvx, nvy] = glideStep(tiles, x, y, vx, vy, mx * want, my * want, dt, r);
+  return [nx, ny, body, nvx, nvy];
+}
+
 export class Game {
   tiles: number[];
   tanks: Tank[] = [];
@@ -196,6 +231,8 @@ export class Game {
   flash = 0;
   /** Conveyor belts (iteration 16): one code per cell (0 none, 1 right, 2 left, 3 up, 4 down), empty when the map has none. */
   belts: number[] = [];
+  /** Some floor cells are ice (iteration 21): tanks keep their momentum on them. */
+  ice = false;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -204,6 +241,7 @@ export class Game {
   constructor(tiles: number[], belts?: number[]) {
     this.tiles = tiles.slice();
     if (belts?.some(Boolean)) this.belts = belts.slice();
+    this.ice = this.belts.includes(ICE);
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -213,7 +251,7 @@ export class Game {
       body: team === 0 ? 0 : Math.PI, turret: team === 0 ? 0 : Math.PI,
       alive: true, fireCd: team === 0 ? 0 : 2 + Math.random() * 1.5, mineCd: 0, spec,
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
-      r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false,
+      r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false, vx: 0, vy: 0,
     };
     if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
@@ -294,8 +332,10 @@ export class Game {
         if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
       } else if (t.boss) this.updateBoss(t);
       if (t.build) this.updateMason(t);
+      t.slid = false;
       if (t.ai) {
         this.updateAI(t);
+        if (this.ice && !t.slid) this.driveTank(t, 0, 0, DT); // nobody at the wheel: it slides on (iteration 21)
         this.rideBelt(t);
       } else if (t.pid) {
         const inp = inputs.get(t.pid);
@@ -752,7 +792,11 @@ export class Game {
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
     const px = t.x, py = t.y;
-    [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt, t.r);
+    if (this.ice) {
+      if (t.slid) return; // one step per tick on the ice: momentum is integrated once
+      t.slid = true;
+      [t.x, t.y, t.body, t.vx, t.vy] = slideDrive(this.tiles, this.belts, t.x, t.y, t.body, t.vx, t.vy, mx, my, this.speedOf(t), dt, t.r);
+    } else [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt, t.r);
     if ((t.x - px) ** 2 + (t.y - py) ** 2 > 1) {
       // went through a portal
       this.events.push(['warp', r2(px), r2(py), r2(t.x), r2(t.y), t.id]);
@@ -1092,6 +1136,10 @@ export class Game {
     return this.tanks.map((t): NetTank => {
       const n: NetTank = [t.id, r2(t.x), r2(t.y), r2(t.body), r2(t.turret), (t.alive ? 1 : 0) | (t.spec.invisible && !this.frozen ? 2 : 0) | this.buffFlags(t)];
       if (t.maxHp > 1) n.push(t.hp);
+      if (this.ice) { // the speed it slides at, so the client prediction can replay the ice (iteration 21)
+        if (t.maxHp <= 1) n.push(null);
+        n.push(r2(t.vx), r2(t.vy));
+      }
       return n;
     });
   }
@@ -1429,7 +1477,7 @@ export class Game {
         const n = ny * W + nx;
         if (prev[n] !== -2 || blocked[n]) continue;
         if (dx && dy && (blocked[y * W + nx] || blocked[ny * W + x])) continue;
-        if (slowOnBelts && this.belts[n]) {
+        if (slowOnBelts && this.belts[n] && this.belts[n] !== ICE) {
           // a tank slower than the belts cannot drive up one: it plans around (or rides it) instead (iteration 16)
           const [bx, by] = BELT_DIRS[this.belts[n]];
           if (bx * dx + by * dy < 0) continue;

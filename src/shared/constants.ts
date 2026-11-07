@@ -191,6 +191,14 @@ export const BELT_DIRS: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, -1], 
 /** How fast a belt carries tanks, mines and crates (tiles per second; a player drives at 3). */
 export const BELT_SPEED = 1.45;
 
+// ------------------------------------------------------------------ ice (iteration 21)
+/** Map character of an ice cell. Ice lives in the same floor layer as the belts (code ICE), the cell itself stays floor. */
+export const ICE_CHAR = '~';
+/** Floor-layer code of an ice cell (1 to 4 are the belts). */
+export const ICE = 5;
+/** Grip on ice (per second): how fast a tank's sliding speed bends toward where its driver steers. Low = slippery. */
+export const ICE_GRIP = 1.7;
+
 // ------------------------------------------------------------------ night
 /** At night the AI only makes out foes this close (tiles), unless they just gave themselves away by firing. */
 export const NIGHT_SIGHT = 4.5;

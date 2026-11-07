@@ -7,12 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { rivals: 6, lobby: 'coop', seconds: 6.5, caption: 'Nouveau : les coéquipiers', sub: 'Seul en campagne ? Ajoute jusqu’à trois tanks pilotés par l’ordinateur' },
-  { mission: 7, arms: ['canon', 'ricochet', 'fusee'], rallies: [3.5, 10], seconds: 15, caption: '« Suis-moi ! »', sub: 'Touche T, bouton Y ou 📣 : tes coéquipiers accourent sans cesser de tirer' },
-  { mission: 12, arms: ['ricochet', 'canon', 'sapeur'], ranks: [1, 1, 1], rallies: [5], seconds: 13, caption: 'Ils jouent les ricochets avec toi', sub: 'Novice, Malin ou Redoutable : l’hôte choisit leur niveau' },
-  { mission: 30, arms: ['canon', 'fusee', 'ricochet'], ranks: [2, 2, 2], volley: true, rallies: [6], seconds: 13, caption: 'Tous ensemble contre les boss', sub: 'Chaque coéquipier rend le boss plus coriace : à vous de jouer serré' },
-  { mission: 5, arms: ['sapeur', 'canon'], skills: [8, [1, 0, 0], 7, [2, 0, 1, 2]], seconds: 9, caption: 'Et toujours l’arbre des galons', sub: 'De l’XP à chaque ennemi détruit' },
-  { versus: [3, [2, 1, 2, 1]], seconds: 8, caption: 'Les rivaux du versus', sub: 'Même cerveau, autre camp' },
+  { mission: 27, arms: ['canon', 'ricochet'], seconds: 15, caption: 'Nouveau : la glace', sub: 'Sur la patinoire, ton tank glisse et garde son élan' },
+  { mission: 28, arms: ['ricochet', 'fusee'], seconds: 14, caption: 'La banquise', sub: 'Un lac gelé, des fosses partout : freine tôt, braque en avance' },
+  { versus: [25, [2, 2, 1, 2]], seconds: 11, caption: 'Glissades en versus', sub: 'Une patinoire de plus parmi les arènes' },
+  { mission: 7, arms: ['canon', 'ricochet', 'fusee'], rallies: [3], seconds: 9, caption: 'Et toujours tes coéquipiers', sub: '« Suis-moi ! » : touche T, bouton Y ou 📣' },
+  { mission: 30, arms: ['canon', 'fusee', 'ricochet'], ranks: [2, 2, 2], volley: true, seconds: 9, caption: 'Le Grondeur t’attend', sub: 'Un boss toutes les dix missions' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();

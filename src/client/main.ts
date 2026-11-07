@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { getMission, versusArena, type ParsedLevel } from '../shared/levels';
@@ -6,7 +6,7 @@ import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel
 import META from '../shared/meta.json';
 import { angDiff, beltStep } from '../shared/physics';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
-import { Game, driveStep } from '../shared/sim';
+import { Game, driveStep, slideDrive } from '../shared/sim';
 import { BRANCHES, TRAINING_SECONDS, XP_PER_GALON, canBuy, cleanRanks, canBuyAny, freeGalons, trainSpec, type Progress, type Ranks } from '../shared/skills';
 import { renderTree } from './skills';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
@@ -200,7 +200,8 @@ let renderTick = 0;
 let latestK = 0;
 let pending: Input[] = [];
 let seq = 0;
-let pred = { x: 0, y: 0, body: 0 };
+let pred = { x: 0, y: 0, body: 0, vx: 0, vy: 0 }; // vx, vy: the speed we slide at on the ice (iteration 21)
+let iceMap = false; // some floor cells of the current level are ice
 let offset = { x: 0, y: 0 };
 let tunnelHinted = false; // the « hidden in the tunnel » hint shows once per mission
 let aimAng = 0;
@@ -287,6 +288,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (msg.mode !== 'taupe') myRole = undefined;
   tiles = msg.tiles.slice();
   belts = Array.isArray(msg.belts) && msg.belts.length === W * H ? msg.belts.map((b) => b | 0) : [];
+  iceMap = belts.includes(ICE);
   infos = new Map(msg.tanks.map((t) => [t.id, t]));
   myTankId = msg.tanks.find((t) => t.pid === pid)?.id ?? -1;
   const myInfo = msg.tanks.find((t) => t.id === myTankId);
@@ -324,8 +326,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}`;
-  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${iceMap ? ' · Glace' : ''}`;
+  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${iceMap ? ' ice' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
@@ -353,6 +355,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
+  else if (iceMap) setTimeout(() => toast('Glace : ton tank glisse et garde son élan. Freine tôt, braque en avance… et profite des glissades pour esquiver !', 4400), 2200);
   else if (belts.some(Boolean)) setTimeout(() => toast('Tapis roulants : ils emportent les tanks, les mines et les caisses. Remonter le courant, ça ralentit !', 4200), 2200);
   else if (tiles.some(isTunnel)) setTimeout(() => toast('Tunnels : roule dedans pour disparaître aux yeux de l’ennemi. Les obus rebondissent dessus, mais on ne peut pas tirer de l’intérieur.', 4200), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
@@ -434,20 +437,22 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
   const me = s.T.get(myTankId);
   if (me) {
     pending = pending.filter((p) => p.s > msg.a);
-    let x = me[1], y = me[2], body = me[3];
+    let x = me[1], y = me[2], body = me[3], vx = me[7] ?? 0, vy = me[8] ?? 0;
     if (me[5] & 1 && phase === 'playing') {
-      for (const p of pending) [x, y, body] = predictStep(x, y, body, p.mx, p.my, s);
+      for (const p of pending) [x, y, body, vx, vy] = predictStep(x, y, body, vx, vy, p.mx, p.my, s);
     }
     const ex = pred.x + offset.x - x, ey = pred.y + offset.y - y;
     if (Math.hypot(ex, ey) < 1.5) { offset.x = ex; offset.y = ey; } else { offset.x = offset.y = 0; }
-    pred = { x, y, body };
+    pred = { x, y, body, vx, vy };
   }
 }
 
-function predictStep(x: number, y: number, body: number, mx: number, my: number, s?: Snap): [number, number, number] {
+function predictStep(x: number, y: number, body: number, vx: number, vy: number, mx: number, my: number, s?: Snap): [number, number, number, number, number] {
   const snap = s ?? snaps[snaps.length - 1];
   const turbo = (snap?.T.get(myTankId)?.[5] ?? 0) & BONUS_INFO.turbo.flag;
-  [x, y, body] = driveStep(tiles, x, y, body, mx, my, mySpec.speed * (turbo ? TURBO_MULT : 1), DT);
+  const speed = mySpec.speed * (turbo ? TURBO_MULT : 1);
+  if (iceMap) [x, y, body, vx, vy] = slideDrive(tiles, belts, x, y, body, vx, vy, mx, my, speed, DT); // the ice keeps our momentum, as on the server
+  else [x, y, body] = driveStep(tiles, x, y, body, mx, my, speed, DT);
   if (belts.length) [x, y] = beltStep(tiles, belts, x, y, TANK_R, DT); // the belt carries us after each drive step, as on the server
   // treat other tanks as static obstacles
   if (snap) {
@@ -459,7 +464,7 @@ function predictStep(x: number, y: number, body: number, mx: number, my: number,
       if (d < rr && d > 1e-4) { x = t[1] + (dx / d) * rr; y = t[2] + (dy / d) * rr; }
     }
   }
-  return [x, y, body];
+  return [x, y, body, vx, vy];
 }
 
 /** AI teammates in the coop campaign (iteration 20): in the lobby list, they are the players with a level. */
@@ -494,7 +499,7 @@ function clientTick() {
   pending.push(inp);
   if (pending.length > 90) pending.shift();
   if (playing) {
-    [pred.x, pred.y, pred.body] = predictStep(pred.x, pred.y, pred.body, inp.mx, inp.my);
+    [pred.x, pred.y, pred.body, pred.vx, pred.vy] = predictStep(pred.x, pred.y, pred.body, pred.vx, pred.vy, inp.mx, inp.my);
     const ceasefire = coopLike(currentMode) && enemiesLeft === 0; // the server no longer lets anyone fire
     if (inp.f && localFireCd <= 0 && !ceasefire) {
       let own = 0;
@@ -552,7 +557,7 @@ function onlineFrame(dt: number) {
       continue;
     }
     const tw = jumped(ta[1], ta[2], tb[1], tb[2], u); // through a portal: no sliding across the map
-    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], tw), y: lerp(ta[2], tb[2], tw), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5], hp: ta[6] });
+    tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], tw), y: lerp(ta[2], tb[2], tw), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5], hp: ta[6] ?? undefined });
   }
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
@@ -1328,7 +1333,8 @@ let attractOpts: AttractOpts = {};
 function attractMission() {
   const r = Math.random();
   // the flea market of the Pilleurs too (iteration 15), and the toy factory's belts (iteration 16)
-  return r < 0.1 ? 21 : r < 0.22 ? 22 + Math.floor(Math.random() * 2) : r < 0.32 ? 24 : r < 0.47 ? 25 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 14);
+  // and the ice of the rink and the frozen lake (iteration 21)
+  return r < 0.1 ? 21 : r < 0.2 ? 22 + Math.floor(Math.random() * 2) : r < 0.28 ? 24 : r < 0.4 ? 25 + Math.floor(Math.random() * 2) : r < 0.54 ? 27 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 14);
 }
 
 function startAttract(opts: AttractOpts = attractOpts) {
@@ -1729,7 +1735,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, rallyBtn: !$('#hud-rally').hidden };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, rallyBtn: !$('#hud-rally').hidden };
   },
 };
 if (params.has('demo')) {

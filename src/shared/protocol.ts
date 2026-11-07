@@ -43,7 +43,8 @@ export interface Input {
 
 // tank: [id, x, y, body, turret, flags, hp?]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan),
 // 64 boss charging a volley (or the Foreur spinning up), 128 boss enraged, 256 enemy has spotted a foe (night), 512 the Foreur is under the table. hp only for tanks with several hit points.
-export type NetTank = [number, number, number, number, number, number, number?];
+// iteration 21, tables with ice only: then [.., hp or null, vx, vy], the speed the tank slides at.
+export type NetTank = [number, number, number, number, number, number, (number | null)?, number?, number?];
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
 // mine: [id, x, y, blinking]

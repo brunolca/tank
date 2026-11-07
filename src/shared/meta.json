@@ -1,7 +1,7 @@
 {
-  "iteration": 20,
-  "date": "2026-11-06",
-  "title": "Les coéquipiers",
+  "iteration": 21,
+  "date": "2026-11-07",
+  "title": "La banquise",
   "journal": [
     {
       "iteration": 1,
@@ -244,6 +244,18 @@
         "« Suis-moi ! » : touche T, bouton Y de la manette ou bouton 📣. Tes coéquipiers te rejoignent quelques secondes sans cesser de tirer, et ils te répondent.",
         "Les vies restent partagées : tant qu’un coéquipier tient debout, la mission continue. Les boss deviennent un peu plus coriaces pour chaque coéquipier.",
         "Sur iPhone, le plateau ne reste plus étiré après avoir tourné l’écran : l’image se recale toute seule."
+      ]
+    },
+    {
+      "iteration": 21,
+      "date": "2026-11-07",
+      "title": "La banquise",
+      "notes": [
+        "Nouveau terrain : la glace. Ton tank y glisse et garde son élan : il faut freiner tôt, braquer en avance… et une glissade bien placée fait une superbe esquive.",
+        "Deux missions sur la glace : la patinoire (mission 27), où les jaunes sèment leurs mines au milieu de la piste, et la banquise (mission 28), un lac gelé entre les fosses, surveillé par des tourelles vertes.",
+        "La neige tombe doucement sur la table dès qu’il y a de la glace, et les chenilles soulèvent des copeaux quand on dérape.",
+        "La patinoire rejoint les arènes du versus : chacun pour soi, sur la glace.",
+        "Dans l’atelier, un nouveau pinceau « Glace » pour dessiner tes propres patinoires et les partager par lien."
       ]
     }
   ]

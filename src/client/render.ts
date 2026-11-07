@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BELT_SPEED, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { BELT_SPEED, ICE, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import { isRivalId } from '../shared/rivals';
 import type { TankInfo } from '../shared/protocol';
@@ -269,6 +269,44 @@ function beltTexture() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Ice (iteration 21): pale blue, a few white scratches from skates and a frosty rim. */
+const SNOW_FLAKES = 320;
+
+function iceTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 0, 128, 128);
+  grad.addColorStop(0, '#bfe6fa'); grad.addColorStop(0.5, '#93d0f0'); grad.addColorStop(1, '#b3e0f7');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.lineCap = 'round';
+  for (let k = 0; k < 12; k++) {
+    g.strokeStyle = `rgba(255,255,255,${0.5 + rnd() * 0.45})`;
+    g.lineWidth = 1 + rnd() * 1.6;
+    const x = rnd() * 128, y = rnd() * 128, a = rnd() * Math.PI, l = 18 + rnd() * 40;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.quadraticCurveTo(x + Math.cos(a) * l * 0.5 + 6, y + Math.sin(a) * l * 0.5 - 6, x + Math.cos(a) * l, y + Math.sin(a) * l);
+    g.stroke();
+  }
+  // a couple of hairline cracks
+  g.strokeStyle = 'rgba(70,130,175,0.45)';
+  g.lineWidth = 1;
+  for (let k = 0; k < 2; k++) {
+    let x = rnd() * 128, y = rnd() * 128;
+    g.beginPath(); g.moveTo(x, y);
+    for (let j = 0; j < 4; j++) { x += (rnd() - 0.5) * 34; y += (rnd() - 0.5) * 34; g.lineTo(x, y); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   return t;
 }
@@ -735,6 +773,14 @@ export class Renderer {
   private beltMat = new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.85 });
   private beltGeo = new THREE.PlaneGeometry(1, 0.94).rotateX(-Math.PI / 2);
   private beltMesh?: THREE.InstancedMesh;
+  /** Ice (iteration 21): one glossy slab per ice cell, snow falls over the table while the level has some. */
+  private iceMat = new THREE.MeshStandardMaterial({ map: iceTexture(), roughness: 0.1, metalness: 0.25 });
+  private iceGeo = new THREE.BoxGeometry(1, 0.03, 1);
+  private iceMesh?: THREE.InstancedMesh;
+  private iceCells = new Set<number>();
+  private snow?: THREE.Points;
+  private snowPos = new Float32Array(SNOW_FLAKES * 3);
+  private snowSeed = new Float32Array(SNOW_FLAKES);
   private tunnels: { cell: number; root: THREE.Group; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; op: number }[] = [];
   private tunnelBusy = new Set<number>();
   private tunnelGeo = {
@@ -1179,6 +1225,7 @@ export class Renderer {
 
     this.paintFloor(tiles);
     this.addBelts(belts);
+    this.addIce(tiles, belts);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const t = tiles[y * W + x];
@@ -1218,6 +1265,57 @@ export class Renderer {
     mesh.receiveShadow = true;
     this.levelGroup.add(mesh);
     this.beltMesh = mesh;
+  }
+
+  private addIce(tiles: number[], belts: number[]) {
+    if (this.iceMesh) { this.levelGroup.remove(this.iceMesh); this.iceMesh.dispose(); this.iceMesh = undefined; }
+    this.iceCells.clear();
+    belts.forEach((b, i) => { if (b === ICE && tiles[i] === Tile.Empty) this.iceCells.add(i); });
+    if (this.snow) this.snow.visible = this.iceCells.size > 0;
+    if (!this.iceCells.size) return;
+    const cells = [...this.iceCells];
+    const mesh = new THREE.InstancedMesh(this.iceGeo, this.iceMat, cells.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+    cells.forEach((i, k) => {
+      q.setFromAxisAngle(up, ((i * 7) % 4) * Math.PI / 2); // the scratches turn from slab to slab
+      m.compose(new THREE.Vector3((i % W) + 0.5, 0.012, Math.floor(i / W) + 0.5), q, one);
+      mesh.setMatrixAt(k, m);
+    });
+    mesh.receiveShadow = true;
+    this.levelGroup.add(mesh);
+    this.iceMesh = mesh;
+    if (!this.snow) {
+      for (let k = 0; k < SNOW_FLAKES; k++) {
+        this.snowPos[k * 3] = -2 + Math.random() * (W + 4);
+        this.snowPos[k * 3 + 1] = Math.random() * 7;
+        this.snowPos[k * 3 + 2] = -2 + Math.random() * (H + 4);
+        this.snowSeed[k] = Math.random() * 100;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(this.snowPos, 3));
+      this.snow = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.11, transparent: true, opacity: 0.9, depthWrite: false }));
+      this.snow.frustumCulled = false;
+      this.scene.add(this.snow);
+    }
+    this.snow.visible = true;
+  }
+
+  /** Is this point of the table on ice? (tread marks turn to frost, sliding throws ice shavings) */
+  onIce(x: number, y: number) {
+    return this.iceCells.size > 0 && x >= 0 && y >= 0 && x < W && y < H && this.iceCells.has(Math.floor(y) * W + Math.floor(x));
+  }
+
+  private animateSnow(dt: number) {
+    if (!this.snow?.visible) return;
+    const p = this.snowPos;
+    for (let k = 0; k < SNOW_FLAKES; k++) {
+      const o = k * 3, sd = this.snowSeed[k];
+      p[o] += Math.sin(this.time * 0.9 + sd) * 0.35 * dt + 0.12 * dt;
+      p[o + 1] -= (0.55 + (sd % 1) * 0.4) * dt;
+      p[o + 2] += Math.cos(this.time * 0.7 + sd) * 0.25 * dt;
+      if (p[o + 1] < 0.02) { p[o] = -2 + Math.random() * (W + 4); p[o + 1] = 6 + Math.random(); p[o + 2] = -2 + Math.random() * (H + 4); }
+    }
+    (this.snow.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
   }
 
   /** A piece of toy-train tunnel (iteration 13): a painted arch, dark inside, with a cream rim at each mouth. */
@@ -1568,7 +1666,17 @@ export class Renderer {
       // tread marks
       if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
       const d = Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY);
-      if (d > 0.22) {
+      if (d > 0.22 && this.onIce(t.x, t.y)) {
+        // on the ice (iteration 21): no tread marks, a spray of ice shavings, more when the tank drifts sideways
+        const mvx = t.x - v.lastMarkX, mvy = t.y - v.lastMarkY;
+        const side = Math.abs(Math.sin(Math.atan2(mvy, mvx) - t.body));
+        v.lastMarkX = t.x; v.lastMarkY = t.y;
+        if (!(t.invisible && t.id !== myId)) {
+          for (let k = 0, n = side > 0.35 ? 3 : 1; k < n; k++) {
+            this.smoke.emit({ x: t.x - mvx * 1.5 + (Math.random() - 0.5) * 0.5, y: 0.06, z: t.y - mvy * 1.5 + (Math.random() - 0.5) * 0.5, vx: -mvx * 3 + (Math.random() - 0.5) * 0.6, vy: 0.5 + Math.random() * 0.4, vz: -mvy * 3 + (Math.random() - 0.5) * 0.6, life: 0.5, s0: 0.05, s1: 0.12, c0: 0xffffff, c1: 0xdff3ff, drag: 2.5 });
+          }
+        }
+      } else if (d > 0.22) {
         const bx = t.x, by = t.y, ang = t.body;
         this.floorMark((g) => {
           g.save();
@@ -2142,6 +2250,7 @@ export class Renderer {
     this.debris.update(dt);
     this.animatePortals(dt);
     this.animateTunnels(dt);
+    this.animateSnow(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();

@@ -1,4 +1,4 @@
-import { BELT_DIRS, BELT_SPEED, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, Tile } from './constants';
+import { BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -201,7 +201,7 @@ export function beltAt(belts: ArrayLike<number> | undefined, x: number, y: numbe
  */
 export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | undefined, x: number, y: number, r: number, dt: number): [number, number] {
   const b = beltAt(belts, x, y);
-  if (!b) return [x, y];
+  if (!b || b === ICE) return [x, y]; // ice does not carry anything (iteration 21, see glideStep)
   const [dx, dy] = BELT_DIRS[b] ?? [0, 0];
   const px = x, py = y;
   const sp = BELT_SPEED * dt;
@@ -215,4 +215,37 @@ export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | un
     if (w) [x, y] = w;
   }
   return [x, y];
+}
+
+/** Is the centre of this point on an ice cell? (iteration 21) */
+export function onIce(belts: ArrayLike<number> | undefined, x: number, y: number): boolean {
+  return beltAt(belts, x, y) === ICE;
+}
+
+/**
+ * Sliding on ice (iteration 21). On ice a tank keeps its momentum: its speed only bends slowly toward where its
+ * driver steers (ICE_GRIP), so it drifts round corners and slides on when the stick is let go. Walls stop the
+ * part of the speed that runs into them. Off the ice, nothing changes: `drive` moves the tank as usual and the
+ * speed it ends with is the one it carries onto the next patch of ice.
+ * Shared by the server and the client prediction, which replays it from the speed the server sends.
+ * `want`: the speed the driver asks for (tiles/s); returns the new position and speed.
+ */
+export function glideStep(
+  tiles: ArrayLike<number>, x: number, y: number, vx: number, vy: number, wantX: number, wantY: number, dt: number, r: number,
+): [number, number, number, number] {
+  const k = 1 - Math.exp(-ICE_GRIP * dt);
+  vx += (wantX - vx) * k;
+  vy += (wantY - vy) * k;
+  if (vx * vx + vy * vy < 0.0004) return [x, y, 0, 0];
+  const px = x, py = y;
+  [x, y] = moveCircle(tiles, x, y, vx * dt, vy * dt, r);
+  // what the walls let through is the speed we keep (a head-on bump stops us, a glancing one slides along)
+  const ax = (x - px) / dt, ay = (y - py) / dt;
+  if (Math.abs(ax) < Math.abs(vx)) vx = ax;
+  if (Math.abs(ay) < Math.abs(vy)) vy = ay;
+  if (r <= PORTAL_MAX_R) {
+    const w = warpTarget(tiles, px, py, x, y);
+    if (w) [x, y] = w; // and the slide goes on out of the twin portal
+  }
+  return [x, y, vx, vy];
 }

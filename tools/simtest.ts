@@ -2,8 +2,8 @@ import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decode
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
-import { Game, driveStep } from '../src/shared/sim';
-import { BOLT_R, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { Game, driveStep, slideDrive } from '../src/shared/sim';
+import { BOLT_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, tunnelAxis } from '../src/shared/physics';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
@@ -773,7 +773,7 @@ console.log('total', Date.now() - t0, 'ms');
     beltMissions.push(mission);
     if (lvl.belts.length !== W * H) fail(`mission ${mission} : couche de tapis de mauvaise taille`);
     lvl.belts.forEach((b, i) => {
-      if (b < 0 || b > 4) fail(`mission ${mission} : code de tapis ${b}`);
+      if (b < 0 || b > 5) fail(`mission ${mission} : code de tapis ${b}`);
       if (b && lvl.tiles[i] !== Tile.Empty) fail(`mission ${mission} : tapis sous un mur en (${i % W}, ${Math.floor(i / W)})`);
     });
   }
@@ -1070,4 +1070,102 @@ console.log('total', Date.now() - t0, 'ms');
   const per = spent / Math.max(1, steps);
   if (per > 0.5) { console.error(`coéquipiers : ${per.toFixed(3)} ms/tick, trop lent`); process.exitCode = 1; }
   if (!fails()) console.log(`coéquipiers OK (${cleared}/${missions.length} missions gagnées par les coéquipiers, ${came} venu(s) au « Suis-moi ! », ${per.toFixed(3)} ms/tick)`);
+}
+
+// ice (iteration 21): tanks keep their momentum, walls stop it, the client prediction agrees, the AI copes
+{
+  const fail = (m: string) => { console.error('GLACE:', m); process.exitCode = 1; };
+  const iceMissions: number[] = [];
+  for (let mission = 1; mission <= 60; mission++) if (getMission(mission).belts?.includes(ICE)) iceMissions.push(mission);
+  if (!iceMissions.includes(27) || !iceMissions.includes(28)) fail(`missions sur la glace : ${iceMissions.join(', ')}`);
+  if (!Array.from({ length: 26 }, (_, r) => !!versusArena(r).belts?.includes(ICE)).some(Boolean)) fail('aucune arène de versus sur la glace');
+  for (let d = 0; d < 60; d++) if (dailyLevel(20000 + d, 1 + (d % DAILY_STAGES)).belts) fail('de la glace dans le défi du jour');
+  // an empty table, ice from column 5 to 16, a wall at column 17
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  const floor = new Array(W * H).fill(0);
+  for (let y = 0; y < H; y++) for (let x = 5; x <= 16; x++) floor[y * W + x] = ICE;
+  for (let y = 0; y < H; y++) tiles[y * W + 17] = Tile.Wall;
+  const g = new Game(tiles, floor);
+  if (!g.ice) fail('la partie ne voit pas la glace');
+  const p = g.addTank('player', 0, 2.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  const go = new Map([['p1', { s: 0, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+  const idle = new Map([['p1', { s: 0, mx: 0, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+  // drive onto the ice at full speed, then let go: it slides on well past where it would have stopped
+  while (p.x < 6) { g.step(go); g.events = []; }
+  const x0 = p.x;
+  for (let i = 0; i < 30; i++) { g.step(idle); g.events = []; }
+  if (p.x - x0 < 1) fail(`le tank ne glisse pas (${(p.x - x0).toFixed(2)} case)`);
+  if (Math.hypot(p.vx, p.vy) > 0.6) fail('le tank ne ralentit pas sur la glace');
+  // steering on the ice bends the slide slowly: half a second after turning down, it still runs right
+  p.x = 6.5; p.y = 3.5; p.vx = 3; p.vy = 0;
+  const down = new Map([['p1', { s: 0, mx: 0, my: 1, a: 0, f: 0 as const, m: 0 as const }]]);
+  for (let i = 0; i < 15; i++) { g.step(down); g.events = []; }
+  if (p.vx < 0.8 || p.vy < 0.8) fail(`la glissade ne s’infléchit pas en douceur (vx ${p.vx.toFixed(2)}, vy ${p.vy.toFixed(2)})`);
+  // off the ice, the tank stops at once
+  p.x = 2.5; p.y = 12.5; p.vx = p.vy = 0;
+  for (let i = 0; i < 10; i++) { g.step(go); g.events = []; }
+  g.step(idle); g.events = [];
+  const xs = p.x;
+  g.step(idle); g.events = [];
+  if (p.x !== xs) fail('le tank glisse hors de la glace');
+  // a wall stops the slide
+  p.x = 15.5; p.y = 6.5; p.vx = 3; p.vy = 0;
+  for (let i = 0; i < 30; i++) { g.step(idle); g.events = []; }
+  if (p.x > 17 - p.r + 1e-6 || Math.abs(p.vx) > 1e-6) fail(`le mur n’arrête pas la glissade (x ${p.x.toFixed(2)}, vx ${p.vx.toFixed(2)})`);
+  // the client prediction (slideDrive input by input) lands exactly where the room puts the tank
+  for (const mission of [27, 28]) {
+    const lvl = getMission(mission);
+    const s = new Game(lvl.tiles, lvl.belts);
+    const pl = s.addTank('player', 0, mission === 27 ? 10.5 : 8.5, mission === 27 ? 11.5 : 6.5, 0x3d7bff, 'p1', 'P'); // out on the ice
+    s.frozen = false;
+    let x = pl.x, y = pl.y, body = pl.body, vx = 0, vy = 0, worst = 0, slid = 0;
+    for (let k = 0; k < 30 * 12; k++) {
+      const on = k < 50 || k % 90 < 60; // drive to the rink first, then steer about and let go now and then
+      const inp = { s: k, mx: k < 50 ? 0.8 : on ? Math.cos(k / 37) : 0, my: k < 50 ? 0.6 : on ? Math.sin(k / 29) * 0.8 : 0, a: 0, f: 0 as const, m: 0 as const };
+      s.step(new Map([['p1', inp]]));
+      s.events = [];
+      [x, y, body, vx, vy] = slideDrive(lvl.tiles, lvl.belts!, x, y, body, vx, vy, inp.mx, inp.my, SPECS.player.speed, DT);
+      worst = Math.max(worst, Math.hypot(x - pl.x, y - pl.y));
+      if (!inp.mx && Math.hypot(pl.vx, pl.vy) > 0.5) slid++;
+      // the snapshot tells the speed, rounded: replaying from it stays close
+    }
+    if (worst > 1e-9) fail(`mission ${mission} : la prédiction s’écarte de ${worst.toFixed(4)} sur la glace`);
+    if (!slid) fail(`mission ${mission} : jamais de glissade`);
+    const n = s.netTanks()[0];
+    if (n.length !== 9 || n[6] !== null || typeof n[7] !== 'number') fail(`mission ${mission} : l’instantané ne donne pas la vitesse (${JSON.stringify(n)})`);
+  }
+  // no speed on the wire off the ice tables (older tabs, smaller snapshots)
+  if (getMission(1).belts || new Game(getMission(25).tiles, getMission(25).belts).ice) fail('de la glace là où il n’y en a pas');
+  // the workshop paints ice and shares it by link
+  {
+    const map = ATELIER_SAMPLE.map.slice();
+    map[7] = '~'.repeat(W);
+    if (checkAtelier(map)) fail(`atelier : carte glacée refusée (${checkAtelier(map)})`);
+    const back = decodeAtelier(encodeAtelier({ name: 'Givre', map }));
+    if (!back || back.map.join('') !== map.join('')) fail('atelier : aller-retour du code raté avec de la glace');
+    if (!atelierLevel({ name: 'Givre', map }).belts?.includes(ICE)) fail('atelier : la glace disparaît en partie');
+  }
+  // the AI copes on the rink: duos of AI players clear the ice missions, quickly
+  let cleared = 0, spent = 0, steps = 0;
+  for (const mission of [27, 28]) {
+    for (let run = 0; run < 3; run++) {
+      const lvl = getMission(mission);
+      const s = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s.addTank('player', 0, sx, sy, 0x3d7bff); s.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const e of lvl.enemies) s.addTank(e.kind, 99, e.x, e.y, 0);
+      s.frozen = false;
+      for (let i = 0; i < 30 * 150 && s.aliveCount(99) > 0 && s.aliveCount(0) > 0; i++) {
+        const t0 = performance.now();
+        s.step(new Map());
+        spent += performance.now() - t0; steps++;
+        s.events = [];
+      }
+      if (s.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick sur la glace`);
+  if (cleared === 0) fail('l’IA ne gagne jamais sur la glace');
+  if (process.exitCode !== 1) console.log(`glace OK (missions : ${iceMissions.join(', ')}, ${cleared}/6 parties gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
 }
