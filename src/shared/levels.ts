@@ -7,9 +7,9 @@ import { BELT_CHARS, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
 //         > < ^ V conveyor belts (iteration 16): tanks, mines and crates ride them (the cell stays floor underneath)
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart',
 };
 
 export interface LevelDef {
@@ -648,6 +648,52 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 22: the Rempart's first stand, a shield wall in the middle of the table; go round it, or bounce off the sides
+  29: {
+    name: 'Le rempart',
+    map: [
+      '......................',
+      '......................',
+      '..........#.......a...',
+      '..1.......#...........',
+      '......................',
+      '..2.......#####.......',
+      '..............#.......',
+      '......................',
+      '.....##.........r.....',
+      '......................',
+      '..............#.......',
+      '..........#####.......',
+      '......................',
+      '..........#...........',
+      '..........#.......p...',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 22: two Rempart escort a green turret through a courtyard: one of you draws their shields, the other strikes
+  31: {
+    name: 'La garde',
+    map: [
+      '......................',
+      '..1...................',
+      '.........##...........',
+      '..2......##.....r.....',
+      '......................',
+      '.....o........###.....',
+      '.....o..........#.....',
+      '................#..g..',
+      '...........oo...#.....',
+      '................#.....',
+      '.....o..........#.....',
+      '.....o........###.....',
+      '......................',
+      '.........##.....r.....',
+      '.........##...........',
+      '...................y..',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -841,6 +887,12 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
       const rt = rng(mission * 9029 + 41);
       let n = 0;
       for (const e of enemies) if (n < 2 && e.kind !== 'steel' && e.kind !== 'mason' && rt() < 0.09) { e.kind = 'thief'; n++; }
+    }
+    // the Rempart (iteration 22) holds the line from the 32nd: one more stream, at most two of them
+    if (opt.seed === undefined && mission > 31) {
+      const rr = rng(mission * 6007 + 53);
+      let n = 0;
+      for (const e of enemies) if (n < 2 && (e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'violet') && rr() < 0.14) { e.kind = 'rampart'; n++; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

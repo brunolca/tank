@@ -1,7 +1,7 @@
 {
-  "iteration": 21,
+  "iteration": 22,
   "date": "2026-11-07",
-  "title": "La banquise",
+  "title": "Le Rempart",
   "journal": [
     {
       "iteration": 1,
@@ -256,6 +256,18 @@
         "La neige tombe doucement sur la table dès qu’il y a de la glace, et les chenilles soulèvent des copeaux quand on dérape.",
         "La patinoire rejoint les arènes du versus : chacun pour soi, sur la glace.",
         "Dans l’atelier, un nouveau pinceau « Glace » pour dessiner tes propres patinoires et les partager par lien."
+      ]
+    },
+    {
+      "iteration": 22,
+      "date": "2026-11-07",
+      "title": "Le Rempart",
+      "notes": [
+        "Un nouvel ennemi entre en scène : le Rempart, un tank bleu canard qui porte un grand bouclier de laiton sur sa tourelle.",
+        "Un obus qui frappe le bouclier de face rebondit et repart… vers toi ! Prends le Rempart de côté, par-derrière, au ricochet ou à la mine.",
+        "Sa tourelle pivote lentement : en coopération, l’un attire son bouclier pendant que l’autre le contourne.",
+        "Deux nouvelles missions, « Le rempart » (29) et « La garde » (31), puis des Remparts dans les missions générées dès la 32ᵉ.",
+        "Le Rempart rejoint la palette de l’atelier pour garder tes propres missions maison."
       ]
     }
   ]

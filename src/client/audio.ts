@@ -164,6 +164,14 @@ export const sfx = {
     noise(t, 0.18, 6000, 1.2, 0.3, 'bandpass', 2500);
     [0.09, 0.17, 0.27].forEach((d) => noise(t + d, 0.06, 3500 + d * 4000, 3, 0.16, 'bandpass'));
   },
+  /** A shell bounces off the Rempart's shield: a short bright gong, lighter than the steel tank's clang. */
+  deflect() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const [f, g] of [[784, 0.12], [1568, 0.06], [2350, 0.035]] as const) tone(t, 0.45, f, f * 1.01, g, 'sine');
+    tone(t, 0.08, 1200, 2400, 0.06, 'triangle');
+    noise(t, 0.08, 7000, 1.5, 0.18, 'highpass');
+  },
   /** The boss takes a hit: a heavy metal clang. */
   bossHit() {
     if (!ctx) return;

@@ -1,6 +1,6 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
-  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
+  FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -142,7 +142,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -922,6 +922,7 @@ export class Game {
         if (!t.alive || under(t)) continue;
         const rr = t.r + BULLET_R;
         if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
+          if (t.kind === 'rampart' && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22)
           b.dead = true;
           this.killTank(t, this.tankById(b.owner));
           break;
@@ -956,6 +957,30 @@ export class Game {
       }
     }
     this.bullets = this.bullets.filter((b) => !b.dead);
+  }
+
+  /** Is the point (x, y) in front of the Rempart's shield (within RAMPART_ARC of where its turret points)? */
+  shieldFaces(t: Tank, x: number, y: number) {
+    return t.kind === 'rampart' && Math.abs(angDiff(t.turret, Math.atan2(y - t.y, x - t.x))) <= RAMPART_ARC;
+  }
+
+  /**
+   * A shell meets the Rempart (iteration 22): if it struck the shield, it bounces off like off a round wall, now the
+   * Rempart's own shell (its bounces left unchanged), and true is returned. From the side or behind, false: it goes down.
+   */
+  deflect(t: Tank, b: Bullet): boolean {
+    if (!this.shieldFaces(t, b.x, b.y)) return false;
+    let nx = b.x - t.x, ny = b.y - t.y;
+    const d = Math.hypot(nx, ny) || 1;
+    nx /= d; ny /= d;
+    const dot = b.vx * nx + b.vy * ny;
+    if (dot < 0) { b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny; }
+    const out = t.r + BULLET_R + 0.03;
+    b.x = t.x + nx * out; b.y = t.y + ny * out;
+    b.owner = t.id;
+    b.volley = undefined;
+    this.events.push(['deflect', r2(b.x), r2(b.y), t.id]);
+    return true;
   }
 
   stepMines(dt: number) {
@@ -1182,6 +1207,11 @@ export class Game {
       }
       // mines also stop bullets: shooting into a mine near us is bad, near foes is fine
       const segLen = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+      if (best && best.kind === 'rampart' && best !== t) {
+        // the shield would send it back: no use (and the AI-driven players learn to go round it)
+        const hx = s.x0 + (s.x1 - s.x0) * bestT, hy = s.y0 + (s.y1 - s.y0) * bestT;
+        if (this.shieldFaces(best, hx, hy)) return { len: acc + segLen * bestT };
+      }
       if (best) return { hit: best, len: acc + segLen * bestT };
       acc += segLen;
     }
@@ -1331,7 +1361,7 @@ export class Game {
     for (const f of foes) {
       tryAng(Math.atan2(f.y - t.y, f.x - t.x), 1);
     }
-    if (spec.bounces > 0 && (spec.skill >= 2 || Math.random() < 0.5)) {
+    if (spec.bounces > 0 && t.kind !== 'rampart' && (spec.skill >= 2 || Math.random() < 0.5)) { // the Rempart keeps its shield on its foe
       const n = spec.skill >= 2 ? 64 : 24;
       const off = Math.random() * ((Math.PI * 2) / n);
       for (let i = 0; i < n; i++) tryAng(off + (i * Math.PI * 2) / n, 0);
@@ -1359,6 +1389,7 @@ export class Game {
       const notice = t.spec.skill >= 2 ? 0.9 : 0.5;
       if (tt <= 0 || tt > notice) continue;
       if (t.spec.skill < 2 && (b.id + t.id) % 3 === 0) continue;
+      if (t.kind === 'rampart' && this.shieldFaces(t, t.x - b.vx, t.y - b.vy)) continue; // head-on: it trusts its shield
       const cx = rx - b.vx * tt, cy = ry - b.vy * tt;
       const d = Math.hypot(cx, cy);
       if (d > t.r + 0.55) continue;

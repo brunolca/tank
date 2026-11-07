@@ -76,7 +76,8 @@ export type GameEvent =
   | ['build', number, number, number] // cx cy tankId: the Maçon lays a cork block on that cell (iteration 12; older tabs are told to reload)
   | ['loot', number, number, number] // x y bonusKind: a Pilleur is destroyed and drops a crate of what it stole (iteration 15)
   | ['call', number, number, number, number] // x y tankId strikes: the Grondeur calls the lightning (iteration 18; older clients ignore it, the strikes are plain 'zap')
-  | ['rally', number, number, number, number]; // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
+  | ['rally', number, number, number, number] // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
+  | ['deflect', number, number, number]; // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
 export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean }

@@ -1169,3 +1169,85 @@ console.log('total', Date.now() - t0, 'ms');
   if (cleared === 0) fail('l’IA ne gagne jamais sur la glace');
   if (process.exitCode !== 1) console.log(`glace OK (missions : ${iceMissions.join(', ')}, ${cleared}/6 parties gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
 }
+
+// the Rempart (iteration 22): its turret shield sends shells back head-on, but it goes down from the side, from behind, or on a mine
+{
+  const fail = (m: string) => { console.error('REMPART:', m); process.exitCode = 1; };
+  const shoot = (fromX: number, fromY: number, turret: number) => {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, fromX, fromY, 0x3d7bff, 'p1', 'P');
+    const r = g.addTank('rampart', 99, 11.5, 8.5, 0);
+    g.frozen = false;
+    r.turret = turret;
+    r.ai = undefined; // hold still, shield where we put it
+    p.turret = Math.atan2(r.y - p.y, r.x - p.x);
+    g.tryFire(p);
+    let deflected = false;
+    for (let i = 0; i < 40 && r.alive; i++) {
+      g.step(new Map());
+      if (g.events.some((e) => e[0] === 'deflect')) deflected = true;
+      g.events = [];
+    }
+    return { g, p, r, deflected };
+  };
+  // head-on: it bounces back, now the Rempart's shell, and comes back at the shooter
+  const a = shoot(5.5, 8.5, Math.PI);
+  if (!a.r.alive) fail('détruit de face');
+  if (!a.deflected) fail('pas d’événement deflect');
+  if (a.p.alive && !a.g.bullets.some((b) => b.owner === a.r.id && b.vx < 0)) fail('l’obus renvoyé ne repart pas vers le tireur');
+  // from behind and from the side
+  if (shoot(5.5, 8.5, 0).r.alive) fail('pas détruit par derrière');
+  if (shoot(11.5, 2.5, Math.PI).r.alive) fail('pas détruit par le côté');
+  // a mine does not care about shields
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  const r = g.addTank('rampart', 99, 11.5, 8.5, 0);
+  g.mines.push({ id: 999, owner: 0, team: 0, x: 11.5, y: 8.5, t: 1, fuse: -1, dead: false });
+  g.explodeMine(g.mines[0]);
+  if (r.alive) fail('une mine ne le détruit pas');
+  // the AI players do not fire into its shield (traceShot sees it as a wall)
+  const h = new Game(new Array(W * H).fill(Tile.Empty));
+  const q = h.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const s = h.addTank('rampart', 99, 11.5, 8.5, 0);
+  s.turret = Math.PI;
+  if (h.traceShot(q, 0, 0).hit === s) fail('l’IA croit pouvoir le toucher de face');
+  s.turret = 0;
+  if (h.traceShot(q, 0, 0).hit !== s) fail('l’IA ne le voit plus de dos');
+  // the missions: handmade 29 and 31, then some generated ones; never in the daily challenge nor the mole
+  const rm: number[] = [];
+  for (let mission = 1; mission <= 90; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'rampart')) rm.push(mission);
+  if (!rm.includes(29) || !rm.includes(31)) fail('missions 29 et 31 sans Rempart');
+  if (rm.some((m) => m < 29)) fail('Rempart avant la 29ᵉ mission');
+  if (rm.length < 8) fail(`trop peu de missions avec des Remparts (${rm.length})`);
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'rampart')) fail('Rempart dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'rampart')) fail('Rempart dans la taupe');
+  // the workshop knows it, and its share code survives the round trip
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'r' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Rempart refusé (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Garde', map }));
+  if (!back || back.map.join('') !== map.join('')) fail('atelier : aller-retour du code raté avec un Rempart');
+  if (killXp('rampart') <= killXp('ash')) fail('XP du Rempart');
+  // duos of AI players clear its missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, deflects = 0;
+  for (const mission of [29, 31]) {
+    for (let run = 0; run < 3; run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const e of lvl.enemies) s2.addTank(e.kind, 99, e.x, e.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t0 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t0; steps++;
+        deflects += s2.events.filter((e) => e[0] === 'deflect').length;
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des Remparts');
+  if (process.exitCode !== 1) console.log(`rempart OK (missions : ${rm.join(', ')}, ${cleared}/6 parties gagnées par l’IA, ${deflects} obus renvoyés, ${per.toFixed(3)} ms/tick)`);
+}

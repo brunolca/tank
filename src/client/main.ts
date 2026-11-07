@@ -352,6 +352,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'rampart')) setTimeout(() => toast('Le Rempart renvoie tous les obus qui frappent son bouclier. Prends-le de côté, par-derrière… ou à la mine !', 4400), 2200);
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
@@ -688,6 +689,12 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.hurt(e[3], e[1], e[2]);
       floater(e[1], e[2], `${e[4]} / ${e[5]}`, enemyColor(renderer.tankKind(e[3]) ?? 'boss'));
       if (audible) sfx.bossHit();
+      break;
+    case 'deflect':
+      // a shell bounced off the Rempart's shield (iteration 22)
+      renderer.deflect(e[3], e[1], e[2]);
+      floater(e[1], e[2], 'Clang !', 0xd9a441);
+      if (audible) sfx.deflect();
       break;
     case 'volley':
       renderer.volley(e[1], e[2]);
@@ -1919,6 +1926,25 @@ if (params.has('demo')) {
     armor() {
       let n = 0;
       for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'steel' && t.hp > 1) { t.buffs.invuln = 0; attract!.killTank(t, undefined); n++; }
+      return n;
+    },
+    /** A hero fires straight into each Rempart's shield (to catch the shell bouncing back on camera). */
+    shieldShot() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const r of g.tanks) {
+        if (!r.alive || r.kind !== 'rampart') continue;
+        const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+        if (!heroes.length) break;
+        const h = heroes.reduce((a, b) => (Math.hypot(a.x - r.x, a.y - r.y) <= Math.hypot(b.x - r.x, b.y - r.y) ? a : b));
+        r.turret = Math.atan2(h.y - r.y, h.x - r.x);
+        const keep = h.turret;
+        h.turret = Math.atan2(r.y - h.y, r.x - h.x);
+        h.fireCd = 0;
+        if (g.tryFire(h)) n++;
+        h.turret = keep;
+      }
       return n;
     },
     /** Make every Maçon lay its next block right now (to catch the masonry on camera). */

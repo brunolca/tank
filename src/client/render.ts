@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BELT_SPEED, ICE, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import { isRivalId } from '../shared/rivals';
 import type { TankInfo } from '../shared/protocol';
@@ -173,6 +173,8 @@ interface TankView {
   key?: THREE.Group; // a versus rival (iteration 17): its wind-up key
   cloud?: THREE.Group; // the Grondeur (iteration 18): its own little storm cloud, floating above
   rodBall?: THREE.MeshStandardMaterial; // and the ball of its lightning rod, which glows as it calls
+  shieldMat?: THREE.MeshStandardMaterial; // the Rempart (iteration 22): its brass shield, which flares when a shell bounces off
+  shieldGlow?: number;
   under?: boolean;
 }
 
@@ -400,6 +402,17 @@ const coinGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.015, 16);
 const sackMat = new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 1 });
 const ropeMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 });
 const maskMat = new THREE.MeshStandardMaterial({ color: 0x17171c, roughness: 0.6, side: THREE.DoubleSide });
+// the Rempart (iteration 22): a curved brass shield on its turret, as wide as the arc that sends shells back
+const rampartGeo = {
+  plate: new THREE.CylinderGeometry(0.5, 0.5, 0.4, 22, 1, true, Math.PI / 2 - RAMPART_ARC, RAMPART_ARC * 2),
+  // a flat brass lip on top, so the shield reads from the camera high above the table
+  lip: new THREE.RingGeometry(0.38, 0.53, 22, 1, -RAMPART_ARC, RAMPART_ARC * 2),
+  rim: new THREE.TorusGeometry(0.5, 0.028, 6, 22, RAMPART_ARC * 2),
+  boss: new THREE.SphereGeometry(0.065, 12, 8),
+  stud: new THREE.SphereGeometry(0.026, 8, 6),
+  crest: new THREE.ConeGeometry(0.05, 0.16, 4),
+};
+const rampartRimMat = new THREE.MeshStandardMaterial({ color: 0x8a5a26, roughness: 0.4, metalness: 0.7 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
 const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
 const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 1, flatShading: true });
@@ -732,6 +745,39 @@ function buildTank(info: TankInfo): TankView {
     mask.position.y = 0.07;
     turret.add(mask);
     view.sack = sack;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'rampart') {
+    const shieldMat = new THREE.MeshStandardMaterial({ color: 0xf0b445, roughness: 0.3, metalness: 0.6, side: THREE.DoubleSide, emissive: 0xffc850, emissiveIntensity: 0.2 });
+    const plate = new THREE.Mesh(rampartGeo.plate, shieldMat);
+    plate.position.y = 0.04;
+    const lip = new THREE.Mesh(rampartGeo.lip, shieldMat);
+    lip.rotation.x = -Math.PI / 2;
+    lip.position.y = 0.24;
+    turret.add(plate, lip);
+    for (const y of [-0.16, 0.245]) {
+      // a bronze rim along the top and the bottom edge
+      const holder = new THREE.Group();
+      holder.rotation.y = RAMPART_ARC;
+      holder.position.y = y;
+      const rim = new THREE.Mesh(rampartGeo.rim, rampartRimMat);
+      rim.rotation.x = Math.PI / 2;
+      holder.add(rim);
+      turret.add(holder);
+    }
+    const boss = new THREE.Mesh(rampartGeo.boss, rampartRimMat);
+    boss.position.set(0.51, 0.04, 0);
+    turret.add(boss);
+    for (const a of [-0.8, -0.4, 0.4, 0.8]) {
+      const stud = new THREE.Mesh(rampartGeo.stud, rampartRimMat);
+      stud.position.set(Math.cos(a) * 0.51, 0.04 + (Math.abs(a) > 0.5 ? 0.1 : -0.1), Math.sin(a) * 0.51);
+      turret.add(stud);
+    }
+    const crest = new THREE.Mesh(rampartGeo.crest, shieldMat);
+    crest.position.set(-0.05, 0.27, 0);
+    turret.add(crest);
+    view.shieldMat = shieldMat;
+    view.shieldGlow = 0;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (armorGroup) {
@@ -1875,6 +1921,10 @@ export class Renderer {
   /** Hit flash, the boss's charging glow and its angry smoke. */
   private tankGlow(v: TankView, t: RTank, dt: number) {
     const fx = t.fx ?? 0;
+    if (v.shieldMat) {
+      v.shieldGlow = Math.max(0, (v.shieldGlow ?? 0) - dt * 3);
+      v.shieldMat.emissiveIntensity = 0.2 + v.shieldGlow * 1.4;
+    }
     v.hit = Math.max(0, v.hit - dt * 4);
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
@@ -1897,6 +1947,19 @@ export class Renderer {
       m.emissive.setHex(col);
       m.emissiveIntensity = glow;
     }
+  }
+
+  /** A shell bounced off the Rempart's shield (iteration 22): the brass flares, a fan of sparks flies off. */
+  deflect(id: number, x: number, y: number) {
+    const v = this.tanks.get(id);
+    if (v) { v.shieldGlow = 1; v.recoil = Math.max(v.recoil, 0.5); }
+    const t = v ? v.root.position : undefined;
+    const out = t ? Math.atan2(y - t.z, x - t.x) : Math.random() * Math.PI * 2;
+    for (let i = 0; i < 16; i++) {
+      const a = out + (Math.random() - 0.5) * 1.8, sp = 2.5 + Math.random() * 3;
+      this.glow.emit({ x, y: 0.45, z: y, vx: Math.cos(a) * sp, vy: 0.5 + Math.random() * 2.5, vz: Math.sin(a) * sp, life: 0.22 + Math.random() * 0.2, s0: 0.06, s1: 0.01, c0: 0xffffff, c1: 0xffc040, grav: 8, drag: 1 });
+    }
+    this.shake = Math.max(this.shake, 0.08);
   }
 
   /** A tough tank (the boss) took a hit. */

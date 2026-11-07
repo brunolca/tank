@@ -43,7 +43,8 @@ export type TankKind =
   | 'drill'
   | 'mason'
   | 'thief'
-  | 'thunder';
+  | 'thunder'
+  | 'rampart';
 
 export interface TankSpec {
   speed: number;
@@ -84,6 +85,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   thief: { speed: 2.5, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2.6, mines: 0, skill: 1, reaction: 0.5, aimError: 0.09, label: 'Pilleur' },
   // iteration 18: the third boss, it calls lightning down on its foes (see THUNDER_*)
   thunder: { speed: 1.15, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.2, turretSpeed: 2.3, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: THUNDER_R, label: 'Grondeur' },
+  // iteration 22: a big brass shield on its turret sends back every shell that hits it head-on (see RAMPART_*)
+  rampart: { speed: 1.1, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.9, turretSpeed: 1.25, mines: 0, skill: 1, reaction: 0.55, aimError: 0.07, label: 'Rempart' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -115,6 +118,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   mason: 0x7b7430,
   thief: 0x8e2a4e,
   thunder: 0x34508f,
+  rampart: 0x2f6f73,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -161,6 +165,10 @@ export const THUNDER_WARN = 0.85;
 export const THUNDER_PER_FOE: [number, number] = [1, 2];
 /** Most strikes of one call. */
 export const THUNDER_MAX = 5;
+
+// ------------------------------------------------------------------ the Rempart (iteration 22): the tank with a shield
+/** Half-width of the shield's arc (radians), centred on where its turret points: shells hitting inside it bounce back. */
+export const RAMPART_ARC = 1.15;
 
 // ------------------------------------------------------------------ the Maçon (iteration 12): the tank that builds cork walls
 /** Seconds between two blocks (min, max); the first one comes MASON_FIRST seconds into the mission. */
