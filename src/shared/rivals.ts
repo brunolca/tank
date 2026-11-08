@@ -6,7 +6,8 @@ import type { Game, Tank } from './sim';
 
 export const MAX_RIVALS = 3;
 /** Modes that take AI tanks: rivals in versus, teammates in the coop campaign (iteration 20, « Les coéquipiers »). */
-export const rivalMode = (m: Mode | undefined) => m === 'versus' || m === 'coop';
+/** and « Drapeaux » (iteration 24), where rivals fill both teams. */
+export const rivalMode = (m: Mode | undefined) => m === 'versus' || m === 'coop' || m === 'drapeau';
 /** Rival ids start with this prefix (never a real player's id: those are UUIDs or the client's own random ids). */
 export const RIVAL_PREFIX = 'ia:';
 export const isRivalId = (pid: string | undefined) => !!pid && pid.startsWith(RIVAL_PREFIX);

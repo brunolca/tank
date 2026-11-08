@@ -105,6 +105,27 @@ try {
   if (vs.moved < 0.3) fail(`les rivaux ne bougent pas (${vs.moved})`);
   await solo.context().close();
 
+  // « Drapeaux » (iteration 24): alone against one rival, each on a team, with the two flags on the table
+  const ctf = await page('drapeaux', server.url + '/');
+  await sleep(1500);
+  await ctf.click('#btn-create');
+  await ctf.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1000);
+  await ctf.click('#mode-select button[data-mode="drapeau"]');
+  await ctf.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  await ctf.click('#btn-rival');
+  await sleep(1000);
+  if ((await ctf.locator('#lobby-players .team-tag').count()) !== 2) fail('le salon des drapeaux devrait montrer l’équipe des 2 tanks');
+  await ctf.click('#btn-start');
+  await sleep(6500);
+  const cf = await state(ctf);
+  if (!cf.online || cf.myTankId < 0) fail(`drapeaux : pas en partie (écran ${cf.screen}, phase ${cf.phase})`);
+  if (cf.tanks !== 2) fail(`drapeaux : ${cf.tanks} tank(s) au lieu de 2`);
+  if (!cf.ctf?.bases || cf.ctf.team !== 1 || cf.ctf.flags !== 2) fail(`drapeaux : bases, équipe ou drapeaux absents (${JSON.stringify(cf.ctf)})`);
+  if (cf.ctf?.board !== 2) fail('drapeaux : le tableau des scores ne montre pas les deux équipes');
+  if (cf.moved < 0.3) fail(`drapeaux : le rival ne bouge pas (${cf.moved})`);
+  await ctf.context().close();
+
   // coop campaign alone with an AI teammate (iteration 20): add one, start, call it with T
   const mate = await page('coéquipier', server.url + '/');
   await sleep(1500);
@@ -139,5 +160,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, coop avec un coéquipier, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, coop avec un coéquipier, mode démo).');
 process.exit(0);

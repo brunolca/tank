@@ -1,7 +1,7 @@
 {
-  "iteration": 23,
+  "iteration": 24,
   "date": "2026-11-08",
-  "title": "Coup de vent",
+  "title": "Les drapeaux",
   "journal": [
     {
       "iteration": 1,
@@ -280,6 +280,18 @@
         "Des feuilles mortes et des traits de vent traversent la table, et l’on entend le souffle monter à chaque rafale.",
         "Deux nouvelles missions, « Coup de vent » (33) et « La bourrasque » (34), puis du vent dans environ une mission générée sur cinq. Les ennemis aussi tiennent compte du vent… à peu près.",
         "En versus, une manche sur six se joue dans le vent, et l’atelier gagne une case « Vent » (il souffle vers la droite) pour tes missions maison."
+      ]
+    },
+    {
+      "iteration": 24,
+      "date": "2026-11-08",
+      "title": "Les drapeaux",
+      "notes": [
+        "Nouveau mode « Drapeaux » : les Bleus contre les Rouges. File chercher le drapeau planté dans la base d’en face et rapporte-le chez toi pour gagner la manche. Première équipe à 3 manches !",
+        "Un tank touché revient à sa base trois secondes plus tard, protégé un court instant. Le porteur touché lâche le drapeau sur place : un coéquipier le renvoie à la base d’un simple contact, sinon il rentre tout seul au bout de 12 secondes.",
+        "Six arènes symétriques, une par manche : le pré carré, les douves, la patinoire, les raccourcis par portail, le bois de nuit et le col venteux.",
+        "Seul ou à deux ? Les rivaux pilotés par l’ordinateur complètent les équipes. Ils se partagent les rôles : l’un attaque, l’autre garde la base et poursuit le voleur.",
+        "Chaque tank prend les couleurs de son équipe, avec un anneau au sol. Un chrono de 2 min 30 tourne pendant la manche : sans drapeau rapporté, c’est l’égalité."
       ]
     }
   ]

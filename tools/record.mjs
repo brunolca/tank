@@ -7,11 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 33, arms: ['canon', 'ricochet'], seconds: 16, gusts: [2.6, 6.5, 10.5], caption: 'Nouveau : le vent', sub: 'Les rafales courbent les obus en vol : vise en amont !' },
-  { mission: 34, arms: ['ricochet', 'fusee'], seconds: 13, gusts: [3, 8], caption: 'La bourrasque', sub: 'La manche à air dit d’où vient le vent… et quand il retombe' },
-  { versus: [4, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 11, gusts: [4], caption: 'Le vent souffle aussi en versus', sub: 'Une manche sur six, et dans les missions générées dès la 33ᵉ' },
-  { playAtelier: { name: 'Coup de mistral', wind: true }, arms: ['canon', 'ricochet'], seconds: 9, gusts: [3.5], caption: 'Une case « Vent » dans l’atelier', sub: 'Pour tes propres missions maison' },
-  { mission: 29, arms: ['canon', 'ricochet'], seconds: 8, shieldShots: [2.5, 5.5], caption: 'Et toujours le Rempart', sub: 'Prends-le de côté ou au ricochet' },
+  { drapeau: [3, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 18, caption: 'Nouveau : les drapeaux', sub: 'Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi' },
+  { drapeau: [0, [2, 1, 2, 1], true], arms: ['ricochet', 'canon', 'canon', 'sapeur'], seconds: 12, caption: 'Cours jusqu’à ta base !', sub: 'Touché, le porteur lâche le drapeau ; un coéquipier le renvoie d’un contact' },
+  { rivals: 6, lobby: 'drapeau', seconds: 6, caption: 'Seul ou à deux ?', sub: 'Les rivaux pilotés par l’ordinateur complètent les équipes' },
+  { drapeau: [2, [2, 2, 2, 2]], arms: ['canon', 'fusee', 'ricochet', 'canon'], seconds: 13, caption: 'Six arènes symétriques', sub: 'Un tank touché revient à sa base trois secondes plus tard' },
+  { drapeau: [4, [2, 2, 2, 2], true], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 10, caption: 'Le bois de nuit', sub: 'Dans le noir, le porteur se faufile' },
+  { mission: 33, arms: ['canon', 'ricochet'], seconds: 8, gusts: [3], caption: 'Et toujours la campagne coop', sub: 'Le vent souffle encore sur les missions générées' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -57,6 +58,7 @@ try {
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
+      else if (shot.drapeau) d.drapeau(shot.drapeau[0], shot.drapeau[1], shot.arms, true, !!shot.drapeau[2]); // « Drapeaux » (iteration 24)
       else if (shot.rivals) d.rivals(shot.rivals * 1000, shot.lobby); // the game goes on behind the lobby (versus, or coop teammates)
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind

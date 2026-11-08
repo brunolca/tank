@@ -4,12 +4,15 @@ import { BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BUR
 import { tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { isRivalId } from '../shared/rivals';
+import { CTF_RETURN, TEAM_COLORS } from '../shared/drapeau';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; color?: number } // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean }
+/** « Drapeaux » (iteration 24): a flag, state 0 at home, 1 carried by `carrier`, 2 dropped (`left` seconds before it flies home). */
+export interface RFlag { team: number; x: number; y: number; carrier: number; state: number; left: number }
 
 const PX = 64; // floor texture pixels per tile
 const RAIN_DROPS = 700;
@@ -146,6 +149,21 @@ function shade(hex: number, k: number) {
 }
 
 // ------------------------------------------------------------------ tank model
+
+/** « Drapeaux » (iteration 24): one flag and its base. */
+interface FlagView {
+  root: THREE.Group;
+  cloth: THREE.Mesh;
+  base: Float32Array; // the cloth's vertices at rest
+  halo: THREE.Mesh;
+  rim: THREE.Mesh;
+  foot: THREE.Mesh;
+  ang: number; // where the cloth points
+  px: number; // last position, to see it move
+  py: number;
+  carried: boolean;
+  phase: number;
+}
 
 interface TankView {
   info: TankInfo;
@@ -1295,6 +1313,7 @@ export class Renderer {
     this.tunnels = [];
     this.glow.clear(); this.smoke.clear(); this.debris.clear();
     for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
+    this.setCtf(undefined);
 
     this.paintFloor(tiles);
     this.addBelts(belts);
@@ -2448,6 +2467,7 @@ export class Renderer {
     this.animateTunnels(dt);
     this.animateSnow(dt);
     this.animateWind(dt);
+    this.animateFlags(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
@@ -2494,6 +2514,138 @@ export class Renderer {
       this.camera.position.z += (Math.random() - 0.5) * this.shake;
     }
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // -------------------------------------------------------------- « Drapeaux » (iteration 24)
+
+  private ctf?: { group: THREE.Group; flags: FlagView[]; rings: THREE.Mesh[]; mats: THREE.Material[] };
+  private flagGeo = {
+    pole: new THREE.CylinderGeometry(0.035, 0.04, 1.3, 8),
+    knob: new THREE.SphereGeometry(0.065, 12, 8),
+    foot: new THREE.CylinderGeometry(0.13, 0.18, 0.08, 16),
+    pad: new THREE.CircleGeometry(0.9, 40).rotateX(-Math.PI / 2),
+    rim: new THREE.RingGeometry(0.8, 0.92, 48).rotateX(-Math.PI / 2),
+    halo: new THREE.RingGeometry(0.42, 0.52, 40).rotateX(-Math.PI / 2),
+    teamRing: new THREE.RingGeometry(0.43, 0.53, 32).rotateX(-Math.PI / 2),
+  };
+  private poleMat = new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.7 });
+
+  /** The bases of a flag round (undefined: none), and a ring of its team's colour under each tank. */
+  setCtf(bases: [number, number][] | undefined, teamOf?: (id: number) => number | undefined) {
+    if (this.ctf) {
+      this.scene.remove(this.ctf.group);
+      for (const r of this.ctf.rings) r.parent?.remove(r);
+      for (const f of this.ctf.flags) f.cloth.geometry.dispose();
+      for (const m of this.ctf.mats) m.dispose();
+      this.ctf = undefined;
+    }
+    if (!bases) return;
+    const group = new THREE.Group();
+    const mats: THREE.Material[] = [];
+    const flags = bases.slice(0, 2).map(([x, y], i): FlagView => {
+      const color = TEAM_COLORS[i];
+      const padMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false });
+      const rimMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false });
+      const clothMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75, side: THREE.DoubleSide, emissive: color, emissiveIntensity: 0.18 });
+      const haloMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false });
+      mats.push(padMat, rimMat, clothMat, haloMat);
+      const pad = new THREE.Mesh(this.flagGeo.pad, padMat);
+      pad.position.set(x, 0.018, y);
+      const rim = new THREE.Mesh(this.flagGeo.rim, rimMat);
+      rim.position.set(x, 0.02, y);
+      const root = new THREE.Group();
+      const foot = new THREE.Mesh(this.flagGeo.foot, this.poleMat);
+      foot.position.y = 0.04;
+      const pole = new THREE.Mesh(this.flagGeo.pole, this.poleMat);
+      pole.position.y = 0.65;
+      const knob = new THREE.Mesh(this.flagGeo.knob, goldMat);
+      knob.position.y = 1.32;
+      const clothGeo = new THREE.PlaneGeometry(0.62, 0.4, 10, 2);
+      clothGeo.translate(0.31 + 0.03, 1.08, 0);
+      const cloth = new THREE.Mesh(clothGeo, clothMat);
+      pole.castShadow = cloth.castShadow = true;
+      root.add(foot, pole, knob, cloth);
+      root.position.set(x, 0, y);
+      const halo = new THREE.Mesh(this.flagGeo.halo, haloMat);
+      halo.position.y = 0.03;
+      root.add(halo);
+      group.add(pad, rim, root);
+      return { root, cloth, base: Float32Array.from(clothGeo.attributes.position.array as ArrayLike<number>), halo, rim, foot, ang: i === 0 ? 0 : Math.PI, px: x, py: y, carried: false, phase: i * 2.1 };
+    });
+    const rings: THREE.Mesh[] = [];
+    if (teamOf) {
+      const ringMats = TEAM_COLORS.map((c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85, depthWrite: false }));
+      mats.push(...ringMats);
+      for (const [id, v] of this.tanks) {
+        const team = teamOf(id);
+        if (team !== 1 && team !== 2) continue;
+        const r = new THREE.Mesh(this.flagGeo.teamRing, ringMats[team - 1]);
+        r.position.y = 0.026;
+        v.root.add(r);
+        rings.push(r);
+      }
+    }
+    this.scene.add(group);
+    this.ctf = { group, flags, rings, mats };
+  }
+
+  /** Place the flags: at home, on the back of their carrier (as drawn this frame), or dropped where it fell. */
+  syncFlags(list: RFlag[]) {
+    if (!this.ctf) return;
+    this.ctf.flags.forEach((v, i) => {
+      const f = list.find((o) => o.team === i + 1);
+      v.root.visible = !!f;
+      if (!f) return;
+      let x = f.x, y = f.y;
+      v.carried = false;
+      if (f.state === 1) {
+        const t = this.tanks.get(f.carrier);
+        if (t && t.root.visible) {
+          const back = -t.hull.rotation.y + Math.PI;
+          x = t.root.position.x + Math.cos(back) * 0.2 * t.scale;
+          y = t.root.position.z + Math.sin(back) * 0.2 * t.scale;
+          v.carried = true;
+        } else v.root.visible = false; // a carrier out of sight (an invisible tank, at night under a tunnel): its flag hides too
+      }
+      v.root.position.set(x, v.carried ? 0.32 : 0, y);
+      v.root.scale.setScalar(v.carried ? 0.72 : 1);
+      v.foot.visible = !v.carried;
+      const halo = v.halo.material as THREE.MeshBasicMaterial;
+      if (f.state === 2) {
+        // dropped: a ring that blinks faster as it is about to fly home
+        const u = Math.max(0, Math.min(1, f.left / CTF_RETURN));
+        halo.opacity = 0.35 + 0.45 * (Math.sin(this.time * (6 + (1 - u) * 14)) > 0 ? 1 : 0.2);
+        v.halo.scale.setScalar(0.7 + u * 0.6);
+      } else halo.opacity = 0;
+      // the base rim glows while its flag is at home
+      (v.rim.material as THREE.MeshBasicMaterial).opacity = f.state === 0 ? 0.8 : 0.25 + 0.2 * Math.sin(this.time * 5);
+    });
+  }
+
+  private animateFlags(dt: number) {
+    if (!this.ctf) return;
+    for (const v of this.ctf.flags) {
+      // the cloth trails behind a moving flag, and drifts in the breeze otherwise
+      const dx = v.root.position.x - v.px, dy = v.root.position.z - v.py;
+      v.px = v.root.position.x; v.py = v.root.position.z;
+      const moving = Math.hypot(dx, dy) > 0.004 && Math.hypot(dx, dy) < 0.5;
+      const want = moving ? Math.atan2(dy, -dx) : v.ang + Math.sin(this.time * 0.7 + v.phase) * 0.004;
+      let d = want - v.ang;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      v.ang += d * Math.min(1, dt * (moving ? 6 : 1));
+      v.root.rotation.y = v.ang;
+      const pos = v.cloth.geometry.attributes.position as THREE.BufferAttribute;
+      const a = pos.array as Float32Array;
+      const speed = moving ? 13 : 6;
+      for (let k = 0; k < a.length; k += 3) {
+        const u = (v.base[k] - 0.03) / 0.62; // 0 at the pole, 1 at the tip
+        a[k + 2] = Math.sin(this.time * speed - u * 5 + v.phase) * 0.07 * u;
+        a[k + 1] = v.base[k + 1] - u * u * 0.04;
+      }
+      pos.needsUpdate = true;
+      v.cloth.geometry.computeVertexNormals();
+    }
   }
 
   /** JPEG of the current frame (the drawing buffer is only valid right after a render). */

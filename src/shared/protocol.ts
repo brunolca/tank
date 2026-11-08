@@ -2,11 +2,13 @@ import type { TankKind, Weapon } from './constants';
 import type { DailyTwist } from './daily';
 import type { Progress, Ranks } from './skills';
 import type { CouncilState, TaupeResult } from './taupe';
+import type { NetFlag } from './drapeau';
 
 // 'daily' (the daily challenge) came with iteration 6: older tabs show it like the coop campaign at worst.
 // 'taupe' (the hidden mole) came with iteration 8, and its 'council' phase: older tabs show a coop game that pauses.
 // 'atelier' (a mission drawn in the workshop) came with iteration 14: older tabs are told to reload anyway (welcome.v).
-export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier';
+// 'drapeau' (capture the flag, Bleus against Rouges) came with iteration 24: older tabs are told to reload (welcome.v).
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
@@ -77,7 +79,8 @@ export type GameEvent =
   | ['loot', number, number, number] // x y bonusKind: a Pilleur is destroyed and drops a crate of what it stole (iteration 15)
   | ['call', number, number, number, number] // x y tankId strikes: the Grondeur calls the lightning (iteration 18; older clients ignore it, the strikes are plain 'zap')
   | ['rally', number, number, number, number] // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
-  | ['deflect', number, number, number]; // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
+  | ['deflect', number, number, number] // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
+  | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
 export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean; wind?: boolean } // wind: iteration 23, it blows to the right
@@ -114,9 +117,11 @@ export interface Results {
   daily?: { state: DailyState; cleared: number; board?: BoardDay };
   taupe?: TaupeResult & { cleared: number; stages: number };
   atelier?: { name: string; won: boolean }; // workshop mission (iteration 14)
+  drapeau?: { teams: [number, number]; winner: number }; // « Drapeaux » (iteration 24): rounds won by each team, the winning team (1 or 2)
   // ff: teammates destroyed (coop-like modes, iteration 8)
   // g: galons earned in the coop campaign (iteration 19)
-  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number }[];
+  // team: « Drapeaux », 1 Bleus or 2 Rouges; caps: flags they brought home
+  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number; team?: number; caps?: number }[];
   winner?: string;
 }
 
@@ -137,6 +142,7 @@ export type ServerMsg =
       wind?: number; // wind (iteration 23): where it mainly blows (radians); the gust of the moment follows from the tick (see wind.ts). Older clients just see the shells curve
       belts?: number[]; // conveyor belts, one code per cell (iteration 16; older tabs are told to reload, at worst they see tanks glide)
       daily?: DailyState;
+      bases?: number[]; // « Drapeaux » (iteration 24): x1 y1 x2 y2, the bases of the Bleus (team 1) and the Rouges (team 2)
     }
   | {
       t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState;
@@ -144,9 +150,12 @@ export type ServerMsg =
       stages?: number; // mole mode: number of stages
       prog?: Record<string, Progress>; // coop campaign (iteration 19): experience, galons and skills of each player
       training?: string[]; // coop campaign, end of a mission: players still choosing their skills
+      teams?: [number, number]; // « Drapeaux » (iteration 24): rounds won by the Bleus and the Rouges
+      win?: number; // « Drapeaux », end of a round: the team that took it (0: a draw)
+      left?: number; // « Drapeaux »: seconds left in the round (the clock runs on each side while it is played)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[] }
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[] } // F: the flags (iteration 24)
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

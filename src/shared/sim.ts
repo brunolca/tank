@@ -4,6 +4,7 @@ import {
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
+import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
@@ -238,6 +239,15 @@ export class Game {
   wind?: number;
   /** The pull of the wind this tick (tiles/s²), see windAt. */
   gust: [number, number] = [0, 0];
+  /** « Drapeaux » (iteration 24): the two flags of a capture-the-flag round (undefined in every other mode). */
+  flags?: CtfFlag[];
+  /** The team that brought the enemy flag home this round (0: not yet). */
+  ctfWinner = 0;
+  /** Seconds of play in this flag round (the room calls a draw at CTF_ROUND). */
+  ctfTime = 0;
+  /** Where each tank of a flag round started (it comes back there), and how long until destroyed ones return. */
+  private ctfHome = new Map<number, [number, number]>();
+  private ctfBack = new Map<number, number>();
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -354,6 +364,121 @@ export class Game {
     this.stepMines(DT);
     if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
     if (this.bonusOn) this.stepBonuses(DT);
+    if (this.flags) this.stepFlags(DT);
+  }
+
+  // -------------------------------------------------------------- « Drapeaux » (iteration 24)
+
+  /** Carried flags follow their carrier (and fall with it), dropped ones fly home after a while; grabs, returns and captures. */
+  stepFlags(dt: number) {
+    const flags = this.flags!;
+    const before = this.ctfTime;
+    this.ctfTime += dt;
+    if (before < CTF_ROUND - 30 && this.ctfTime >= CTF_ROUND - 30) this.events.push(['flag', 0, 0, 0, 0, 5]); // 30 seconds left
+    this.ctfRespawn(dt);
+    for (const f of flags) {
+      if (f.state === 1) {
+        const c = this.tankById(f.carrier);
+        if (!c || !c.alive) {
+          f.state = 2; f.dropT = 0; f.carrier = 0;
+          this.events.push(['flag', r2(f.x), r2(f.y), f.team, c?.id ?? 0, 1]);
+        } else {
+          f.x = c.x; f.y = c.y;
+          const home = flags.find((o) => o.team === c.team);
+          if (home && !this.ctfWinner && Math.hypot(c.x - home.hx, c.y - home.hy) < CTF_CAPTURE) {
+            this.ctfWinner = c.team;
+            this.events.push(['flag', r2(home.hx), r2(home.hy), f.team, c.id, 3]);
+          }
+          continue;
+        }
+      }
+      if (f.state === 2) {
+        f.dropT += dt;
+        if (f.dropT >= CTF_RETURN) { this.flagHome(f, 0); continue; }
+      }
+      for (const t of this.tanks) {
+        if (!t.alive || t.kind !== 'player' || Math.hypot(t.x - f.x, t.y - f.y) > CTF_GRAB) continue;
+        if (t.team !== f.team) {
+          if (flags.some((o) => o.carrier === t.id)) continue;
+          f.state = 1; f.carrier = t.id; f.dropT = 0;
+          this.events.push(['flag', r2(f.x), r2(f.y), f.team, t.id, 0]);
+          break;
+        } else if (f.state === 2) { this.flagHome(f, t.id); break; } // a touch from a teammate sends it home
+      }
+    }
+    this.ctfBrains();
+  }
+
+  /** Destroyed tanks come back at their starting spot a few seconds later, briefly untouchable. */
+  private ctfRespawn(dt: number) {
+    for (const t of this.tanks) {
+      if (t.kind !== 'player' || (t.team !== 1 && t.team !== 2)) continue;
+      if (!this.ctfHome.has(t.id)) this.ctfHome.set(t.id, [t.x, t.y]);
+      if (t.alive) continue;
+      const left = (this.ctfBack.get(t.id) ?? CTF_RESPAWN) - dt;
+      if (left > 0) { this.ctfBack.set(t.id, left); continue; }
+      this.ctfBack.delete(t.id);
+      const [hx, hy] = this.ctfHome.get(t.id)!;
+      const busy = this.tanks.filter((o) => o.alive).map((o): [number, number] => [o.x, o.y]);
+      let x = hx, y = hy;
+      if (busy.some(([ox, oy]) => Math.hypot(ox - x, oy - y) < TANK_R * 2.2)) {
+        // someone parked on the spot: the nearest free cell around it
+        for (let rad = 1; rad < 6 && x === hx && y === hy; rad++) {
+          for (let dy = -rad; dy <= rad && x === hx && y === hy; dy++) for (let dx = -rad; dx <= rad; dx++) {
+            const cx = Math.floor(hx) + dx, cy = Math.floor(hy) + dy;
+            if (cx < 0 || cy < 0 || cx >= W || cy >= H || this.tiles[cy * W + cx] !== Tile.Empty) continue;
+            if (busy.some(([ox, oy]) => Math.hypot(ox - cx - 0.5, oy - cy - 0.5) < TANK_R * 2.2)) continue;
+            x = cx + 0.5; y = cy + 0.5; break;
+          }
+        }
+      }
+      t.x = x; t.y = y; t.vx = t.vy = 0;
+      t.alive = true;
+      t.hp = t.maxHp;
+      t.buffs.bounce = t.buffs.turbo = t.buffs.fan = 0;
+      t.buffs.shield = false;
+      t.buffs.invuln = CTF_SAFE;
+      t.fireCd = 0.4;
+      t.body = t.turret = Math.atan2(H / 2 - y, W / 2 - x);
+      if (t.ai) { t.ai.path = []; t.ai.pathT = 0; t.ai.dodgeT = 0; t.ai.goal = undefined; }
+      this.events.push(['flag', r2(x), r2(y), t.team, t.id, 4]);
+    }
+  }
+
+  private flagHome(f: CtfFlag, by: number) {
+    f.state = 0; f.carrier = 0; f.dropT = 0;
+    this.events.push(['flag', r2(f.x), r2(f.y), f.team, by, 2]);
+    f.x = f.hx; f.y = f.hy;
+  }
+
+  /**
+   * AI tanks of a flag round get a goal: the carrier heads home, a dropped flag of ours is fetched back, the last tank of
+   * a pair guards the base (and chases a thief), the other one raids. They still shoot at whatever they see on the way.
+   */
+  private ctfBrains() {
+    const flags = this.flags!;
+    for (const t of this.tanks) {
+      if (!t.alive || !t.ai || t.kind !== 'player') continue;
+      const mine = flags.find((f) => f.team === t.team), theirs = flags.find((f) => f.team !== t.team);
+      if (!mine || !theirs) continue;
+      let goal: Pt | undefined;
+      const thief = mine.state === 1 ? this.tankById(mine.carrier) : undefined;
+      if (theirs.carrier === t.id) goal = { x: mine.hx, y: mine.hy };
+      else if (mine.state === 2) goal = mine;
+      else {
+        const mates = this.tanks.filter((o) => o.alive && o.kind === 'player' && o.team === t.team);
+        const guard = mates.length >= 2 && mates.every((o) => o.id <= t.id);
+        if (guard) goal = thief ?? (Math.hypot(t.x - mine.hx, t.y - mine.hy) > 5 ? { x: mine.hx, y: mine.hy } : undefined);
+        else if (theirs.state !== 1) goal = theirs;
+        else goal = thief; // a teammate has their flag: escort it, or go after ours
+      }
+      const cell = goal ? Math.floor(goal.y) * W + Math.floor(goal.x) : undefined;
+      if (cell !== t.ai.goal) { t.ai.goal = cell; t.ai.path = []; t.ai.pathT = 0; }
+    }
+  }
+
+  netFlags(): NetFlag[] | undefined {
+    return this.flags?.map((f): NetFlag => [f.team, r2(f.x), r2(f.y), f.carrier, f.state, f.state === 2 ? Math.max(0, Math.ceil(CTF_RETURN - f.dropT)) : 0]);
   }
 
   // -------------------------------------------------------------- storm

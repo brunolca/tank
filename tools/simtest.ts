@@ -7,6 +7,7 @@ import { BOLT_R, BULLET_SPEED, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SP
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
+import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
 
 for (const def of Object.values(EXTRA_LEVELS)) {
@@ -1333,4 +1334,129 @@ console.log('total', Date.now() - t0, 'ms');
   if (cleared === 0) fail('l’IA ne vient jamais à bout du vent');
   console.log(`vent : pire tick ${worst.toFixed(3)} ms`);
   if (process.exitCode !== 1) console.log(`vent OK (missions : ${wm.join(', ')}, ${cleared}/6 parties gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Drapeaux » (iteration 24): symmetric arenas, grab / drop / return / capture, and AI teams that actually go for the flag
+{
+  const fail = (m: string) => { console.error('drapeaux : ' + m); process.exitCode = 1; };
+  // every arena: the right size, mirrored, bases and spawns on free floor, each base reachable from the other
+  for (let r = 0; r < CTF_ARENA_COUNT; r++) {
+    const lvl = ctfArena(r);
+    if (lvl.tiles.length !== W * H) fail(`${lvl.name} : mauvaise taille`);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) {
+      const a = lvl.tiles[y * W + x], b = lvl.tiles[y * W + (W - 1 - x)];
+      if (a !== b) { fail(`${lvl.name} : pas symétrique en (${x}, ${y})`); break; }
+    }
+    for (const [x, y] of [...lvl.bases, ...lvl.spawns]) if (lvl.tiles[Math.floor(y) * W + Math.floor(x)] !== Tile.Empty) fail(`${lvl.name} : base ou départ sur une case occupée (${x}, ${y})`);
+    if (lvl.spawns.length !== 4) fail(`${lvl.name} : ${lvl.spawns.length} départs`);
+    // flood from the first base, tanks only
+    const seen = new Uint8Array(W * H), q = [Math.floor(lvl.bases[0][1]) * W + Math.floor(lvl.bases[0][0])];
+    seen[q[0]] = 1;
+    for (let i = 0; i < q.length; i++) {
+      const c = q[i], cx = c % W, cy = (c / W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy, n = ny * W + nx;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || seen[n]) continue;
+        const t = lvl.tiles[n];
+        if (t !== Tile.Empty && t !== Tile.Tunnel && t !== Tile.PortalA && t !== Tile.PortalB) continue;
+        seen[n] = 1; q.push(n);
+      }
+    }
+    if (!seen[Math.floor(lvl.bases[1][1]) * W + Math.floor(lvl.bases[1][0])]) fail(`${lvl.name} : une base est injoignable depuis l’autre`);
+  }
+  if (ctfTeam(0) !== 1 || ctfTeam(1) !== 2 || ctfTeam(2) !== 1 || ctfTeam(3) !== 2) fail('les équipes ne sont pas alternées');
+
+  // the rules, with two hand-driven tanks on an empty table
+  {
+    const lvl = ctfArena(0);
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    g.flags = newFlags(lvl.bases);
+    const blue = g.addTank('player', 1, 6.5, 8.5, 0x3d7bff, 'b', 'B');
+    const red = g.addTank('player', 2, 15.5, 8.5, 0xe2453c, 'r', 'R');
+    g.frozen = false;
+    const ev = () => { const e = g.events.filter((x) => x[0] === 'flag'); g.events = []; return e.map((x) => x[5]); };
+    g.step(new Map()); ev();
+    // blue drives over the red flag: grabbed, it follows the carrier
+    blue.x = lvl.bases[1][0]; blue.y = lvl.bases[1][1];
+    g.step(new Map());
+    const red0 = g.flags[1];
+    if (red0.state !== 1 || red0.carrier !== blue.id) fail('le drapeau n’est pas ramassé');
+    if (ev()[0] !== 0) fail('pas d’événement « pris »');
+    blue.x = 11; blue.y = 3.5;
+    g.step(new Map());
+    if (Math.hypot(red0.x - blue.x, red0.y - blue.y) > 0.01) fail('le drapeau ne suit pas son porteur');
+    // a red touch on its own flag while carried does nothing; the carrier blows up: dropped where it fell
+    g.killTank(blue, red);
+    g.step(new Map());
+    if (red0.state !== 2 || Math.hypot(red0.x - 11, red0.y - 3.5) > 0.01) fail('le drapeau n’est pas lâché sur place');
+    if (ev()[0] !== 1) fail('pas d’événement « lâché »');
+    // a red tank touches it: home at once
+    red.x = 11; red.y = 3.5;
+    g.step(new Map());
+    if (red0.state !== 0 || red0.x !== red0.hx || red0.y !== red0.hy) fail('un coéquipier ne renvoie pas le drapeau');
+    if (ev()[0] !== 2) fail('pas d’événement « rentré »');
+    // red grabs the blue flag, drops it, and it flies home by itself after CTF_RETURN seconds
+    red.x = lvl.bases[0][0]; red.y = lvl.bases[0][1];
+    g.step(new Map());
+    if (g.flags[0].carrier !== red.id) fail('les Rouges ne prennent pas le drapeau bleu');
+    red.x = 9; red.y = 13.5; g.step(new Map());
+    red.alive = false; g.step(new Map());
+    if (g.flags[0].state !== 2) fail('drapeau bleu non lâché');
+    for (let i = 0; i < 30 * CTF_RETURN + 2; i++) g.step(new Map());
+    if (g.flags[0].state !== 0) fail('le drapeau lâché ne rentre pas tout seul');
+    // capture: red (alive again) brings the blue flag home
+    red.alive = true; ev();
+    red.x = lvl.bases[0][0]; red.y = lvl.bases[0][1]; g.step(new Map());
+    red.x = lvl.bases[1][0] - 0.4; red.y = lvl.bases[1][1]; g.step(new Map());
+    if (g.ctfWinner !== 2) fail('la capture n’est pas comptée');
+    if (!ev().includes(3)) fail('pas d’événement « capturé »');
+    // the net view
+    const nf = g.netFlags()!;
+    if (nf.length !== 2 || nf[0][0] !== 1 || nf[0][3] !== red.id || nf[0][4] !== 1) fail(`vue réseau inattendue ${JSON.stringify(nf)}`);
+  }
+
+  // destroyed tanks come back at their base, untouchable for a moment
+  {
+    const lvl = ctfArena(0);
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.flags = newFlags(lvl.bases);
+    const a = g.addTank('player', 1, lvl.spawns[0][0], lvl.spawns[0][1], 0, 'a', 'A');
+    g.addTank('player', 2, lvl.spawns[1][0], lvl.spawns[1][1], 0, 'b', 'B');
+    g.frozen = false;
+    g.step(new Map());
+    a.x = 11; a.y = 0.5;
+    g.killTank(a, undefined);
+    for (let i = 0; i < 30 * CTF_RESPAWN + 2; i++) g.step(new Map());
+    if (!a.alive || Math.hypot(a.x - lvl.spawns[0][0], a.y - lvl.spawns[0][1]) > 0.01) fail('un tank détruit ne revient pas à sa base');
+    g.killTank(a, undefined);
+    if (!a.alive) fail('un tank de retour à sa base n’est pas protégé');
+  }
+
+  // AI teams: rounds must end by a capture, quickly and cheaply
+  let caps = 0, rounds = 0, worst = 0, ticksAll = 0;
+  const capsBy = [0, 0];
+  for (let round = 0; round < 18; round++) {
+    const lvl = ctfArena(round);
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.bonusOn = true; g.bonusNext = 5; g.bonusEvery = [8, 12];
+    g.night = !!lvl.night; g.wind = lvl.wind;
+    g.flags = newFlags(lvl.bases);
+    const n = round % 3 === 0 ? 2 : 4;
+    lvl.spawns.slice(0, n).forEach(([x, y], i) => {
+      const t = g.addTank('player', ctfTeam(i), x, y, 0x3d7bff, `ia:${i + 1}`, `R${i}`);
+      g.arm(t, WEAPONS[(round + i) % WEAPONS.length]);
+      makeRival(g, t, (round + i) % 3);
+    });
+    g.frozen = false;
+    let ticks = 0;
+    const t1 = performance.now();
+    for (; ticks < 30 * CTF_ROUND && !g.ctfWinner; ticks++) { g.step(new Map()); g.events = []; }
+    worst = Math.max(worst, (performance.now() - t1) / Math.max(1, ticks));
+    ticksAll += ticks;
+    rounds++;
+    if (g.ctfWinner) { caps++; capsBy[g.ctfWinner - 1]++; }
+  }
+  if (caps < rounds * 0.7) fail(`seulement ${caps}/${rounds} manches gagnées par une capture`);
+  if (worst > 1) fail(`${worst.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`drapeaux OK (${CTF_ARENA_COUNT} arènes, ${caps}/${rounds} manches gagnées par une capture, Bleus ${capsBy[0]} · ${capsBy[1]} Rouges, ${(ticksAll / rounds / 30).toFixed(0)} s en moyenne, ${worst.toFixed(3)} ms/tick au pire)`);
 }

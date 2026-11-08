@@ -251,6 +251,18 @@ export const sfx = {
     noise(t + 0.38, 0.12, 7000, 0.8, 0.6, 'highpass');
     noise(t + 0.4, 0.6, 1800, 0.7, 0.4, 'lowpass', 200);
   },
+  /** « Drapeaux » (iteration 24): 0 a flag is grabbed (a rising whistle), 1 dropped (a falling one), 2 sent home (a chime), 3 brought home (a fanfare). */
+  flag(what: number, ours: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (what === 0) { tone(t, 0.18, 600, 1200, 0.12, 'square'); tone(t + 0.16, 0.14, ours ? 500 : 1200, ours ? 420 : 1500, 0.1, 'triangle'); }
+    else if (what === 1) { tone(t, 0.32, 900, 300, 0.12, 'triangle'); noise(t + 0.05, 0.2, 600, 0.8, 0.25, 'lowpass', 120); }
+    else if (what === 2) [988, 784, 659].forEach((f, i) => tone(t + i * 0.08, 0.2, f, f, 0.12, 'triangle'));
+    else {
+      [523, 659, 784, 1047, 784, 1047].forEach((f, i) => { tone(t + i * 0.09, 0.22, f, f, 0.16, 'square'); tone(t + i * 0.09, 0.22, f / 2, f / 2, 0.08, 'triangle'); });
+      noise(t + 0.5, 0.6, 3000, 0.6, 0.2, 'highpass');
+    }
+  },
   /** « Suis-moi ! » (iteration 20): two cheerful toots of a toy horn. */
   rally() {
     if (!ctx) return;
