@@ -17,6 +17,7 @@ export interface LevelDef {
   map: string[];
   night?: boolean; // dark table: the AI only sees up close (or a muzzle flash), players drive with headlights
   storm?: boolean; // lightning strikes fall on the table, announced by a crackling ring (iteration 9)
+  wind?: number; // a wind bends the shells (iteration 23): where it mainly blows, in degrees (0 right, 90 down the map, 180 left, 270 up)
   /** Optional overlay of conveyor belts (same 17 rows, only > < ^ V count): lets a tank start on a belt (iteration 16). */
   belts?: string[];
 }
@@ -694,6 +695,55 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 23: the first gusts. The wind blows down the map: shots fired across the table curve toward the bottom,
+  // and the cork shelves hide the enemies from straight shots, not from curved ones
+  33: {
+    name: 'Coup de vent',
+    wind: 90,
+    map: [
+      '......................',
+      '......................',
+      '..........#...........',
+      '..1.......#......a....',
+      '..........#...........',
+      '......................',
+      '.....ooo......####....',
+      '..2...........#.......',
+      '..............#...p...',
+      '......................',
+      '.....ooo......####....',
+      '......................',
+      '..........#...........',
+      '..........#......y....',
+      '..........#...........',
+      '.................m....',
+      '......................',
+    ],
+  },
+  // iteration 23: a gale across the windmill posts; the wind blows toward the top right, into the violets' faces
+  34: {
+    name: 'La bourrasque',
+    wind: 315,
+    map: [
+      '......................',
+      '..1..........H........',
+      '.............H....v...',
+      '..2.....H.............',
+      '........H.....oo......',
+      '..............oo...g..',
+      '.....oo...............',
+      '.....oo.....H.........',
+      '............H....p....',
+      '........#.............',
+      '........#....oo.......',
+      '.............oo....w..',
+      '...H..................',
+      '...H.......H..........',
+      '...........H.....v....',
+      '......................',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -745,6 +795,8 @@ export interface ParsedLevel {
   enemies: { kind: TankKind; x: number; y: number }[];
   night?: boolean;
   storm?: boolean;
+  /** Wind (iteration 23): where it mainly blows, in radians (grid axes), when it blows. */
+  wind?: number;
   /** Floor layer: conveyor belts (iteration 16) and ice (iteration 21), one code per cell (0 none, 1 right, 2 left, 3 up, 4 down, 5 ice), only when the map has some. */
   belts?: number[];
 }
@@ -784,7 +836,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       }
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts };
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180 };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
@@ -809,6 +861,8 @@ const ROSTER_BY_TIER: TankKind[][] = [
 /** Options for generated missions: the daily challenge picks its own layout seed, portals, night and name. */
 export interface GenOptions {
   seed?: number; portals?: boolean; night?: boolean; storm?: boolean; name?: string;
+  /** Wind direction in radians, or false for a calm table. Campaign missions from the 33rd: about one in five is windy. */
+  wind?: number | false;
   /** Share of the enemies swapped for steel tanks (iteration 10). Campaign missions from the 21st: 0.22; the daily challenge: 0 unless its twist says so. */
   armored?: number;
 }
@@ -898,8 +952,17 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);
     // and about a quarter of them under a storm (yet another stream, so walls, portals and night stay put)
     const storm = opt.storm ?? (mission > 20 && rng(mission * 7717 + 3)() < 0.27);
-    const name = storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`;
-    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm };
+    // and from the 33rd, about one in five has wind (iteration 23; one more stream, the daily challenge and the mole stay calm)
+    let wind: number | undefined;
+    if (opt.wind !== undefined) wind = opt.wind === false ? undefined : opt.wind;
+    else if (opt.seed === undefined && mission > 32) {
+      const rw = rng(mission * 5381 + 29);
+      if (rw() < 0.22) wind = Math.floor(rw() * 8) * (Math.PI / 4);
+    }
+    const name = wind !== undefined
+      ? storm ? `Tempête ${mission}` : night ? `Nuit de vent ${mission}` : `Coup de vent ${mission}`
+      : storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`;
+    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm, wind };
   }
   return parseLevel(LEVELS[0]);
 }
@@ -1108,6 +1171,7 @@ export function versusArena(round: number): ParsedLevel {
   base.spawns = corners.map(([cx, cy]) => nearestFree(base.tiles, cx, cy));
   base.night = round % 4 === 3; // every fourth round is fought in the dark
   base.storm = round % 5 === 2; // and one in five under a storm (from the third round)
+  base.wind = round % 6 === 4 ? ((round * 3) % 8) * (Math.PI / 4) : undefined; // and one in six in the wind (iteration 23), from the fifth
   return base;
 }
 

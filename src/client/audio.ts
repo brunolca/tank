@@ -301,6 +301,38 @@ export function setRain(on: boolean) {
   }
 }
 
+// wind (iteration 23): a low, breathy noise that swells with the gusts
+let windSrc: AudioBufferSourceNode | undefined;
+let windGain: GainNode | undefined;
+let windBand: BiquadFilterNode | undefined;
+export function setWind(on: boolean) {
+  if (!ctx) return;
+  if (on && !windSrc) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    src.playbackRate.value = 0.6;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.9;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    src.connect(bp).connect(g).connect(sfxBus);
+    src.start();
+    windSrc = src; windGain = g; windBand = bp;
+  } else if (!on && windSrc) {
+    const src = windSrc, g = windGain!;
+    g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.3);
+    src.stop(ctx.currentTime + 1.5);
+    windSrc = windGain = windBand = undefined;
+  }
+}
+/** Follow the gust of the moment (0.1 lull … 1 gust); called a few times per second. */
+export function windGust(k: number) {
+  if (!ctx || !windGain || !windBand) return;
+  windGain.gain.setTargetAtTime(0.012 + 0.07 * k * k, ctx.currentTime, 0.25);
+  windBand.frequency.setTargetAtTime(300 + 520 * k, ctx.currentTime, 0.3);
+}
+
 // ------------------------------------------------------------------ music
 
 let musicTimer: ReturnType<typeof setInterval> | undefined;

@@ -219,6 +219,12 @@ kbd {
 .tank-ico::after { content: ''; position: absolute; left: 6px; top: -5px; width: 10px; height: 8px; border-radius: 5px 5px 2px 2px; background: #6fa0ff; }
 .hud-center { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 #hud-enemies { font-size: 15px; }
+/* wind (iteration 23): where it blows and how hard, under the enemy count */
+#hud-wind { display: flex; align-items: center; gap: 8px; background: var(--panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
+#hud-wind[hidden] { display: none; }
+#hud-wind i { font-style: normal; display: inline-block; color: #d8f0e0; transition: transform 0.2s linear; }
+#hud-wind b { width: 46px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+#hud-wind u { display: block; height: 100%; width: 50%; background: linear-gradient(90deg, #9bd3b0, #f6efe2); border-radius: 3px; transition: width 0.2s linear; }
 #scoreboard { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .sb-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
 .sb-row i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
@@ -336,6 +342,11 @@ body.demo #boss-bar { top: 18px; }
 #banner.storm .b-kicker::before { content: '⚡ '; }
 #banner.storm.night .b-kicker::before { content: '☾ ⚡ '; }
 #banner.storm .b-title { animation: storm-title 3.2s infinite; }
+/* wind (iteration 23): a breezy kicker and a title that sways */
+#banner.wind .b-kicker { color: #d8f0e0; }
+#banner.wind:not(.storm):not(.night) .b-kicker::before { content: '🍂 '; }
+#banner.wind .b-title { animation: wind-title 2.6s ease-in-out infinite; }
+@keyframes wind-title { 0%, 100% { transform: skewX(0deg) translateX(0); } 40% { transform: skewX(-6deg) translateX(6px); } 70% { transform: skewX(-2deg) translateX(2px); } }
 @keyframes storm-title {
   0%, 86%, 92%, 100% { text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
   88%, 94% { text-shadow: 0 0 30px rgba(210, 225, 255, 0.95), 0 0 6px #fff; }

@@ -1,7 +1,7 @@
 {
-  "iteration": 22,
-  "date": "2026-11-07",
-  "title": "Le Rempart",
+  "iteration": 23,
+  "date": "2026-11-08",
+  "title": "Coup de vent",
   "journal": [
     {
       "iteration": 1,
@@ -268,6 +268,18 @@
         "Sa tourelle pivote lentement : en coopération, l’un attire son bouclier pendant que l’autre le contourne.",
         "Deux nouvelles missions, « Le rempart » (29) et « La garde » (31), puis des Remparts dans les missions générées dès la 32ᵉ.",
         "Le Rempart rejoint la palette de l’atelier pour garder tes propres missions maison."
+      ]
+    },
+    {
+      "iteration": 23,
+      "date": "2026-11-08",
+      "title": "Coup de vent",
+      "notes": [
+        "Le vent se lève sur certaines tables : il courbe les obus en vol, sans les ralentir. Vise un peu en amont, et un obus bien lancé contourne même un mur !",
+        "Le vent souffle par rafales : une manche à air rayée, plantée sur le coin du cadre, se gonfle dans les bourrasques et retombe pendant les accalmies. C’est le bon moment pour tirer droit.",
+        "Des feuilles mortes et des traits de vent traversent la table, et l’on entend le souffle monter à chaque rafale.",
+        "Deux nouvelles missions, « Coup de vent » (33) et « La bourrasque » (34), puis du vent dans environ une mission générée sur cinq. Les ennemis aussi tiennent compte du vent… à peu près.",
+        "En versus, une manche sur six se joue dans le vent, et l’atelier gagne une case « Vent » (il souffle vers la droite) pour tes missions maison."
       ]
     }
   ]

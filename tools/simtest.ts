@@ -3,8 +3,9 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { BOLT_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
-import { beltStep, castRicochet, tunnelAxis } from '../src/shared/physics';
+import { BOLT_R, BULLET_SPEED, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
+import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
 
@@ -17,7 +18,7 @@ for (let i = 0; i < LEVELS.length; i++) {
   if (LEVELS[i].map.length !== H || bad.length) { console.error('BAD MAP', i + 1, LEVELS[i].map.length, bad); process.exitCode = 1; }
 }
 let t0 = Date.now();
-for (let mission = 1; mission <= LEVELS.length + 13; mission++) {
+for (let mission = 1; mission <= LEVELS.length + 15; mission++) {
   const lvl = getMission(mission);
   if (!lvl.spawns.length || !lvl.enemies.length) { console.error(`M${mission}: no spawn or no enemy`); process.exitCode = 1; }
   const g = new Game(lvl.tiles, lvl.belts);
@@ -28,6 +29,7 @@ for (let mission = 1; mission <= LEVELS.length + 13; mission++) {
   g.bonusNext = 1;
   g.bonusEvery = [3, 5];
   g.storm = !!lvl.storm;
+  g.wind = lvl.wind;
   let kills = 0, shots = 0, ticks = 0;
   g.onKill = () => kills++;
   const inputs = new Map();
@@ -1250,4 +1252,85 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des Remparts');
   if (process.exitCode !== 1) console.log(`rempart OK (missions : ${rm.join(', ')}, ${cleared}/6 parties gagnées par l’IA, ${deflects} obus renvoyés, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the wind (iteration 23): it bends shells in flight without changing their speed, the same at the same tick everywhere
+{
+  const fail = (m: string) => { console.error('VENT:', m); process.exitCode = 1; };
+  // a shell fired right, in a wind blowing down the map, curves down and keeps its speed
+  const fly = (wind?: number) => {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 2.5, 4.5, 0x3d7bff, 'p1', 'P');
+    g.wind = wind;
+    g.frozen = false;
+    p.turret = 0;
+    g.tryFire(p);
+    const b = g.bullets[0];
+    for (let i = 0; i < 45 && !b.dead; i++) g.step(new Map());
+    return b;
+  };
+  const calm = fly(), windy = fly(Math.PI / 2);
+  if (Math.abs(calm.y - 4.5) > 0.01) fail('sans vent, l’obus dévie');
+  if (windy.y - 4.5 < 0.5) fail(`l’obus ne dévie pas dans le vent (${(windy.y - 4.5).toFixed(2)})`);
+  const sp = Math.hypot(windy.vx, windy.vy);
+  if (Math.abs(sp - BULLET_SPEED) > 0.01) fail(`le vent change la vitesse de l’obus (${sp.toFixed(3)})`);
+  // the gust follows the tick: a lull and a gust within one cycle, always between 0.1 and 1
+  let lo = 9, hi = 0;
+  for (let k = 0; k < 30 * 14; k++) { const v = gustAt(k); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (lo < 0.09 || lo > 0.2 || hi < 0.95 || hi > 1.0001) fail(`rafales hors bornes (${lo.toFixed(2)} à ${hi.toFixed(2)})`);
+  const [ax, ay] = windAt(0, 123);
+  if (Math.abs(Math.hypot(ax, ay) - WIND_ACC * gustAt(123)) > 1e-9) fail('windAt incohérent');
+  // the AI follows the curve: the windy trace of an aimed shot ends where the real shell goes
+  {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 2.5, 4.5, 0x3d7bff, 'p1', 'P');
+    g.wind = Math.PI / 2;
+    g.frozen = false;
+    g.step(new Map());
+    const segs = castWindy(g.tiles, 2.5, 4.5, 0, BULLET_SPEED, 0, g.gust[0], g.gust[1], 8);
+    const end = segs[segs.length - 1];
+    if (!end || end.y1 - 4.5 < 0.2) fail('le tracé de l’IA ne se courbe pas');
+    void p;
+  }
+  // the missions: 33 and 34 by hand, some generated ones from the 33rd; never in the daily challenge nor the mole
+  const wm: number[] = [];
+  for (let mission = 1; mission <= 120; mission++) if (getMission(mission).wind !== undefined) wm.push(mission);
+  if (!wm.includes(33) || !wm.includes(34)) fail('missions 33 et 34 sans vent');
+  if (wm.some((m) => m < 33)) fail('du vent avant la 33ᵉ mission');
+  if (wm.length < 12) fail(`trop peu de missions venteuses (${wm.length})`);
+  if (wm.some((m) => m % 10 === 0)) fail('du vent sur un boss');
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).wind !== undefined) fail('vent dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).wind !== undefined) fail('vent dans la taupe');
+  if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].some((r) => versusArena(r).wind !== undefined)) fail('pas de vent en versus');
+  // the workshop: a « Vent » box, kept in the share code
+  const map = blankMap();
+  const back = decodeAtelier(encodeAtelier({ name: 'Brise', map, wind: true }));
+  if (!back?.wind) fail('atelier : le vent se perd dans le code');
+  if (atelierLevel({ name: 'Brise', map, wind: true }).wind !== 0) fail('atelier : le vent ne souffle pas vers la droite');
+  if (decodeAtelier(encodeAtelier({ name: 'Calme', map }))?.wind) fail('atelier : du vent sans case cochée');
+  // duos of AI players clear the windy missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, worst = 0;
+  for (const mission of [33, 34, wm.find((m) => m > 34)!]) {
+    for (let run = 0; run < 2; run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      s2.wind = lvl.wind;
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const e of lvl.enemies) s2.addTank(e.kind, 99, e.x, e.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t0 = performance.now();
+        s2.step(new Map());
+        const dt = performance.now() - t0;
+        spent += dt; steps++; worst = Math.max(worst, dt);
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout du vent');
+  console.log(`vent : pire tick ${worst.toFixed(3)} ms`);
+  if (process.exitCode !== 1) console.log(`vent OK (missions : ${wm.join(', ')}, ${cleared}/6 parties gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
 }

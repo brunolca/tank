@@ -1,7 +1,7 @@
 import { BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
-import { getMission, versusArena, type ParsedLevel } from '../shared/levels';
+import { EXTRA_LEVELS, LEVELS, getMission, versusArena, type ParsedLevel } from '../shared/levels';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep } from '../shared/physics';
@@ -10,7 +10,8 @@ import { Game, driveStep, slideDrive } from '../shared/sim';
 import { BRANCHES, TRAINING_SECONDS, XP_PER_GALON, canBuy, cleanRanks, canBuyAny, freeGalons, trainSpec, type Progress, type Ranks } from '../shared/skills';
 import { renderTree } from './skills';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
-import { initAudio, isMusicOn, setMusicIntensity, setRain, sfx, startMusic, toggleMusic } from './audio';
+import { initAudio, isMusicOn, setMusicIntensity, setRain, setWind, sfx, startMusic, toggleMusic, windGust } from './audio';
+import { gustAt, windAngle, windWords } from '../shared/wind';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
 import { Workshop, drawMap } from './atelier';
@@ -88,7 +89,7 @@ function show(s: Screen) {
   $('#atelier').hidden = s !== 'atelier';
   $('#hud').hidden = s !== 'game';
   document.body.dataset.screen = s;
-  if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; setRain(false); }
+  if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; setRain(false); setWind(false); }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -197,6 +198,9 @@ let myTankId = -1;
 let snaps: Snap[] = [];
 let evq: { k: number; e: GameEvent }[] = [];
 let renderTick = 0;
+/** Wind of the mission being played (iteration 23): where it mainly blows, undefined on a calm table. */
+let levelWind: number | undefined;
+let windSoundT = 0;
 let latestK = 0;
 let pending: Input[] = [];
 let seq = 0;
@@ -310,8 +314,12 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   renderer.setLevel(tiles, msg.tanks, belts);
   renderer.setNight(!!msg.night);
   renderer.setStorm(!!msg.storm);
+  levelWind = typeof msg.wind === 'number' && Number.isFinite(msg.wind) ? msg.wind : undefined;
+  renderer.setWind(levelWind);
   show('game');
   setRain(!!msg.storm);
+  setWind(levelWind !== undefined);
+  $('#hud-wind').hidden = levelWind === undefined;
   setMusicIntensity(0);
   dailyState = msg.daily;
   dailyK = msg.tick;
@@ -326,8 +334,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${iceMap ? ' · Glace' : ''}`;
-  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${iceMap ? ' ice' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${iceMap ? ' · Glace' : ''}${levelWind !== undefined ? ' · Vent' : ''}`;
+  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${iceMap ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
@@ -350,6 +358,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
+  else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
   else if (enemies.some((e) => e.kind === 'rampart')) setTimeout(() => toast('Le Rempart renvoie tous les obus qui frappent son bouclier. Prends-le de côté, par-derrière… ou à la mine !', 4400), 2200);
@@ -537,6 +546,14 @@ function onlineFrame(dt: number) {
   renderTick += dt * TICK_RATE;
   if (Math.abs(renderTick - target) > 8) renderTick = target;
   else renderTick += (target - renderTick) * Math.min(1, dt * 3);
+  renderer.windTick = renderTick; // the gust is a function of the tick: the same as the server's
+  if (levelWind !== undefined && (windSoundT -= dt) <= 0) {
+    windSoundT = 0.15;
+    const k = gustAt(renderTick);
+    windGust(k);
+    $<HTMLElement>('#hud-wind i').style.transform = `rotate(${((windAngle(levelWind, renderTick) * 180) / Math.PI).toFixed(1)}deg)`;
+    $<HTMLElement>('#hud-wind u').style.width = `${Math.round(k * 100)}%`;
+  }
 
   // events
   while (evq.length && evq[0].k <= renderTick) handleEvent(evq.shift()!.e, true);
@@ -1104,10 +1121,10 @@ function renderLobby() {
     ? `La taupe (${TAUPE_MIN_PLAYERS} ou 4 joueurs) : ${TAUPE_STAGES} missions en coop… mais l’un de vous, tiré au sort en secret, veut les faire échouer. Après chaque mission, le conseil vote : démasquez la taupe pour gagner, mais accuser un innocent coûte une vie. La taupe gagne si vous perdez vos 3 vies.`
     : lobbyMode === 'atelier'
     ? (lobbyAtelier
-      ? `Atelier : « ${lobbyAtelier.name} », une mission dessinée par l’hôte, à jouer en coop avec ${ATELIER_LIVES} vies.${lobbyAtelier.night ? ' De nuit.' : ''}${lobbyAtelier.storm ? ' Sous l’orage.' : ''}`
+      ? `Atelier : « ${lobbyAtelier.name} », une mission dessinée par l’hôte, à jouer en coop avec ${ATELIER_LIVES} vies.${lobbyAtelier.night ? ' De nuit.' : ''}${lobbyAtelier.storm ? ' Sous l’orage.' : ''}${lobbyAtelier.wind ? ' Dans le vent.' : ''}`
       : 'Atelier : l’hôte dessine sa propre mission (murs, liège, trous, tunnels, portails, ennemis et même un boss), puis vous la jouez en coop.')
     : lobbyMode === 'coop'
-    ? 'Campagne coopérative : 19 missions faites main puis missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions. Pas assez de monde ? Ajoute jusqu’à 3 coéquipiers pilotés par l’ordinateur.'
+    ? `Campagne coopérative : ${LEVELS.length + Object.keys(EXTRA_LEVELS).length} missions faites main, mêlées aux missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions. Pas assez de monde ? Ajoute jusqu’à 3 coéquipiers pilotés par l’ordinateur.`
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
   renderWeapons();
   renderCheckpoints(isHost);
@@ -1361,6 +1378,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
   g.night = opts.night ?? (!!lvl.night || (!opts.heroes && opts.mission === undefined && Math.random() < 0.25));
   // and sometimes under a storm
   g.storm = opts.storm ?? (!!lvl.storm || (!opts.heroes && opts.mission === undefined && Math.random() < 0.18));
+  // the wind (iteration 23): its own setting, and sometimes on the home screen
+  g.wind = lvl.wind ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && Math.random() < 0.16 ? Math.floor(Math.random() * 8) * (Math.PI / 4) : undefined);
   if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
   if (opts.daily) applyTwist(g, dailyTwist(opts.daily.day));
   if (opts.heroes) {
@@ -1388,6 +1407,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
   renderer.setNight(g.night);
   renderer.setStorm(g.storm);
+  renderer.setWind(g.wind);
 }
 function stopAttract() {
   attract = undefined;
@@ -1404,6 +1424,7 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
   g.bonusNext = 3; g.bonusEvery = [6, 9];
   g.night = !!lvl.night;
   g.storm = !!lvl.storm;
+  g.wind = lvl.wind;
   const names = [0, 1, 2, 3].map((i) => RIVAL_NAMES[(vs.round + i * 3) % RIVAL_NAMES.length]);
   lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
     const t = g.addTank('player', i + 1, x, y, PLAYER_COLORS[i], `ia:${i + 1}`, names[i]);
@@ -1420,6 +1441,7 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
   renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
   renderer.setNight(g.night);
   renderer.setStorm(g.storm);
+  renderer.setWind(g.wind);
   renderVsBoard();
 }
 
@@ -1462,6 +1484,7 @@ function attractFrame(dt: number) {
     g.events = [];
   }
   const u = attractAcc / DT;
+  renderer.windTick = g.tick + u;
   const tanks: RTank[] = g.tanks.map((t) => {
     const p = attractPrev.get(t.id) ?? t;
     const w = jumped(p.x, p.y, t.x, t.y, u);
@@ -1908,8 +1931,8 @@ if (params.has('demo')) {
       $('#hud').hidden = true;
       attract = undefined;
       startAttract({ heroes: true, atelier: a, arms: arms?.filter(isWeapon) });
-      const wx = `${a.night ? ' · Nuit' : ''}${a.storm ? ' · Orage' : ''}`;
-      banner(`Atelier · mission maison${wx}`, a.name, `Tanks ennemis : ${atelierLevel(a).enemies.length}`, `intro atelier${a.night ? ' night' : ''}${a.storm ? ' storm' : ''}`);
+      const wx = `${a.night ? ' · Nuit' : ''}${a.storm ? ' · Orage' : ''}${a.wind ? ' · Vent' : ''}`;
+      banner(`Atelier · mission maison${wx}`, a.name, `Tanks ennemis : ${atelierLevel(a).enemies.length}`, `intro atelier${a.night ? ' night' : ''}${a.storm ? ' storm' : ''}${a.wind ? ' wind' : ''}`);
       setTimeout(hideBanner, 2600);
       return a.name;
     },
@@ -1941,6 +1964,26 @@ if (params.has('demo')) {
         r.turret = Math.atan2(h.y - r.y, h.x - r.x);
         const keep = h.turret;
         h.turret = Math.atan2(r.y - h.y, r.x - h.x);
+        h.fireCd = 0;
+        if (g.tryFire(h)) n++;
+        h.turret = keep;
+      }
+      return n;
+    },
+    /**
+     * The wind (iteration 23): every hero fires one shell straight across the wind, toward the middle of the table,
+     * so the video shows the shells bending. Returns the number of shells fired (0 on a calm table).
+     */
+    gustShot() {
+      const g = attract;
+      if (!g || g.wind === undefined) return 0;
+      let n = 0;
+      const across = g.wind + Math.PI / 2;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player') continue;
+        const toMid = Math.atan2(H / 2 - h.y, W / 2 - h.x);
+        const keep = h.turret;
+        h.turret = Math.abs(angDiff(across, toMid)) < Math.PI / 2 ? across : across + Math.PI;
         h.fireCd = 0;
         if (g.tryFire(h)) n++;
         h.turret = keep;

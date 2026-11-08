@@ -113,6 +113,42 @@ export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang
   return segs;
 }
 
+/**
+ * The windy twin of castRicochet (iteration 23): steps a shell of that speed through a steady wind (ax, ay), with the
+ * same per-axis bounces as the simulation, and returns its curved path as short chords. Used by the AI to aim in the wind.
+ */
+export function castWindy(tiles: ArrayLike<number>, x: number, y: number, ang: number, speed: number, bounces: number, ax: number, ay: number, maxLen = 45): Segment[] {
+  const segs: Segment[] = [];
+  const R = 0.09, dt = Math.min(0.12, 0.85 / speed); // steps shorter than a wall is thick
+  let vx = Math.cos(ang) * speed, vy = Math.sin(ang) * speed;
+  let x0 = x, y0 = y, steps = 0;
+  const pull = Math.hypot(ax, ay) > 1e-6;
+  for (let len = 0; len < maxLen; len += speed * dt) {
+    const ox = x, oy = y;
+    let bounced = false;
+    const nx = x + vx * dt;
+    if (bulletBlocked(tiles, nx, y, R)) { vx = -vx; bounced = true; } else x = nx;
+    const ny = y + vy * dt;
+    if (bulletBlocked(tiles, x, ny, R)) { vy = -vy; bounced = true; } else y = ny;
+    const w = warpTarget(tiles, ox, oy, x, y);
+    if (bounced || w || ++steps >= 2) {
+      segs.push({ x0, y0, x1: x, y1: y });
+      steps = 0;
+      if (bounced && --bounces < 0) return segs;
+      if (w) [x, y] = w;
+      x0 = x; y0 = y;
+    }
+    if (pull) {
+      // same bend as the simulation: sideways only, the shell keeps its speed
+      const s = Math.hypot(vx, vy), bx = vx + ax * dt, by = vy + ay * dt, n = Math.hypot(bx, by) || 1;
+      vx = (bx / n) * s; vy = (by / n) * s;
+    }
+    if (x < -1 || y < -1 || x > W + 1 || y > H + 1) break;
+  }
+  if (x0 !== x || y0 !== y) segs.push({ x0, y0, x1: x, y1: y });
+  return segs;
+}
+
 function dda(tiles: ArrayLike<number>, x: number, y: number, dx: number, dy: number, maxT: number) {
   // inflate by bullet radius: shrink the effective free space by offsetting against wall faces
   const R = 0.09;

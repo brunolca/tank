@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 29, arms: ['canon', 'ricochet'], seconds: 16, shieldShots: [2.5, 6.5, 10.5], caption: 'Nouveau : le Rempart', sub: 'Son bouclier de laiton renvoie les obus qui le frappent de face' },
-  { mission: 31, arms: ['ricochet', 'fusee'], seconds: 14, shieldShots: [3.5, 8.5], caption: 'La garde', sub: 'Deux Remparts escortent une tourelle : l’un attire les boucliers, l’autre frappe' },
-  { mission: 33, arms: ['canon', 'sapeur', 'ricochet'], seconds: 11, shieldShots: [4], caption: 'Prends-le à revers', sub: 'Par le côté, au ricochet ou à la mine : dès la 32ᵉ mission' },
-  { mission: 27, arms: ['canon', 'ricochet'], seconds: 9, caption: 'Et toujours la glace', sub: 'Freine tôt, braque en avance' },
-  { mission: 30, arms: ['canon', 'fusee', 'ricochet'], ranks: [2, 2, 2], volley: true, seconds: 9, caption: 'Le Grondeur t’attend', sub: 'Un boss toutes les dix missions' },
+  { mission: 33, arms: ['canon', 'ricochet'], seconds: 16, gusts: [2.6, 6.5, 10.5], caption: 'Nouveau : le vent', sub: 'Les rafales courbent les obus en vol : vise en amont !' },
+  { mission: 34, arms: ['ricochet', 'fusee'], seconds: 13, gusts: [3, 8], caption: 'La bourrasque', sub: 'La manche à air dit d’où vient le vent… et quand il retombe' },
+  { versus: [4, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 11, gusts: [4], caption: 'Le vent souffle aussi en versus', sub: 'Une manche sur six, et dans les missions générées dès la 33ᵉ' },
+  { playAtelier: { name: 'Coup de mistral', wind: true }, arms: ['canon', 'ricochet'], seconds: 9, gusts: [3.5], caption: 'Une case « Vent » dans l’atelier', sub: 'Pour tes propres missions maison' },
+  { mission: 29, arms: ['canon', 'ricochet'], seconds: 8, shieldShots: [2.5, 5.5], caption: 'Et toujours le Rempart', sub: 'Prends-le de côté ou au ricochet' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -76,6 +76,7 @@ try {
       for (const s of shot.beltCrates ?? []) setTimeout(() => d.beltCrate?.(), s * 1000);
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
+      for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

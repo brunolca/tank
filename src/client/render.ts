@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
+import { gustAt, windAngle } from '../shared/wind';
 import { isRivalId } from '../shared/rivals';
 import type { TankInfo } from '../shared/protocol';
 
@@ -277,6 +278,21 @@ function beltTexture() {
 
 /** Ice (iteration 21): pale blue, a few white scratches from skates and a frosty rim. */
 const SNOW_FLAKES = 320;
+/** Wind (iteration 23): leaves blown across the table, and quick white streaks when it gusts. */
+const LEAVES = 80;
+const GUSTS = 40;
+const LEAF_COLORS = [0xe8892c, 0xd9542b, 0xf2c14e, 0x9bbf4a, 0xc76a2a, 0xf0a33a];
+
+/** Red and white stripes of the windsock (iteration 23). */
+function sockTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 8;
+  const g = c.getContext('2d')!;
+  for (let i = 0; i < 5; i++) { g.fillStyle = i % 2 ? '#f6efe2' : '#e2453c'; g.fillRect((i * 64) / 5, 0, 64 / 5 + 1, 8); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 
 function iceTexture() {
   const c = document.createElement('canvas');
@@ -827,6 +843,17 @@ export class Renderer {
   private snow?: THREE.Points;
   private snowPos = new Float32Array(SNOW_FLAKES * 3);
   private snowSeed = new Float32Array(SNOW_FLAKES);
+  /** Wind (iteration 23): where it mainly blows (undefined on a calm table), and the tick the gust is read at (set every frame). */
+  private windBase?: number;
+  windTick = 0;
+  private leaves?: THREE.InstancedMesh;
+  private leafSt = new Float32Array(LEAVES * 5); // x, height, z, spin phase, own speed
+  private gustLines?: THREE.LineSegments;
+  private gustPos = new Float32Array(GUSTS * 6);
+  private gustLife = new Float32Array(GUSTS);
+  private sock?: THREE.Group;
+  private sockPivot?: THREE.Group;
+  private windDummy = new THREE.Object3D();
   private tunnels: { cell: number; root: THREE.Group; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; op: number }[] = [];
   private tunnelBusy = new Set<number>();
   private tunnelGeo = {
@@ -1344,6 +1371,112 @@ export class Renderer {
       this.scene.add(this.snow);
     }
     this.snow.visible = true;
+  }
+
+  /** Wind (iteration 23): leaves fly across the table, streaks show the gusts and a windsock on the frame shows where it blows. */
+  setWind(base?: number) {
+    this.windBase = base;
+    const on = base !== undefined;
+    if (on && !this.leaves) {
+      const geo = new THREE.PlaneGeometry(0.26, 0.15);
+      const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+      this.leaves = new THREE.InstancedMesh(geo, mat, LEAVES);
+      this.leaves.frustumCulled = false;
+      const c = new THREE.Color();
+      for (let i = 0; i < LEAVES; i++) {
+        this.leaves.setColorAt(i, c.setHex(LEAF_COLORS[i % LEAF_COLORS.length]));
+        const o = i * 5;
+        this.leafSt[o] = -2 + Math.random() * (W + 4);
+        this.leafSt[o + 1] = 0.2 + Math.random() * 1.4;
+        this.leafSt[o + 2] = -2 + Math.random() * (H + 4);
+        this.leafSt[o + 3] = Math.random() * 10;
+        this.leafSt[o + 4] = 0.7 + Math.random() * 0.6;
+      }
+      this.scene.add(this.leaves);
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(this.gustPos, 3).setUsage(THREE.DynamicDrawUsage));
+      this.gustLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+      this.gustLines.frustumCulled = false;
+      this.scene.add(this.gustLines);
+      // the windsock: a wooden pole on the far right corner of the frame, a striped sock that swings with the wind
+      const sock = new THREE.Group();
+      sock.position.set(W + 0.3, WALL_H + 0.08, -0.3);
+      const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.7 });
+      sock.scale.setScalar(1.35);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.95, 10), wood);
+      pole.position.y = 0.475;
+      pole.castShadow = true;
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffb43d, roughness: 0.4, metalness: 0.3 }));
+      knob.position.y = 0.98;
+      const pivot = new THREE.Group();
+      pivot.position.y = 0.88;
+      pivot.rotation.order = 'YZX';
+      const cloth = new THREE.CylinderGeometry(0.17, 0.08, 0.95, 16, 1, true).rotateZ(Math.PI / 2).translate(0.5, 0, 0); // along +x, wide at the pole
+      const sm = new THREE.Mesh(cloth, new THREE.MeshStandardMaterial({ map: sockTexture(), roughness: 0.8, side: THREE.DoubleSide }));
+      sm.castShadow = true;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.018, 6, 18).rotateY(Math.PI / 2), wood);
+      ring.position.x = 0.03;
+      pivot.add(sm, ring);
+      sock.add(pole, knob, pivot);
+      this.scene.add(sock);
+      this.sock = sock; this.sockPivot = pivot;
+    }
+    if (this.leaves) this.leaves.visible = on;
+    if (this.gustLines) this.gustLines.visible = on;
+    if (this.sock) this.sock.visible = on;
+  }
+  get windOn() { return this.windBase !== undefined; }
+
+  private animateWind(dt: number) {
+    if (this.windBase === undefined || !this.leaves) return;
+    const ang = windAngle(this.windBase, this.windTick), k = gustAt(this.windTick);
+    const dx = Math.cos(ang), dz = Math.sin(ang);
+    const px = -dz, pz = dx; // across the wind
+    const d = this.windDummy;
+    const st = this.leafSt;
+    // a point that left the table comes back in from the side the wind blows from
+    const respawn = (o: number, stride: number, arr: Float32Array) => {
+      const u = Math.random();
+      let x: number, z: number;
+      if (Math.abs(dx) > Math.abs(dz)) { x = dx > 0 ? -1.5 : W + 1.5; z = -1.5 + u * (H + 3); } else { z = dz > 0 ? -1.5 : H + 1.5; x = -1.5 + u * (W + 3); }
+      arr[o] = x; arr[o + stride] = z;
+    };
+    for (let i = 0; i < LEAVES; i++) {
+      const o = i * 5;
+      const sp = (0.6 + 4.4 * k) * st[o + 4];
+      const fl = Math.sin(this.time * 3 + st[o + 3]) * 0.6;
+      st[o] += (dx * sp + px * fl) * dt;
+      st[o + 2] += (dz * sp + pz * fl) * dt;
+      st[o + 1] = Math.max(0.06, st[o + 1] + (Math.sin(this.time * 1.7 + st[o + 3] * 2) * 0.5 + (k - 0.45) * 0.6) * dt);
+      if (st[o + 1] > 1.8) st[o + 1] = 1.8;
+      if (st[o] < -2 || st[o] > W + 2 || st[o + 2] < -2 || st[o + 2] > H + 2) { respawn(o, 2, st); st[o + 1] = 0.3 + Math.random() * 1.2; }
+      d.position.set(st[o], st[o + 1], st[o + 2]);
+      const spin = this.time * (2 + 4 * k) * st[o + 4] + st[o + 3];
+      d.rotation.set(-Math.PI / 2 + Math.sin(spin) * 0.9, -ang + spin * 0.3, Math.cos(spin * 1.3) * 0.6);
+      d.updateMatrix();
+      this.leaves.setMatrixAt(i, d.matrix);
+    }
+    this.leaves.instanceMatrix.needsUpdate = true;
+    // gust streaks: only when it really blows
+    const g = this.gustPos;
+    const len = 0.5 + 1.3 * k, sp = 3 + 8 * k;
+    for (let i = 0; i < GUSTS; i++) {
+      const o = i * 6;
+      this.gustLife[i] -= dt;
+      if (this.gustLife[i] <= 0) {
+        this.gustLife[i] = 0.5 + Math.random() * 0.9;
+        g[o] = -1 + Math.random() * (W + 2); g[o + 1] = 0.35 + Math.random() * 1.2; g[o + 2] = -1 + Math.random() * (H + 2);
+      }
+      g[o] += dx * sp * dt; g[o + 2] += dz * sp * dt;
+      g[o + 3] = g[o] - dx * len; g[o + 4] = g[o + 1]; g[o + 5] = g[o + 2] - dz * len;
+    }
+    (this.gustLines!.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    (this.gustLines!.material as THREE.LineBasicMaterial).opacity = Math.max(0, (k - 0.35) * 0.75) * (1 - this.night * 0.5);
+    // the windsock swings round and stands out in a gust, droops in a lull
+    if (this.sockPivot) {
+      this.sockPivot.rotation.y = -ang + Math.sin(this.time * 7) * 0.08 * k;
+      this.sockPivot.rotation.z = -(1 - k) * 1.05 + Math.sin(this.time * 11) * 0.05 * k;
+    }
   }
 
   /** Is this point of the table on ice? (tread marks turn to frost, sliding throws ice shavings) */
@@ -2314,6 +2447,7 @@ export class Renderer {
     this.animatePortals(dt);
     this.animateTunnels(dt);
     this.animateSnow(dt);
+    this.animateWind(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();

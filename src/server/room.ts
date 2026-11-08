@@ -224,7 +224,7 @@ export class Room extends DurableObject<Env> {
         if (p.pid !== this.hostId() || this.phase !== 'lobby') break;
         const why = checkAtelier(msg.map);
         if (why) { this.send(ws, { t: 'error', msg: `Atelier : ${why}` }); break; }
-        this.atelier = { name: cleanName(msg.name) || 'Mission maison', map: (msg.map as string[]).slice(), night: msg.night === true || undefined, storm: msg.storm === true || undefined };
+        this.atelier = { name: cleanName(msg.name) || 'Mission maison', map: (msg.map as string[]).slice(), night: msg.night === true || undefined, storm: msg.storm === true || undefined, wind: msg.wind === true || undefined };
         this.mode = 'atelier';
         this.rivals = [];
         void this.saveRivals();
@@ -456,6 +456,7 @@ export class Room extends DurableObject<Env> {
     game.bonusOn = true;
     game.night = !!this.level.night;
     game.storm = !!this.level.storm;
+    game.wind = this.level.wind;
     if (this.mode === 'versus') { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
@@ -485,6 +486,7 @@ export class Room extends DurableObject<Env> {
       tick: this.game.tick,
       night: this.level.night ? 1 : undefined,
       storm: this.level.storm ? 1 : undefined,
+      wind: this.level.wind,
       belts: this.game.belts.length ? this.game.belts : undefined,
       daily: this.dailyState(),
     });

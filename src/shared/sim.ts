@@ -3,7 +3,8 @@ import {
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
-import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { bend, windAt } from './wind';
+import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
@@ -233,6 +234,10 @@ export class Game {
   belts: number[] = [];
   /** Some floor cells are ice (iteration 21): tanks keep their momentum on them. */
   ice = false;
+  /** Wind (iteration 23): where it mainly blows (radians), undefined on a calm table. It bends the shells in flight. */
+  wind?: number;
+  /** The pull of the wind this tick (tiles/s²), see windAt. */
+  gust: [number, number] = [0, 0];
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -309,6 +314,7 @@ export class Game {
   step(inputs: Map<string, Input>) {
     this.tick++;
     if (this.frozen) return;
+    if (this.wind !== undefined) this.gust = windAt(this.wind, this.tick);
     for (const t of this.tanks) {
       if (!t.alive) continue;
       t.fireCd -= DT;
@@ -889,8 +895,10 @@ export class Game {
   }
 
   stepBullets(dt: number) {
+    const windy = this.wind !== undefined, [gx, gy] = this.gust;
     for (const b of this.bullets) {
       if (b.dead) continue;
+      if (windy) [b.vx, b.vy] = bend(b.vx, b.vy, gx, gy, dt); // the wind bends it, never speeds it up
       let bounced = false;
       const ox = b.x, oy = b.y;
       const nx = b.x + b.vx * dt;
@@ -1191,7 +1199,10 @@ export class Game {
     const tip = t.r + 0.22;
     const sx = t.x + Math.cos(ang) * tip, sy = t.y + Math.sin(ang) * tip;
     if (bulletBlocked(this.tiles, sx, sy, BULLET_R)) return { len: 0 };
-    const segs = castRicochet(this.tiles, sx, sy, ang, bounces, 45);
+    // in the wind (iteration 23), the AI follows the shell's curve with the gust of the moment (which may change in flight)
+    const segs = this.wind !== undefined
+      ? castWindy(this.tiles, sx, sy, ang, t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED, bounces, this.gust[0], this.gust[1], 32)
+      : castRicochet(this.tiles, sx, sy, ang, bounces, 45);
     let acc = 0;
     for (let si = 0; si < segs.length; si++) {
       const s = segs[si];
@@ -1362,7 +1373,7 @@ export class Game {
       tryAng(Math.atan2(f.y - t.y, f.x - t.x), 1);
     }
     if (spec.bounces > 0 && t.kind !== 'rampart' && (spec.skill >= 2 || Math.random() < 0.5)) { // the Rempart keeps its shield on its foe
-      const n = spec.skill >= 2 ? 64 : 24;
+      const n = this.wind !== undefined ? (spec.skill >= 2 ? 28 : 12) : spec.skill >= 2 ? 64 : 24; // curved traces cost more
       const off = Math.random() * ((Math.PI * 2) / n);
       for (let i = 0; i < n; i++) tryAng(off + (i * Math.PI * 2) / n, 0);
     }
