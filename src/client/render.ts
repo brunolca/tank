@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
+import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { isRivalId } from '../shared/rivals';
 import { CTF_RETURN, TEAM_COLORS } from '../shared/drapeau';
 import type { TankInfo } from '../shared/protocol';
@@ -175,6 +176,7 @@ interface TankView {
   lastMarkY: number;
   wasAlive: boolean;
   recoil: number;
+  seenT?: number; // fog (iteration 26): seconds during which its last muzzle flash shows it through the mist
   materials: THREE.MeshStandardMaterial[];
   bubble?: THREE.Mesh;
   scale: number; // hull radius / TANK_R (the boss is drawn bigger)
@@ -918,6 +920,19 @@ export class Renderer {
   private sock?: THREE.Group;
   private sockPivot?: THREE.Group;
   private windDummy = new THREE.Object3D();
+  /** Fog (iteration 26): the seed of the banks of mist (undefined on a clear table), the tick they are read at (set every frame). */
+  private fogSeed?: number;
+  fogTick = 0;
+  /** Who sees through the mist around them: set by the game (teammates in coop, only oneself in versus). */
+  fogAlly?: (id: number) => boolean;
+  private fogMesh?: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  private fogNow: FogBank[] = [];
+  private fogSeers: { x: number; y: number }[] = [];
+  private fogAmt = 0;
+  private fogStart = 0;
+  private fogHorn = 0;
+  /** Called now and then on a foggy table (for the foghorn). */
+  onFogHorn?: () => void;
   private tunnels: { cell: number; root: THREE.Group; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; op: number }[] = [];
   private tunnelBusy = new Set<number>();
   private tunnelGeo = {
@@ -1492,6 +1507,103 @@ export class Renderer {
   }
   get windOn() { return this.windBase !== undefined; }
 
+  /** Fog (iteration 26): banks of mist drift over the table, a clearing opens around you and your teammates. */
+  setFog(seed?: number) {
+    this.fogSeed = seed;
+    if (seed !== undefined && !this.fogMesh) {
+      const banks = Array.from({ length: FOG_BANKS }, () => new THREE.Vector3(-99, -99, 1));
+      const seers = Array.from({ length: 4 }, () => new THREE.Vector3(0, 0, 0));
+      const mat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: { uBank: { value: banks }, uSeer: { value: seers }, uTime: { value: 0 }, uAmt: { value: 0 }, uSight: { value: FOG_SIGHT } },
+        vertexShader: `
+          varying vec2 vP;
+          void main() {
+            vec4 w = modelMatrix * vec4(position, 1.0);
+            vP = w.xz;
+            gl_Position = projectionMatrix * viewMatrix * w;
+          }`,
+        fragmentShader: `
+          uniform vec3 uBank[${FOG_BANKS}];
+          uniform vec3 uSeer[4];
+          uniform float uTime, uAmt, uSight;
+          varying vec2 vP;
+          float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float noise(vec2 p) {
+            vec2 i = floor(p), f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+          }
+          float fbm(vec2 p) {
+            float v = 0.0, a = 0.5;
+            for (int i = 0; i < 4; i++) { v += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+            return v;
+          }
+          void main() {
+            float d = 0.0;
+            for (int i = 0; i < ${FOG_BANKS}; i++) {
+              vec3 b = uBank[i];
+              d = max(d, (b.z - length(vP - b.xy)) / (b.z * 0.55));
+            }
+            d = clamp(d, 0.0, 1.0);
+            float n = fbm(vP * 0.42 + vec2(uTime * 0.06, uTime * 0.035));
+            float m = fbm(vP * 0.9 - vec2(uTime * 0.04, -uTime * 0.05));
+            float dd = clamp(d * 1.2 + (n - 0.5) * 0.8, 0.0, 1.0);
+            float a = smoothstep(0.0, 1.0, dd) * (0.78 + 0.18 * m) + 0.05 + 0.05 * n;
+            for (int i = 0; i < 4; i++) {
+              vec3 s = uSeer[i];
+              float c = smoothstep(uSight * 0.45, uSight * 1.05, length(vP - s.xy));
+              a *= mix(1.0, 0.25 + 0.75 * c, s.z);
+            }
+            vec3 col = mix(vec3(0.74, 0.76, 0.78), vec3(0.98, 0.97, 0.94), n * 0.6 + m * 0.4);
+            gl_FragColor = vec4(col, clamp(a, 0.0, 0.94) * uAmt);
+          }`,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W + 2, H + 2).rotateX(-Math.PI / 2), mat);
+      mesh.position.set(W / 2, 1.25, H / 2);
+      mesh.renderOrder = 5;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      this.fogMesh = mesh;
+    }
+    if (seed === undefined) this.fogAmt = 0;
+    else if (this.fogAmt <= 0) this.fogStart = performance.now();
+    if (this.fogMesh) this.fogMesh.visible = seed !== undefined;
+    this.fogHorn = 1.2;
+  }
+  get fogOn() { return this.fogSeed !== undefined; }
+
+  /** Is that tank lost in the mist for us? Never ourselves, our teammates, a tank close to one of us, or one that just fired. */
+  private lostInFog(t: RTank, v: TankView) {
+    if (this.fogSeed === undefined || !t.alive || (v.seenT ?? 0) > 0 || this.lightning > 0.45) return false;
+    const r = FOG_SIGHT + v.scale * TANK_R;
+    for (const s of this.fogSeers) if ((s.x - t.x) ** 2 + (s.y - t.y) ** 2 < r * r) return false;
+    return fogDensity(this.fogNow, t.x, t.y) >= FOG_HIDE;
+  }
+
+  private animateFog(dt: number) {
+    const m = this.fogMesh;
+    if (!m || this.fogSeed === undefined) return;
+    this.fogAmt = Math.min(1, (performance.now() - this.fogStart) / 900); // real time, even at a low frame rate
+    const u = m.material.uniforms;
+    u.uAmt.value = this.fogAmt;
+    u.uTime.value = this.time;
+    fogBanks(this.fogSeed, this.fogTick, this.fogNow);
+    const banks = u.uBank.value as THREE.Vector3[];
+    for (let i = 0; i < banks.length; i++) {
+      const b = this.fogNow[i];
+      if (b) banks[i].set(b.x, b.y, b.r); else banks[i].set(-99, -99, 1);
+    }
+    const seers = u.uSeer.value as THREE.Vector3[];
+    for (let i = 0; i < seers.length; i++) {
+      const s = this.fogSeers[i];
+      if (s) seers[i].set(s.x, s.y, 1); else seers[i].set(0, 0, 0);
+    }
+    // a foghorn now and then, far away
+    if ((this.fogHorn -= dt) <= 0) { this.fogHorn = 16 + Math.random() * 10; this.onFogHorn?.(); }
+  }
+
   private animateWind(dt: number) {
     if (this.windBase === undefined || !this.leaves) return;
     const ang = windAngle(this.windBase, this.windTick), k = gustAt(this.windTick);
@@ -1871,6 +1983,11 @@ export class Renderer {
   // ---------------------------------------------------------------- per-frame state
 
   syncTanks(list: RTank[], myId: number, dt: number) {
+    this.fogSeers.length = 0;
+    if (this.fogSeed !== undefined) {
+      fogBanks(this.fogSeed, this.fogTick, this.fogNow);
+      for (const t of list) if (t.alive && (t.id === myId || this.fogAlly?.(t.id)) && this.fogSeers.length < 4) this.fogSeers.push({ x: t.x, y: t.y });
+    }
     this.tunnelBusy.clear();
     if (this.tunnels.length) {
       for (const t of list) {
@@ -1883,7 +2000,9 @@ export class Renderer {
       const v = this.tanks.get(t.id);
       if (!v) continue;
       // a lightning flash shows invisible tanks for an instant
-      const visible = t.alive && !(t.invisible && t.id !== myId && this.lightning < 0.45);
+      // and, in the fog (iteration 26), the tanks lost in a bank of mist far from you and your teammates
+      if (v.seenT) v.seenT = Math.max(0, v.seenT - dt);
+      const visible = t.alive && !(t.invisible && t.id !== myId && this.lightning < 0.45) && !this.lostInFog(t, v);
       v.root.visible = visible;
       if (!t.alive) {
         if (v.wasAlive) this.deathMark(t.x, t.y, v.info);
@@ -2512,7 +2631,7 @@ export class Renderer {
 
   muzzle(x: number, y: number, ang: number, rocket: boolean, shooterId: number) {
     const v = this.tanks.get(shooterId);
-    if (v) v.recoil = 1;
+    if (v) { v.recoil = 1; v.seenT = 1.6; }
     if (this.night > 0.3 && this.flashT <= 0) {
       // the muzzle flash lights up the night (and gives the shooter away)
       this.flash.position.set(x, 0.8, y);
@@ -2624,6 +2743,7 @@ export class Renderer {
     this.animateTunnels(dt);
     this.animateSnow(dt);
     this.animateWind(dt);
+    this.animateFog(dt);
     this.animateFlags(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate

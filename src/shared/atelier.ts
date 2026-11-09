@@ -128,7 +128,7 @@ export function checkAtelier(map: unknown): string | undefined {
 
 /** The level the room plays for a checked workshop map. */
 export function atelierLevel(a: AtelierMap): ParsedLevel {
-  return parseLevel({ name: cleanName(a.name) || 'Mission maison', map: a.map, night: !!a.night, storm: !!a.storm, wind: a.wind ? 0 : undefined } satisfies LevelDef); // the wind blows to the right (iteration 23)
+  return parseLevel({ name: cleanName(a.name) || 'Mission maison', map: a.map, night: !!a.night, storm: !!a.storm, wind: a.wind ? 0 : undefined, fog: a.fog ? 1 : undefined } satisfies LevelDef); // the wind blows to the right (iteration 23)
 }
 
 /** Enemy kinds on a map, for the lobby summary. */
@@ -138,7 +138,7 @@ export function atelierKinds(map: string[]): TankKind[] {
 
 // ---------------------------------------------------------------- share codes
 // Each cell becomes a letter (A, B, C… in BRUSHES order, then a, b… past Z); a run of identical cells is the letter followed by its length.
-// The name goes first, as base64url, then a dot, the cells, and optionally a dot and the weather (n night, s storm, w wind). The code lives in the link's hash: it never reaches the server.
+// The name goes first, as base64url, then a dot, the cells, and optionally a dot and the weather (n night, s storm, w wind, f fog). The code lives in the link's hash: it never reaches the server.
 
 const b64 = (s: string) => {
   const bytes = new TextEncoder().encode(s);
@@ -160,7 +160,7 @@ export function encodeAtelier(a: AtelierMap): string {
     out += letter(CHARS.indexOf(cells[i])) + (j - i > 1 ? String(j - i) : '');
     i = j;
   }
-  const flags = (a.night ? 'n' : '') + (a.storm ? 's' : '') + (a.wind ? 'w' : '');
+  const flags = (a.night ? 'n' : '') + (a.storm ? 's' : '') + (a.wind ? 'w' : '') + (a.fog ? 'f' : '');
   return `${b64(cleanName(a.name))}.${out}${flags ? '.' + flags : ''}`;
 }
 
@@ -182,7 +182,7 @@ export function decodeAtelier(code: string): AtelierMap | undefined {
     }
     if (used !== body.length || cells.length !== W * H) return;
     const map = Array.from({ length: H }, (_, y) => cells.slice(y * W, (y + 1) * W));
-    return { name, map, night: flags.includes('n') || undefined, storm: flags.includes('s') || undefined, wind: flags.includes('w') || undefined };
+    return { name, map, night: flags.includes('n') || undefined, storm: flags.includes('s') || undefined, wind: flags.includes('w') || undefined, fog: flags.includes('f') || undefined };
   } catch {
     return;
   }

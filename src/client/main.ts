@@ -32,6 +32,7 @@ let fps = 60;
 
 const canvas = $<HTMLCanvasElement>('#game');
 const renderer = new Renderer(canvas);
+renderer.onFogHorn = () => { if (screen === 'game') sfx.foghorn(); }; // a foghorn far away, on foggy tables (iteration 26)
 const controls = new Controls(canvas, (x, y) => renderer.screenToArena(x, y), $('#mine-btn'));
 
 // ------------------------------------------------------------------ profile
@@ -202,6 +203,8 @@ let renderTick = 0;
 /** Wind of the mission being played (iteration 23): where it mainly blows, undefined on a calm table. */
 let levelWind: number | undefined;
 let windSoundT = 0;
+/** Fog (iteration 26): the seed of the banks of mist of the current level, undefined on a clear table. */
+let levelFog: number | undefined;
 let latestK = 0;
 let pending: Input[] = [];
 let seq = 0;
@@ -327,6 +330,10 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   renderer.setStorm(!!msg.storm);
   levelWind = typeof msg.wind === 'number' && Number.isFinite(msg.wind) ? msg.wind : undefined;
   renderer.setWind(levelWind);
+  // the fog (iteration 26): you see through it around you, and around your teammates (in coop, or in your flag team)
+  levelFog = typeof msg.fog === 'number' && Number.isFinite(msg.fog) ? msg.fog : undefined;
+  renderer.fogAlly = coopLike(msg.mode) ? (id) => infos.get(id)?.team !== 99 : msg.mode === 'drapeau' ? (id) => !!myTeam && infos.get(id)?.team === myTeam : undefined;
+  renderer.setFog(levelFog);
   show('game');
   setRain(!!msg.storm);
   setWind(levelWind !== undefined);
@@ -347,8 +354,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${iceMap ? ' · Glace' : ''}${levelWind !== undefined ? ' · Vent' : ''}`;
-  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${iceMap ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${iceMap ? ' · Glace' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
+  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${iceMap ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
@@ -376,6 +383,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (sowerFight) setTimeout(() => toast('Le Semeur : ses graines mûres l’épargnent, mais une graine touchée par ton obus explose aussitôt… et le blesse s’il est à côté !', 4600), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
+  else if (levelFog !== undefined) setTimeout(() => toast(coopLike(msg.mode) ? 'Brouillard : au cœur de la brume, un tank ne se voit que de près… ou quand il tire. Les ennemis aussi te perdent de vue !' : 'Brouillard : cache-toi dans la brume ! Chaque tir trahit ta position.', 4600), 2200);
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
@@ -570,7 +578,7 @@ function onlineFrame(dt: number) {
   renderTick += dt * TICK_RATE;
   if (Math.abs(renderTick - target) > 8) renderTick = target;
   else renderTick += (target - renderTick) * Math.min(1, dt * 3);
-  renderer.windTick = renderTick; // the gust is a function of the tick: the same as the server's
+  renderer.windTick = renderer.fogTick = renderTick; // the gust is a function of the tick: the same as the server's
   if (levelWind !== undefined && (windSoundT -= dt) <= 0) {
     windSoundT = 0.15;
     const k = gustAt(renderTick);
@@ -1198,7 +1206,7 @@ function renderLobby() {
     ? `La taupe (${TAUPE_MIN_PLAYERS} ou 4 joueurs) : ${TAUPE_STAGES} missions en coop… mais l’un de vous, tiré au sort en secret, veut les faire échouer. Après chaque mission, le conseil vote : démasquez la taupe pour gagner, mais accuser un innocent coûte une vie. La taupe gagne si vous perdez vos 3 vies.`
     : lobbyMode === 'atelier'
     ? (lobbyAtelier
-      ? `Atelier : « ${lobbyAtelier.name} », une mission dessinée par l’hôte, à jouer en coop avec ${ATELIER_LIVES} vies.${lobbyAtelier.night ? ' De nuit.' : ''}${lobbyAtelier.storm ? ' Sous l’orage.' : ''}${lobbyAtelier.wind ? ' Dans le vent.' : ''}`
+      ? `Atelier : « ${lobbyAtelier.name} », une mission dessinée par l’hôte, à jouer en coop avec ${ATELIER_LIVES} vies.${lobbyAtelier.night ? ' De nuit.' : ''}${lobbyAtelier.storm ? ' Sous l’orage.' : ''}${lobbyAtelier.wind ? ' Dans le vent.' : ''}${lobbyAtelier.fog ? ' Dans le brouillard.' : ''}`
       : 'Atelier : l’hôte dessine sa propre mission (murs, liège, trous, tunnels, portails, ennemis et même un boss), puis vous la jouez en coop.')
     : lobbyMode === 'coop'
     ? `Campagne coopérative : ${LEVELS.length + Object.keys(EXTRA_LEVELS).length} missions faites main, mêlées aux missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions. Pas assez de monde ? Ajoute jusqu’à 3 coéquipiers pilotés par l’ordinateur.`
@@ -1467,6 +1475,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
   g.storm = opts.storm ?? (!!lvl.storm || (!opts.heroes && opts.mission === undefined && Math.random() < 0.18));
   // the wind (iteration 23): its own setting, and sometimes on the home screen
   g.wind = lvl.wind ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && Math.random() < 0.16 ? Math.floor(Math.random() * 8) * (Math.PI / 4) : undefined);
+  // the fog (iteration 26): its own setting, and sometimes on the home screen (on calm, daylit tables)
+  g.fog = lvl.fog ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && !g.night && g.wind === undefined && Math.random() < 0.16 ? 1 + Math.floor(Math.random() * 999) : undefined);
   if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
   if (opts.daily) applyTwist(g, dailyTwist(opts.daily.day));
   if (opts.heroes) {
@@ -1495,6 +1505,8 @@ function startAttract(opts: AttractOpts = attractOpts) {
   renderer.setNight(g.night);
   renderer.setStorm(g.storm);
   renderer.setWind(g.wind);
+  renderer.fogAlly = (id) => g.tankById(id)?.team === 1; // the camera sees through the mist around the heroes
+  renderer.setFog(g.fog);
 }
 function stopAttract() {
   attract = undefined;
@@ -1512,6 +1524,7 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
   g.night = !!lvl.night;
   g.storm = !!lvl.storm;
   g.wind = lvl.wind;
+  g.fog = lvl.fog;
   const names = [0, 1, 2, 3].map((i) => RIVAL_NAMES[(vs.round + i * 3) % RIVAL_NAMES.length]);
   lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
     const t = g.addTank('player', i + 1, x, y, PLAYER_COLORS[i], `ia:${i + 1}`, names[i]);
@@ -1530,6 +1543,8 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
   renderer.setNight(g.night);
   renderer.setStorm(g.storm);
   renderer.setWind(g.wind);
+  renderer.fogAlly = () => true; // the camera follows everybody: the mist only hides them from each other
+  renderer.setFog(g.fog);
   renderVsBoard();
 }
 
@@ -1569,6 +1584,7 @@ function startAttractFlags(c: AttractFlags, arms?: Weapon[]) {
   renderer.setNight(g.night);
   renderer.setStorm(false);
   renderer.setWind(g.wind);
+  renderer.setFog(undefined);
   renderCtfBoard();
 }
 
@@ -1633,7 +1649,7 @@ function attractFrame(dt: number) {
     g.events = [];
   }
   const u = attractAcc / DT;
-  renderer.windTick = g.tick + u;
+  renderer.windTick = renderer.fogTick = g.tick + u;
   const tanks: RTank[] = g.tanks.map((t) => {
     const p = attractPrev.get(t.id) ?? t;
     const w = jumped(p.x, p.y, t.x, t.y, u);
@@ -2122,8 +2138,8 @@ if (params.has('demo')) {
       $('#hud').hidden = true;
       attract = undefined;
       startAttract({ heroes: true, atelier: a, arms: arms?.filter(isWeapon) });
-      const wx = `${a.night ? ' · Nuit' : ''}${a.storm ? ' · Orage' : ''}${a.wind ? ' · Vent' : ''}`;
-      banner(`Atelier · mission maison${wx}`, a.name, `Tanks ennemis : ${atelierLevel(a).enemies.length}`, `intro atelier${a.night ? ' night' : ''}${a.storm ? ' storm' : ''}${a.wind ? ' wind' : ''}`);
+      const wx = `${a.night ? ' · Nuit' : ''}${a.storm ? ' · Orage' : ''}${a.wind ? ' · Vent' : ''}${a.fog ? ' · Brouillard' : ''}`;
+      banner(`Atelier · mission maison${wx}`, a.name, `Tanks ennemis : ${atelierLevel(a).enemies.length}`, `intro atelier${a.night ? ' night' : ''}${a.storm ? ' storm' : ''}${a.wind ? ' wind' : ''}${a.fog ? ' fog' : ''}`);
       setTimeout(hideBanner, 2600);
       return a.name;
     },

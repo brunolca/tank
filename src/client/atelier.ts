@@ -157,6 +157,7 @@ export class Workshop {
   night = false;
   storm = false;
   wind = false; // iteration 23: a wind that blows to the right
+  fog = false; // iteration 26: banks of mist drifting over the table
   private brush = '#';
   private mirror = false;
   private undo: string[][] = [];
@@ -188,6 +189,7 @@ export class Workshop {
               <label class="check"><input type="checkbox" data-o="night" /> Nuit</label>
               <label class="check"><input type="checkbox" data-o="storm" /> Orage</label>
               <label class="check" title="Le vent souffle vers la droite et courbe les obus"><input type="checkbox" data-o="wind" /> Vent</label>
+              <label class="check" title="Des bancs de brume dérivent et cachent les tanks"><input type="checkbox" data-o="fog" /> Brouillard</label>
             </div>
             <div class="at-tools">
               <select class="at-tpl" aria-label="Partir d’une mission"></select>
@@ -235,7 +237,7 @@ export class Workshop {
     const nameIn = root.querySelector<HTMLInputElement>('.at-name input')!;
     nameIn.addEventListener('input', () => { this.name = nameIn.value; this.save(); });
     root.querySelectorAll<HTMLInputElement>('.at-opts input').forEach((i) => i.addEventListener('change', () => {
-      const o = i.dataset.o as 'mirror' | 'night' | 'storm' | 'wind';
+      const o = i.dataset.o as 'mirror' | 'night' | 'storm' | 'wind' | 'fog' | 'fog';
       this[o] = i.checked;
       this.hooks.click();
       this.changed();
@@ -278,7 +280,7 @@ export class Workshop {
   }
 
   value(): AtelierMap {
-    return { name: cleanName(this.name) || 'Ma mission', map: this.map.slice(), night: this.night || undefined, storm: this.storm || undefined, wind: this.wind || undefined };
+    return { name: cleanName(this.name) || 'Ma mission', map: this.map.slice(), night: this.night || undefined, storm: this.storm || undefined, wind: this.wind || undefined, fog: this.fog || undefined };
   }
 
   set(a: AtelierMap) {
@@ -289,6 +291,7 @@ export class Workshop {
     this.night = !!a.night;
     this.storm = !!a.storm;
     this.wind = !!a.wind;
+    this.fog = !!a.fog;
     this.changed();
   }
 
@@ -358,12 +361,12 @@ export class Workshop {
     this.root.querySelectorAll<HTMLButtonElement>('.at-brushes button').forEach((b) => b.classList.toggle('on', b.dataset.ch === this.brush));
     const nameIn = this.root.querySelector<HTMLInputElement>('.at-name input')!;
     if (document.activeElement !== nameIn) nameIn.value = this.name;
-    this.root.querySelectorAll<HTMLInputElement>('.at-opts input').forEach((i) => (i.checked = this[i.dataset.o as 'mirror' | 'night' | 'storm' | 'wind']));
+    this.root.querySelectorAll<HTMLInputElement>('.at-opts input').forEach((i) => (i.checked = this[i.dataset.o as 'mirror' | 'night' | 'storm' | 'wind' | 'fog']));
     const why = checkAtelier(this.map);
     const lvl = parseLevel({ name: '', map: this.map });
     const st = this.root.querySelector('.at-status')!;
     st.classList.toggle('bad', !!why);
-    st.textContent = why ?? `Prête à jouer : ${lvl.enemies.length} tank${lvl.enemies.length > 1 ? 's' : ''} ennemi${lvl.enemies.length > 1 ? 's' : ''}${this.night ? ', de nuit' : ''}${this.storm ? ', sous l’orage' : ''}${this.wind ? ', dans le vent' : ''}.`;
+    st.textContent = why ?? `Prête à jouer : ${lvl.enemies.length} tank${lvl.enemies.length > 1 ? 's' : ''} ennemi${lvl.enemies.length > 1 ? 's' : ''}${this.night ? ', de nuit' : ''}${this.storm ? ', sous l’orage' : ''}${this.wind ? ', dans le vent' : ''}${this.fog ? ', dans le brouillard' : ''}.`;
     this.root.querySelector<HTMLButtonElement>('[data-a="play"]')!.disabled = !!why;
     this.root.querySelector<HTMLButtonElement>('[data-a="undo"]')!.disabled = !this.undo.length;
   }
@@ -376,7 +379,7 @@ export class Workshop {
     try {
       const a = JSON.parse(localStorage.getItem('tanks.atelier') ?? 'null') as AtelierMap | null;
       if (a && Array.isArray(a.map) && a.map.length === H && a.map.every((r) => typeof r === 'string' && r.length === W)) {
-        this.map = a.map.slice(); this.name = String(a.name ?? 'Ma mission'); this.night = !!a.night; this.storm = !!a.storm; this.wind = !!a.wind;
+        this.map = a.map.slice(); this.name = String(a.name ?? 'Ma mission'); this.night = !!a.night; this.storm = !!a.storm; this.wind = !!a.wind; this.fog = !!a.fog;
       }
     } catch {}
   }
@@ -395,7 +398,7 @@ export class Workshop {
     order.sort((p, q) => rank(p.ch) - rank(q.ch) || (rank(p.ch) < 5 ? p.y - q.y || p.x - q.x : p.x - q.x));
     this.map = blankMap().map((r) => r.replace(/[12]/g, '.'));
     this.name = '';
-    this.night = !!a.night; this.storm = !!a.storm; this.wind = !!a.wind;
+    this.night = !!a.night; this.storm = !!a.storm; this.wind = !!a.wind; this.fog = !!a.fog;
     this.renderUi();
     this.draw();
     let k = 0;

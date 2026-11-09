@@ -1,7 +1,7 @@
 {
-  "iteration": 25,
+  "iteration": 26,
   "date": "2026-11-09",
-  "title": "Le Semeur",
+  "title": "Le brouillard",
   "journal": [
     {
       "iteration": 1,
@@ -305,6 +305,18 @@
         "Faire sauter une mine ennemie d’un obus compte maintenant pour toi : chaque tank soufflé te rapporte de l’expérience.",
         "Les quatre boss se relaient toutes les dix missions, et un Semeur sur deux se bat dans le vent.",
         "Sur l’accueil, un bestiaire dit qui est qui : chaque couleur d’ennemi, et ce qu’elle annonce."
+      ]
+    },
+    {
+      "iteration": 26,
+      "date": "2026-11-09",
+      "title": "Le brouillard",
+      "notes": [
+        "Le brouillard se lève : des bancs de brume dérivent lentement sur la table. Au cœur de la brume, un tank ne se voit que de près… ou à l’éclair de son tir.",
+        "Les ennemis aussi te perdent de vue : glisse-toi dans la brume pour les contourner, ou attends qu’ils en sortent.",
+        "Deux nouvelles missions, « Purée de pois » (35ᵉ) et « Les marais » (36ᵉ), puis une mission générée sur cinq dans la brume, les jours sans vent.",
+        "En versus, une manche sur sept se joue à cache-cache dans le brouillard. Dans l’atelier, une nouvelle case « Brouillard » pour tes missions maison.",
+        "Une corne de brume résonne au loin de temps en temps. Écoute bien !"
       ]
     }
   ]

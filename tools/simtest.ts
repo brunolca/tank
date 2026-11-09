@@ -6,6 +6,7 @@ import { Game, driveStep, slideDrive } from '../src/shared/sim';
 import { BOLT_R, BULLET_SPEED, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
+import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
@@ -31,6 +32,7 @@ for (let mission = 1; mission <= LEVELS.length + 15; mission++) {
   g.bonusEvery = [3, 5];
   g.storm = !!lvl.storm;
   g.wind = lvl.wind;
+  g.fog = lvl.fog;
   let kills = 0, shots = 0, ticks = 0;
   g.onKill = () => kills++;
   const inputs = new Map();
@@ -1537,4 +1539,82 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
   if (!sows) fail('pas de semailles en 60 s');
   if (process.exitCode !== 1) console.log(`Semeur OK (${sows} semailles, ${bursts} graines éclatées, ${hurts} coup(s) encaissé(s) en 60 s, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the fog (iteration 26): drifting banks of mist, pure functions of the tick; deep inside one, a tank is lost to sight
+{
+  const fail = (m: string) => { console.error('BROUILLARD:', m); process.exitCode = 1; };
+  // the same banks at the same tick, everywhere; they move, stay over the table, and cover a fair share of it
+  const a = fogBanks(7, 300), b = fogBanks(7, 300).map((k) => ({ ...k }));
+  if (JSON.stringify(a) !== JSON.stringify(b)) fail('bancs différents au même tick');
+  const later = fogBanks(7, 600);
+  if (later.every((k, i) => Math.hypot(k.x - b[i].x, k.y - b[i].y) < 0.3)) fail('les bancs ne dérivent pas');
+  let covered = 0, samples = 0;
+  for (let tick = 0; tick < 30 * 120; tick += 90) {
+    const bs = fogBanks(3, tick);
+    for (const k of bs) if (k.x < 0 || k.x > W || k.y < 0 || k.y > H) fail(`banc hors de la table (${k.x.toFixed(1)}, ${k.y.toFixed(1)})`);
+    for (let y = 0.5; y < H; y++) for (let x = 0.5; x < W; x++) { samples++; if (fogDensity(bs, x, y) >= 0.5) covered++; }
+  }
+  const share = covered / samples;
+  if (share < 0.12 || share > 0.5) fail(`part de la table dans la brume : ${(share * 100).toFixed(0)} %`);
+  // a tank in the heart of a bank: hidden from afar, seen up close, seen right after it fires
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  g.fog = 11;
+  g.frozen = false;
+  g.step(new Map());
+  const bank = g.fogNow[0];
+  const e = g.addTank('ash', 99, bank.x, bank.y, 0);
+  e.ai = undefined;
+  const far = g.addTank('player', 0, bank.x > W / 2 ? 1.5 : W - 1.5, bank.y > H / 2 ? 1.5 : H - 1.5, 0x3d7bff);
+  const fogAt = (x: number, y: number) => fogDensity(g.fogNow, x, y);
+  if (fogAt(e.x, e.y) < 0.99) fail('le cœur du banc n’est pas dense');
+  if (fogAt(far.x, far.y) < 0.5 && g.canSee(far, e)) fail('un tank au cœur de la brume se voit de loin');
+  const near = g.addTank('player', 0, e.x + FOG_SIGHT * 0.6, e.y, 0x3d7bff);
+  if (!g.canSee(near, e)) fail('un tank tout près ne se voit pas dans la brume');
+  e.reveal = 1;
+  if (!g.canSee(far, e)) fail('le tir ne trahit pas le tank dans la brume');
+  e.reveal = 0;
+  if (!fogHides(g.fogNow, e.x, e.y, far.x, far.y)) fail('fogHides incohérent');
+  g.fog = undefined; g.step(new Map());
+  if (!g.canSee(far, e)) fail('sans brouillard, tout le monde se voit');
+  // the missions: 35 and 36 by hand, some generated ones from the 37th, by day and without wind; never in the daily challenge nor the mole
+  const fm: number[] = [];
+  for (let mission = 1; mission <= 160; mission++) { const l = getMission(mission); if (l.fog !== undefined) { fm.push(mission); if (l.night || l.wind !== undefined) fail(`mission ${mission} : brouillard de nuit ou dans le vent`); } }
+  if (!fm.includes(35) || !fm.includes(36)) fail('missions 35 et 36 sans brouillard');
+  if (fm.some((m) => m < 35)) fail('du brouillard avant la 35ᵉ mission');
+  if (fm.length < 10) fail(`trop peu de missions dans la brume (${fm.length})`);
+  if (fm.some((m) => m % 10 === 0)) fail('du brouillard sur un boss');
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).fog !== undefined) fail('brouillard dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).fog !== undefined) fail('brouillard dans la taupe');
+  if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].some((r) => versusArena(r).fog !== undefined)) fail('pas de brouillard en versus');
+  // the workshop: a « Brouillard » box, kept in the share code
+  const map = blankMap();
+  const back = decodeAtelier(encodeAtelier({ name: 'Purée', map, fog: true, wind: true }));
+  if (!back?.fog || !back.wind) fail('atelier : le brouillard se perd dans le code');
+  if (atelierLevel({ name: 'Purée', map, fog: true }).fog === undefined) fail('atelier : pas de brouillard malgré la case');
+  if (decodeAtelier(encodeAtelier({ name: 'Clair', map }))?.fog) fail('atelier : du brouillard sans case cochée');
+  // duos of AI players clear the foggy missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0;
+  const games = [35, 36, fm.find((m) => m > 36)!];
+  for (const mission of games) {
+    for (let run = 0; run < 2; run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      s2.fog = lvl.fog;
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout du brouillard');
+  if (process.exitCode !== 1) console.log(`brouillard OK (missions : ${fm.join(', ')}, ${(share * 100).toFixed(0)} % de la table dans la brume, ${cleared}/6 parties gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
 }

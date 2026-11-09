@@ -4,6 +4,7 @@ import {
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
+import { fogBanks, fogHides, type FogBank } from './fog';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
@@ -245,6 +246,10 @@ export class Game {
   wind?: number;
   /** The pull of the wind this tick (tiles/s²), see windAt. */
   gust: [number, number] = [0, 0];
+  /** Fog (iteration 26): the seed of the banks of mist drifting over the table, undefined on a clear one. */
+  fog?: number;
+  /** Where the banks of mist are this tick (see fogBanks). */
+  fogNow: FogBank[] = [];
   /** « Drapeaux » (iteration 24): the two flags of a capture-the-flag round (undefined in every other mode). */
   flags?: CtfFlag[];
   /** The team that brought the enemy flag home this round (0: not yet). */
@@ -331,6 +336,8 @@ export class Game {
     this.tick++;
     if (this.frozen) return;
     if (this.wind !== undefined) this.gust = windAt(this.wind, this.tick);
+    if (this.fog !== undefined) fogBanks(this.fog, this.tick, this.fogNow);
+    else if (this.fogNow.length) this.fogNow = [];
     for (const t of this.tanks) {
       if (!t.alive) continue;
       t.fireCd -= DT;
@@ -1411,6 +1418,8 @@ export class Game {
     if (o.team === t.team) return true;
     // a tank in a tunnel is out of sight, unless you are right at its door (iteration 13)
     if (this.inTunnel(o) && (o.x - t.x) ** 2 + (o.y - t.y) ** 2 > TUNNEL_SIGHT * TUNNEL_SIGHT) return false;
+    // lost in a bank of mist (iteration 26), unless close by, or its muzzle flash (or a lightning flash) just gave it away
+    if (this.fogNow.length && o.reveal <= 0 && this.flash <= 0 && fogHides(this.fogNow, o.x, o.y, t.x, t.y, o.r)) return false;
     if (!this.night || o.reveal > 0 || this.flash > 0) return true;
     const d = NIGHT_SIGHT + o.r;
     return (o.x - t.x) ** 2 + (o.y - t.y) ** 2 < d * d;

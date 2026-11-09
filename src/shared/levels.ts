@@ -18,6 +18,7 @@ export interface LevelDef {
   night?: boolean; // dark table: the AI only sees up close (or a muzzle flash), players drive with headlights
   storm?: boolean; // lightning strikes fall on the table, announced by a crackling ring (iteration 9)
   wind?: number; // a wind bends the shells (iteration 23): where it mainly blows, in degrees (0 right, 90 down the map, 180 left, 270 up)
+  fog?: number; // banks of mist drift over the table (iteration 26): the seed of their paths (see fog.ts)
   /** Optional overlay of conveyor belts (same 17 rows, only > < ^ V count): lets a tank start on a belt (iteration 16). */
   belts?: string[];
 }
@@ -744,6 +745,55 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 26: the first fog. Banks of mist drift across the table: deep inside one, a tank is lost to sight
+  // (unless you come close, or it fires); the browns and greens wait in the mist, the ashes prowl
+  35: {
+    name: 'Purée de pois',
+    fog: 1,
+    map: [
+      '......................',
+      '..1...........o.......',
+      '..............o...b...',
+      '..2.....##....o.......',
+      '........##............',
+      '.....................a',
+      '....oo.......##.......',
+      '....oo.......##...g...',
+      '.........a............',
+      '......................',
+      '...........oo.....##..',
+      '....##.....oo.....##..',
+      '....##................',
+      '................a.....',
+      '.........o............',
+      '.........o.......b....',
+      '......................',
+    ],
+  },
+  // iteration 26: marshes in the fog, pools that shells fly over, a white tank somewhere in the mist
+  36: {
+    name: 'Les marais',
+    fog: 7,
+    map: [
+      '......................',
+      '..1...................',
+      '.......____......p....',
+      '..2....____...........',
+      '...............___....',
+      '.....m.........___....',
+      '......................',
+      '..___.......y.....m...',
+      '..___.................',
+      '.........____.........',
+      '.........____...___...',
+      '......p.........___...',
+      '......................',
+      '...___......m.........',
+      '...___..........w.....',
+      '......................',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -797,6 +847,8 @@ export interface ParsedLevel {
   storm?: boolean;
   /** Wind (iteration 23): where it mainly blows, in radians (grid axes), when it blows. */
   wind?: number;
+  /** Fog (iteration 26): the seed of the banks of mist, when there is fog. */
+  fog?: number;
   /** Floor layer: conveyor belts (iteration 16) and ice (iteration 21), one code per cell (0 none, 1 right, 2 left, 3 up, 4 down, 5 ice), only when the map has some. */
   belts?: number[];
 }
@@ -836,7 +888,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       }
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180 };
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180, fog: def.fog };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
@@ -863,6 +915,8 @@ export interface GenOptions {
   seed?: number; portals?: boolean; night?: boolean; storm?: boolean; name?: string;
   /** Wind direction in radians, or false for a calm table. Campaign missions from the 33rd: about one in five is windy. */
   wind?: number | false;
+  /** Fog seed, or false for a clear table. Campaign missions from the 37th: about one in five, by day and without wind (iteration 26). */
+  fog?: number | false;
   /** Share of the enemies swapped for steel tanks (iteration 10). Campaign missions from the 21st: 0.22; the daily challenge: 0 unless its twist says so. */
   armored?: number;
 }
@@ -959,10 +1013,19 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
       const rw = rng(mission * 5381 + 29);
       if (rw() < 0.22) wind = Math.floor(rw() * 8) * (Math.PI / 4);
     }
-    const name = wind !== undefined
+    // and from the 37th, about one in five of the calm days is foggy (iteration 26; one more stream again)
+    let fog: number | undefined;
+    if (opt.fog !== undefined) fog = opt.fog === false ? undefined : opt.fog;
+    else if (opt.seed === undefined && mission > 36 && !night && wind === undefined) {
+      const rf = rng(mission * 8123 + 61);
+      if (rf() < 0.24) fog = 1 + Math.floor(rf() * 1000);
+    }
+    const name = fog !== undefined
+      ? storm ? `Brume d’orage ${mission}` : `Mission de brume ${mission}`
+      : wind !== undefined
       ? storm ? `Tempête ${mission}` : night ? `Nuit de vent ${mission}` : `Coup de vent ${mission}`
       : storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`;
-    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm, wind };
+    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm, wind, fog };
   }
   return parseLevel(LEVELS[0]);
 }
@@ -1226,6 +1289,7 @@ export function versusArena(round: number): ParsedLevel {
   base.night = round % 4 === 3; // every fourth round is fought in the dark
   base.storm = round % 5 === 2; // and one in five under a storm (from the third round)
   base.wind = round % 6 === 4 ? ((round * 3) % 8) * (Math.PI / 4) : undefined; // and one in six in the wind (iteration 23), from the fifth
+  base.fog = round % 7 === 5 && !base.night && base.wind === undefined ? 3 + round : undefined; // and one in seven in the fog (iteration 26): hide and seek
   return base;
 }
 

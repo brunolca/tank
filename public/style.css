@@ -356,6 +356,12 @@ body.demo #boss-bar { top: 18px; }
 #banner.wind:not(.storm):not(.night) .b-kicker::before { content: '🍂 '; }
 #banner.wind .b-title { animation: wind-title 2.6s ease-in-out infinite; }
 @keyframes wind-title { 0%, 100% { transform: skewX(0deg) translateX(0); } 40% { transform: skewX(-6deg) translateX(6px); } 70% { transform: skewX(-2deg) translateX(2px); } }
+/* fog (iteration 26): a pale kicker and a title that blurs in and out of the mist */
+#banner.fog .b-kicker { color: #e6e9ee; }
+#banner.fog:not(.storm):not(.wind) .b-kicker::before { content: '🌫 '; }
+#banner.fog .b-title { animation: fog-title 3.4s ease-in-out infinite; }
+@keyframes fog-title { 0%, 100% { filter: blur(0); opacity: 1; } 50% { filter: blur(2.5px); opacity: 0.72; } }
+@media (prefers-reduced-motion: reduce) { #banner.fog .b-title { animation: none; } }
 @keyframes storm-title {
   0%, 86%, 92%, 100% { text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
   88%, 94% { text-shadow: 0 0 30px rgba(210, 225, 255, 0.95), 0 0 6px #fff; }

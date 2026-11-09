@@ -286,6 +286,16 @@ export const sfx = {
     tone(t + 0.15, 0.2, 700, 720, 0.18, 'square');
     tone(t + 0.15, 0.2, 350, 360, 0.08, 'triangle');
   },
+  /** A foghorn far away (iteration 26): two long, low notes, the second one lower, and the breath of the mist. */
+  foghorn() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 1.5, 116, 112, 0.09, 'sawtooth');
+    tone(t, 1.5, 233, 226, 0.035, 'triangle');
+    tone(t + 1.6, 2.1, 87, 82, 0.1, 'sawtooth');
+    tone(t + 1.6, 2.1, 174, 166, 0.04, 'triangle');
+    noise(t, 3.6, 380, 0.7, 0.05, 'lowpass', 200);
+  },
   /** The lightning falls: a sharp crack, then the thunder rolls. */
   thunder() {
     if (!ctx) return;

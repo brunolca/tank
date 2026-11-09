@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 40, arms: ['canon', 'ricochet'], seconds: 16, sows: [1.2, 8.5], seedShots: [3.4, 5.6, 10.6, 13], caption: 'Nouveau : le Semeur', sub: 'Le quatrième boss sème des graines géantes qui finissent par exploser' },
-  { mission: 40, arms: ['ricochet', 'canon'], bossHp: 5, seconds: 13, sows: [0.8, 6.5], seedShots: [2.8, 4.6, 8.6, 10.6], caption: 'Tire sur ses graines !', sub: 'Touchée, une graine explose aussitôt… et blesse le Semeur s’il est à côté' },
-  { mission: 80, arms: ['canon', 'fusee'], seconds: 11, sows: [1, 6.5], seedShots: [3.2, 8.8], caption: 'Le Semeur dans le vent', sub: 'Un sur deux se bat dans la bourrasque : vise en amont' },
-  { bestiary: 7, seconds: 7, caption: '' }, // no caption: the open bestiary speaks for itself (the caption would hide it)
-  { drapeau: [3, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 9, caption: 'Et toujours les drapeaux', sub: 'Les Bleus contre les Rouges, à quatre en ligne' },
-  { mission: 36, arms: ['canon', 'ricochet'], seconds: 8, caption: 'La campagne continue', sub: 'Quatre boss se relaient toutes les dix missions' },
+  { mission: 35, arms: ['canon', 'ricochet'], seconds: 16, caption: 'Nouveau : le brouillard', sub: 'Des bancs de brume dérivent sur la table et cachent les tanks' },
+  { mission: 36, arms: ['ricochet', 'canon'], seconds: 14, caption: 'Les marais', sub: 'Au cœur de la brume, un tank ne se voit que de près… ou quand il tire' },
+  { versus: [5, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 12, caption: 'Cache-cache en versus', sub: 'Une manche sur sept se joue dans le brouillard' },
+  { mission: 52, arms: ['canon', 'fusee'], seconds: 9, caption: 'Missions de brume', sub: 'Une mission générée sur cinq, les jours sans vent' },
+  { mission: 40, arms: ['canon', 'ricochet'], seconds: 9, sows: [1, 6], seedShots: [3, 7.5], caption: 'Et toujours le Semeur', sub: 'Quatre boss se relaient toutes les dix missions' },
+  { drapeau: [3, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 8, caption: 'Et les drapeaux', sub: 'Les Bleus contre les Rouges, à quatre en ligne' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();

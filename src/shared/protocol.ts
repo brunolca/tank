@@ -84,7 +84,7 @@ export type GameEvent =
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
-export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean; wind?: boolean } // wind: iteration 23, it blows to the right
+export interface AtelierMap { name: string; map: string[]; night?: boolean; storm?: boolean; wind?: boolean; fog?: boolean } // wind: iteration 23, it blows to the right; fog: iteration 26
 
 /** One finished run on the daily board. */
 export interface BoardEntry {
@@ -141,6 +141,7 @@ export type ServerMsg =
       night?: 1; // night mission (older clients just play it in daylight)
       storm?: 1; // storm: lightning strikes (iteration 9; older clients see tanks blow up without the lightning)
       wind?: number; // wind (iteration 23): where it mainly blows (radians); the gust of the moment follows from the tick (see wind.ts). Older clients just see the shells curve
+      fog?: number; // fog (iteration 26): the seed of the drifting banks of mist (see fog.ts); older clients just see the enemies hesitate
       belts?: number[]; // conveyor belts, one code per cell (iteration 16; older tabs are told to reload, at worst they see tanks glide)
       daily?: DailyState;
       bases?: number[]; // « Drapeaux » (iteration 24): x1 y1 x2 y2, the bases of the Bleus (team 1) and the Rouges (team 2)
@@ -165,7 +166,7 @@ export type ClientMsg =
   | { t: 'mode'; mode: Mode }
   | { t: 'arm'; w: Weapon } // pick a cannon (iteration 7, applies from the next mission)
   | { t: 'from'; n: number } // host: start the campaign at a checkpoint (1, 6, 11…)
-  | { t: 'atelier'; name: string; map: string[]; night?: boolean; storm?: boolean; wind?: boolean } // host: the workshop mission to play (iteration 14; also switches to that mode)
+  | { t: 'atelier'; name: string; map: string[]; night?: boolean; storm?: boolean; wind?: boolean; fog?: boolean } // host: the workshop mission to play (iteration 14; also switches to that mode)
   | { t: 'rival'; op: 'add' | 'del' | 'lvl'; id?: string } // host, versus lobby: add an AI rival, remove one, or change its level (iteration 17)
   | { t: 'order' } // coop campaign (iteration 20): « Suis-moi ! », the AI teammates come to the sender's tank
   | { t: 'skill'; b: number } // coop campaign (iteration 19): buy the next rank of branch b (0 to 2), or -1 « ready » at the end of a mission
