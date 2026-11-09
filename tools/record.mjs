@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { drapeau: [3, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 18, caption: 'Nouveau : les drapeaux', sub: 'Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi' },
-  { drapeau: [0, [2, 1, 2, 1], true], arms: ['ricochet', 'canon', 'canon', 'sapeur'], seconds: 12, caption: 'Cours jusqu’à ta base !', sub: 'Touché, le porteur lâche le drapeau ; un coéquipier le renvoie d’un contact' },
-  { rivals: 6, lobby: 'drapeau', seconds: 6, caption: 'Seul ou à deux ?', sub: 'Les rivaux pilotés par l’ordinateur complètent les équipes' },
-  { drapeau: [2, [2, 2, 2, 2]], arms: ['canon', 'fusee', 'ricochet', 'canon'], seconds: 13, caption: 'Six arènes symétriques', sub: 'Un tank touché revient à sa base trois secondes plus tard' },
-  { drapeau: [4, [2, 2, 2, 2], true], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 10, caption: 'Le bois de nuit', sub: 'Dans le noir, le porteur se faufile' },
-  { mission: 33, arms: ['canon', 'ricochet'], seconds: 8, gusts: [3], caption: 'Et toujours la campagne coop', sub: 'Le vent souffle encore sur les missions générées' },
+  { mission: 40, arms: ['canon', 'ricochet'], seconds: 16, sows: [1.2, 8.5], seedShots: [3.4, 5.6, 10.6, 13], caption: 'Nouveau : le Semeur', sub: 'Le quatrième boss sème des graines géantes qui finissent par exploser' },
+  { mission: 40, arms: ['ricochet', 'canon'], bossHp: 5, seconds: 13, sows: [0.8, 6.5], seedShots: [2.8, 4.6, 8.6, 10.6], caption: 'Tire sur ses graines !', sub: 'Touchée, une graine explose aussitôt… et blesse le Semeur s’il est à côté' },
+  { mission: 80, arms: ['canon', 'fusee'], seconds: 11, sows: [1, 6.5], seedShots: [3.2, 8.8], caption: 'Le Semeur dans le vent', sub: 'Un sur deux se bat dans la bourrasque : vise en amont' },
+  { bestiary: 7, seconds: 7, caption: '' }, // no caption: the open bestiary speaks for itself (the caption would hide it)
+  { drapeau: [3, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 9, caption: 'Et toujours les drapeaux', sub: 'Les Bleus contre les Rouges, à quatre en ligne' },
+  { mission: 36, arms: ['canon', 'ricochet'], seconds: 8, caption: 'La campagne continue', sub: 'Quatre boss se relaient toutes les dix missions' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -54,6 +54,7 @@ try {
     await page.evaluate((shot) => {
       const d = window.__demo;
       if (shot.home) d.home(shot.home * 1000);
+      else if (shot.bestiary) d.bestiary(shot.bestiary * 1000); // the bestiary on the home screen (iteration 25)
       else if (shot.atelier) d.atelier(shot.atelier * 1000);
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
@@ -79,6 +80,8 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
+      for (const s of shot.sows ?? []) setTimeout(() => d.sow?.(), s * 1000); // the Semeur sows (iteration 25)
+      for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);
       for (const k of shot.buffs ?? []) d.buff?.(k);

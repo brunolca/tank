@@ -1,7 +1,7 @@
 {
-  "iteration": 24,
-  "date": "2026-11-08",
-  "title": "Les drapeaux",
+  "iteration": 25,
+  "date": "2026-11-09",
+  "title": "Le Semeur",
   "journal": [
     {
       "iteration": 1,
@@ -292,6 +292,19 @@
         "Six arènes symétriques, une par manche : le pré carré, les douves, la patinoire, les raccourcis par portail, le bois de nuit et le col venteux.",
         "Seul ou à deux ? Les rivaux pilotés par l’ordinateur complètent les équipes. Ils se partagent les rôles : l’un attaque, l’autre garde la base et poursuit le voleur.",
         "Chaque tank prend les couleurs de son équipe, avec un anneau au sol. Un chrono de 2 min 30 tourne pendant la manche : sans drapeau rapporté, c’est l’égalité."
+      ]
+    },
+    {
+      "iteration": 25,
+      "date": "2026-11-09",
+      "title": "Le Semeur",
+      "notes": [
+        "Un quatrième boss entre en scène : le Semeur, un gros tank vert pomme avec une trémie pleine de grains sur le dos. Il vous attend à la mission 40, puis toutes les 40 missions.",
+        "Quand sa trémie tremble, il lance des graines géantes en cloche : une juste devant toi, les autres tout autour de lui. Le cercle orange au sol montre jusqu’où porte leur souffle, bien plus loin qu’une mine.",
+        "Une graine mûre éclate toute seule sans toucher le Semeur. Mais tire dessus : elle explose aussitôt, et s’il est à côté, c’est lui qui encaisse ! Tes coéquipiers pilotés par l’ordinateur connaissent l’astuce.",
+        "Faire sauter une mine ennemie d’un obus compte maintenant pour toi : chaque tank soufflé te rapporte de l’expérience.",
+        "Les quatre boss se relaient toutes les dix missions, et un Semeur sur deux se bat dans le vent.",
+        "Sur l’accueil, un bestiaire dit qui est qui : chaque couleur d’ennemi, et ce qu’elle annonce."
       ]
     }
   ]

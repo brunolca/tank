@@ -8,6 +8,7 @@ export const TANK_R = 0.36;
 export const BOSS_R = 0.62;
 export const DRILL_R = 0.56;
 export const THUNDER_R = 0.58;
+export const SOWER_R = 0.6;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
 export const MINE_BLAST = 1.55;
@@ -44,7 +45,8 @@ export type TankKind =
   | 'mason'
   | 'thief'
   | 'thunder'
-  | 'rampart';
+  | 'rampart'
+  | 'sower';
 
 export interface TankSpec {
   speed: number;
@@ -87,6 +89,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   thunder: { speed: 1.15, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.2, turretSpeed: 2.3, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: THUNDER_R, label: 'Grondeur' },
   // iteration 22: a big brass shield on its turret sends back every shell that hits it head-on (see RAMPART_*)
   rampart: { speed: 1.1, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.9, turretSpeed: 1.25, mines: 0, skill: 1, reaction: 0.55, aimError: 0.07, label: 'Rempart' },
+  // iteration 25: the fourth boss, it sows giant seed-mines all over the table (see SOWER_*, SEED_*)
+  sower: { speed: 1.1, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.25, turretSpeed: 2.3, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: SOWER_R, label: 'Semeur' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -119,6 +123,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   thief: 0x8e2a4e,
   thunder: 0x34508f,
   rampart: 0x2f6f73,
+  sower: 0x86b33a,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -153,8 +158,8 @@ export const DRILL_BLAST = 1.45;
 export const DRILL_RING_SHOTS = 8;
 /** Flags bit: the Foreur is under the table (nothing can touch it, it touches nothing). */
 export const FLAG_BURROW = 512;
-/** The three bosses that take turns every ten missions. */
-export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder';
+/** The four bosses that take turns every ten missions. */
+export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower';
 
 // ------------------------------------------------------------------ the Grondeur (iteration 18): the boss that calls the lightning
 /** Seconds between two calls (calm, then enraged). */
@@ -165,6 +170,23 @@ export const THUNDER_WARN = 0.85;
 export const THUNDER_PER_FOE: [number, number] = [1, 2];
 /** Most strikes of one call. */
 export const THUNDER_MAX = 5;
+
+// ------------------------------------------------------------------ the Semeur (iteration 25): the boss that sows giant mines
+/** Seconds between two sowings (calm, then enraged). */
+export const SOWER_EVERY: [number, number] = [6.6, 4.4];
+/** Seconds it holds still, its hopper glowing, before the seeds fly (flag FLAG_CHARGING meanwhile). */
+export const SOWER_WARN = 0.9;
+/** Seeds thrown at each sowing (calm, then enraged): one in front of each foe, the rest all around itself. */
+export const SOWER_SEEDS: [number, number] = [4, 6];
+/** Most of its seeds on the table at once. */
+export const SOWER_MAX = 10;
+/** Reach of a seed's blast: much wider than a mine's. */
+export const SEED_BLAST = 2.2;
+/** Seconds before a seed bursts on its own (calm, then enraged); it blinks during the last SEED_BLINK. */
+export const SEED_RIPEN: [number, number] = [5.2, 4.2];
+export const SEED_BLINK = 1.3;
+/** Seconds a seed is in the air after it is thrown: shells fly under it. */
+export const SEED_FLIGHT = 0.5;
 
 // ------------------------------------------------------------------ the Rempart (iteration 22): the tank with a shield
 /** Half-width of the shield's arc (radians), centred on where its turret points: shells hitting inside it bounce back. */

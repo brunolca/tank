@@ -141,6 +141,12 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 180, 
 .help { color: var(--muted); font-size: 14px; }
 .help summary { cursor: pointer; font-weight: 600; }
 .help ul { padding-left: 18px; margin: 8px 0 0; line-height: 1.7; }
+/* the bestiary (iteration 25): one line per enemy, its colour first */
+.help ul.bestiary { list-style: none; padding-left: 0; max-height: 260px; overflow-y: auto; line-height: 1.45; }
+.bestiary li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+.bestiary li::before { content: ''; flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); transform: translateY(1px); }
+.bestiary li.boss::before { width: 14px; height: 14px; box-shadow: 0 0 0 2px #f2c14e; }
+.bestiary b { color: #fff4e0; color: color-mix(in srgb, var(--c) 50%, #fff4e0); }
 kbd {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--line);
@@ -333,6 +339,9 @@ body.demo #boss-bar { top: 18px; }
 #boss-bar.thunder .boss-top b { color: #9cc6ff; }
 #boss-bar.thunder .boss-top b::before { content: '⚡ '; }
 #boss-bar.thunder #boss-fill { background: linear-gradient(180deg, #bcdcff, #3f6fd8); box-shadow: 0 0 12px rgba(110, 160, 255, 0.6); }
+#boss-bar.sower .boss-top b { color: #a6e07a; }
+#boss-bar.sower .boss-top b::before { content: '🌱 '; }
+#boss-bar.sower #boss-fill { background: linear-gradient(180deg, #b8ec8a, #4f8f2a); box-shadow: 0 0 12px rgba(140, 220, 90, 0.55); }
 #banner.boss .b-kicker { color: #ff5d4c; }
 #banner.boss .b-title { color: #f2c14e; }
 #banner.night .b-kicker { color: #9db4ff; }

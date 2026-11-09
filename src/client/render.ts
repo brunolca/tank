@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { isRivalId } from '../shared/rivals';
@@ -10,7 +10,7 @@ import type { TankInfo } from '../shared/protocol';
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; color?: number } // color: the shooter's, for player shells
-export interface RMine { id: number; x: number; y: number; blink: boolean }
+export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number } // seed: a seed of the Semeur (iteration 25), its age in seconds
 /** « Drapeaux » (iteration 24): a flag, state 0 at home, 1 carried by `carrier`, 2 dropped (`left` seconds before it flies home). */
 export interface RFlag { team: number; x: number; y: number; carrier: number; state: number; left: number }
 
@@ -192,6 +192,7 @@ interface TankView {
   key?: THREE.Group; // a versus rival (iteration 17): its wind-up key
   cloud?: THREE.Group; // the Grondeur (iteration 18): its own little storm cloud, floating above
   rodBall?: THREE.MeshStandardMaterial; // and the ball of its lightning rod, which glows as it calls
+  hopper?: THREE.Group; // the Semeur (iteration 25): its seed hopper, which shakes as it sows
   shieldMat?: THREE.MeshStandardMaterial; // the Rempart (iteration 22): its brass shield, which flares when a shell bounces off
   shieldGlow?: number;
   under?: boolean;
@@ -437,6 +438,22 @@ const sackMat = new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 1 }
 const ropeMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 });
 const maskMat = new THREE.MeshStandardMaterial({ color: 0x17171c, roughness: 0.6, side: THREE.DoubleSide });
 // the Rempart (iteration 22): a curved brass shield on its turret, as wide as the arc that sends shells back
+// the Semeur (iteration 25): a wooden seed hopper on its back deck, a sprout on its turret, and its giant seeds
+const sowerGeo = {
+  hopper: new THREE.CylinderGeometry(0.24, 0.13, 0.28, 14, 1, true),
+  hopperBottom: new THREE.CircleGeometry(0.13, 14),
+  grain: new THREE.SphereGeometry(0.06, 10, 8),
+  leaf: new THREE.SphereGeometry(0.1, 12, 8),
+  stem: new THREE.CylinderGeometry(0.015, 0.02, 0.2, 6),
+  seed: new THREE.SphereGeometry(0.3, 22, 14),
+  seam: new THREE.TorusGeometry(0.27, 0.025, 6, 28),
+};
+const hopperMat = new THREE.MeshStandardMaterial({ color: 0xb77a3e, roughness: 0.7, side: THREE.DoubleSide });
+const grainMat = new THREE.MeshStandardMaterial({ color: 0xe8b04a, roughness: 0.5, emissive: 0x5a3200, emissiveIntensity: 0.3 });
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x5fc24a, roughness: 0.5 });
+const seedMat = new THREE.MeshStandardMaterial({ color: 0xc98a3a, roughness: 0.55, metalness: 0.05, emissive: 0xff5a10, emissiveIntensity: 0 });
+const seamMat = new THREE.MeshStandardMaterial({ color: 0x7a4a1c, roughness: 0.7 });
+
 const rampartGeo = {
   plate: new THREE.CylinderGeometry(0.5, 0.5, 0.4, 22, 1, true, Math.PI / 2 - RAMPART_ARC, RAMPART_ARC * 2),
   // a flat brass lip on top, so the shield reads from the camera high above the table
@@ -733,6 +750,35 @@ function buildTank(info: TankInfo): TankView {
     root.add(cloud);
     view.cloud = cloud;
     view.rodBall = ballMat;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'sower') {
+    // a toy seed drill: a wooden hopper full of golden grains on the back deck, a green sprout on the turret
+    const hopper = new THREE.Group();
+    const bin = new THREE.Mesh(sowerGeo.hopper, hopperMat);
+    const bottom = new THREE.Mesh(sowerGeo.hopperBottom, hopperMat);
+    bottom.rotation.x = Math.PI / 2;
+    bottom.position.y = -0.14;
+    hopper.add(bin, bottom);
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.4, r = i ? 0.1 + (i % 3) * 0.035 : 0;
+      const g = new THREE.Mesh(sowerGeo.grain, grainMat);
+      g.position.set(Math.cos(a) * r, 0.1 + (i % 2) * 0.03, Math.sin(a) * r);
+      hopper.add(g);
+    }
+    hopper.position.set(-0.28, 0.6, 0);
+    hull.add(hopper);
+    const stem = new THREE.Mesh(sowerGeo.stem, leafMat);
+    stem.position.set(-0.05, 0.25, 0);
+    turret.add(stem);
+    for (const z of [-1, 1]) {
+      const leaf = new THREE.Mesh(sowerGeo.leaf, leafMat);
+      leaf.scale.set(0.5, 0.25, 1);
+      leaf.position.set(-0.05, 0.35, z * 0.08);
+      leaf.rotation.x = z * 0.5;
+      turret.add(leaf);
+    }
+    view.hopper = hopper;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (info.kind === 'mason') {
@@ -1295,7 +1341,7 @@ export class Renderer {
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
     this.bullets.clear();
-    for (const m of this.mines.values()) this.scene.remove(m);
+    for (const m of this.mines.values()) { this.scene.remove(m); if (m.userData.ring) this.scene.remove(m.userData.ring); }
     this.mines.clear();
     for (const c of this.crates.values()) this.removeCrate(c);
     this.crates.clear();
@@ -1854,6 +1900,13 @@ export class Renderer {
       v.turret.position.y = 0.37 * v.scale;
       this.tankGlow(v, t, dt);
       if (v.cloud) this.tankThunder(v, t, dt);
+      if (v.hopper) {
+        const sh = (v.hopper.userData.shake = Math.max(0, (v.hopper.userData.shake ?? 0) - dt * 2.5));
+        const charging = !!((t.fx ?? 0) & FLAG_CHARGING);
+        v.hopper.rotation.z = Math.sin(this.time * 38) * (sh * 0.25 + (charging ? 0.08 : 0));
+        v.hopper.position.y = 0.6 + sh * 0.12;
+        if (charging && Math.random() < 30 * dt) this.glow.emit({ x: t.x, y: 1.1, z: t.y, vx: (Math.random() - 0.5) * 0.8, vy: 1.2, vz: (Math.random() - 0.5) * 0.8, life: 0.4, s0: 0.06, s1: 0.02, c0: 0xffe080, c1: 0xffa020 });
+      }
       if (v.ring) {
         (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(this.time * 4) * 0.25;
       }
@@ -2081,7 +2134,7 @@ export class Renderer {
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
       glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
-      col = v.cloud ? 0x4f8dff : 0xff5a20;
+      col = v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : 0xff5a20;
       if (Math.random() < 60 * dt) {
         // sparks sucked into the hull
         const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
@@ -2321,6 +2374,7 @@ export class Renderer {
     for (const mn of list) {
       seen.add(mn.id);
       let g = this.mines.get(mn.id);
+      if (!g && mn.seed !== undefined) g = this.newSeed(mn);
       if (!g) {
         g = new THREE.Group();
         const base = new THREE.Mesh(geo.mineBase, this.mineMat);
@@ -2337,6 +2391,7 @@ export class Renderer {
         this.scene.add(g);
         this.mines.set(mn.id, g);
       }
+      if (g.userData.seed) { this.syncSeed(g, mn); continue; }
       // mines ride the belts (iteration 16): glide to the new spot, jump when a portal took them
       const far = Math.abs(mn.x - g.position.x) + Math.abs(mn.y - g.position.z) > 1;
       g.position.x += (mn.x - g.position.x) * (far ? 1 : 0.5);
@@ -2347,8 +2402,110 @@ export class Renderer {
       if (on && mn.blink && Math.random() < 0.3) this.glow.emit({ x: mn.x, y: 0.2, z: mn.y, life: 0.12, s0: 0.12, s1: 0.02, c0: 0xff3030 });
     }
     for (const [id, g] of this.mines) {
-      if (!seen.has(id)) { this.scene.remove(g); this.mines.delete(id); }
+      if (!seen.has(id)) {
+        this.scene.remove(g);
+        if (g.userData.ring) this.scene.remove(g.userData.ring);
+        this.mines.delete(id);
+      }
     }
+  }
+
+  /** Where the Semeur last sowed: its new seeds fly out of there (iteration 25). */
+  private sowFrom?: { x: number; y: number; at: number };
+
+  /** A giant seed of the Semeur: a striped wooden seed with a sprout, and a ring on the floor that shows its reach. */
+  private newSeed(mn: RMine): THREE.Group {
+    const g = new THREE.Group();
+    const body = new THREE.Group();
+    const shell = new THREE.Mesh(sowerGeo.seed, seedMat.clone());
+    shell.scale.set(1, 0.78, 0.86);
+    shell.position.y = 0.24;
+    const seam = new THREE.Mesh(sowerGeo.seam, seamMat);
+    seam.position.y = 0.24;
+    seam.scale.set(1, 0.86, 1);
+    const stem = new THREE.Mesh(sowerGeo.stem, leafMat);
+    stem.position.y = 0.5;
+    const leaf = new THREE.Mesh(sowerGeo.leaf, leafMat);
+    leaf.scale.set(0.9, 0.3, 0.45);
+    leaf.position.set(0.07, 0.6, 0);
+    leaf.rotation.z = 0.4;
+    const led = new THREE.Mesh(geo.mineLed, this.ledOff);
+    led.position.set(0, 0.47, 0.12);
+    led.name = 'led';
+    body.add(shell, seam, stem, leaf, led);
+    body.traverse((o) => { o.castShadow = true; });
+    g.add(body);
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xff9a3a, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.scale.setScalar(SEED_BLAST);
+    ring.position.set(mn.x, 0.035, mn.y);
+    this.scene.add(ring);
+    const age = mn.seed ?? 0;
+    const from = this.sowFrom && this.time - this.sowFrom.at < 0.6 && age < SEED_FLIGHT ? this.sowFrom : undefined;
+    g.userData = { seed: true, body, shell: shell.material, ring, born: this.time - age, fx: from?.x ?? mn.x, fy: from?.y ?? mn.y };
+    g.position.set(mn.x, 0, mn.y);
+    this.scene.add(g);
+    this.mines.set(mn.id, g);
+    return g;
+  }
+
+  private syncSeed(g: THREE.Group, mn: RMine) {
+    const ud = g.userData as { body: THREE.Group; shell: THREE.MeshStandardMaterial; ring: THREE.Mesh; born: number; fx: number; fy: number };
+    const age = this.time - ud.born;
+    const u = Math.min(1, age / SEED_FLIGHT);
+    // in the air: an arc from the hopper to where it lands, spinning
+    if (u < 1) {
+      g.position.set(ud.fx + (mn.x - ud.fx) * u, Math.sin(Math.PI * u) * 1.6, ud.fy + (mn.y - ud.fy) * u);
+      ud.body.rotation.z = u * 7;
+    } else {
+      if (ud.body.rotation.z) {
+        ud.body.rotation.z = 0;
+        for (let i = 0; i < 8; i++) {
+          const a = Math.random() * Math.PI * 2;
+          this.smoke.emit({ x: mn.x, y: 0.1, z: mn.y, vx: Math.cos(a) * 1.4, vy: 0.3, vz: Math.sin(a) * 1.4, life: 0.5, s0: 0.08, s1: 0.2, c0: 0xc9a77a, c1: 0xefe0c4, drag: 3 });
+        }
+      }
+      g.position.x += (mn.x - g.position.x) * 0.5;
+      g.position.z += (mn.y - g.position.z) * 0.5;
+      g.position.y = 0;
+    }
+    // it swells as it ripens, glows, then blinks fast before it bursts
+    const ripe = Math.min(1, Math.max(0, age - SEED_FLIGHT) / (SEED_RIPEN[0] - SEED_FLIGHT));
+    const pulse = mn.blink ? 0.5 + 0.5 * Math.sin(this.time * 24) : 0.5 + 0.5 * Math.sin(this.time * (3 + ripe * 6));
+    const sc = 0.9 + ripe * 0.22 + (mn.blink ? pulse * 0.08 : 0);
+    ud.body.scale.set(sc, sc * (1 + (mn.blink ? pulse * 0.06 : 0)), sc);
+    ud.shell.emissiveIntensity = ripe * 0.25 + (mn.blink ? pulse * 0.9 : 0);
+    const ring = ud.ring;
+    ring.position.set(g.position.x, 0.035, g.position.z);
+    (ring.material as THREE.MeshBasicMaterial).opacity = u < 1 ? 0 : 0.18 + ripe * 0.25 + (mn.blink ? pulse * 0.35 : 0);
+    (ring.material as THREE.MeshBasicMaterial).color.setHex(mn.blink ? 0xff4020 : 0xff9a3a);
+    const led = g.getObjectByName('led') as THREE.Mesh;
+    led.material = (mn.blink ? pulse > 0.5 : pulse > 0.85) ? this.ledOn : this.ledOff;
+  }
+
+  /** The Semeur sows (iteration 25): its hopper shakes, a puff of chaff, and the seeds fly out of it. */
+  sow(x: number, y: number, id: number) {
+    this.sowFrom = { x, y, at: this.time };
+    const v = this.tanks.get(id);
+    if (v?.hopper) v.hopper.userData.shake = 1;
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, s = 0.6 + Math.random() * 2;
+      this.debris.emit({ x, y: 1, z: y, vx: Math.cos(a) * s, vy: 2 + Math.random() * 3, vz: Math.sin(a) * s, life: 0.9 + Math.random() * 0.5, s0: 0.05, s1: 0.03, c0: Math.random() < 0.5 ? 0xe8b04a : 0x7fd05a, c1: 0x8a6a2a, grav: 9, drag: 0.6 });
+    }
+  }
+
+  /** A seed bursts: a wide shock wave, a shower of leaves and chaff. */
+  seedBurst(x: number, y: number, r: number) {
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.06, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.55, size: r * 1.15 });
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 3.5;
+      this.debris.emit({ x, y: 0.4, z: y, vx: Math.cos(a) * s, vy: 2 + Math.random() * 4, vz: Math.sin(a) * s, life: 1.2 + Math.random() * 0.8, s0: 0.06 + Math.random() * 0.05, s1: 0.03, c0: Math.random() < 0.6 ? 0x6fcf4f : 0xe8b04a, c1: 0x3a5a1a, grav: 6, drag: 1.2 });
+    }
+    this.shake = Math.max(this.shake, 0.45);
   }
 
   // ---------------------------------------------------------------- effects

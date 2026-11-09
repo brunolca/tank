@@ -263,6 +263,21 @@ export const sfx = {
       noise(t + 0.5, 0.6, 3000, 0.6, 0.2, 'highpass');
     }
   },
+  /** The Semeur sows (iteration 25): a creak of the hopper, then one hollow « plop » per seed thrown. */
+  sow(n: number) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.18, 700, 1.5, 0.25, 'bandpass', 1500);
+    for (let i = 0; i < Math.min(6, n); i++) tone(t + 0.12 + i * 0.07, 0.11, 300 + i * 45, 170 + i * 30, 0.2, 'sine');
+  },
+  /** A seed bursts: a deep thump, a rustle of leaves. */
+  seedBurst() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.6, 95, 30, 0.75, 'sine');
+    noise(t, 1, 1100, 0.6, 0.9, 'lowpass', 70);
+    noise(t + 0.12, 0.5, 4200, 0.9, 0.18, 'bandpass', 2400);
+  },
   /** « Suis-moi ! » (iteration 20): two cheerful toots of a toy horn. */
   rally() {
     if (!ctx) return;

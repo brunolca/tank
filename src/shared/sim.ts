@@ -1,13 +1,16 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
+
+/** Radius of a seed of the Semeur on the table (what a shell must touch to set it off). */
+export const SEED_R = 0.34;
 
 export interface Tank {
   id: number;
@@ -111,6 +114,8 @@ export interface Mine {
   fuse: number;
   dead: boolean;
   blast?: number; // radius of its blast (MINE_BLAST when omitted; « Grand souffle » makes it wider)
+  seed?: number; // a seed of the Semeur (iteration 25): seconds until it bursts on its own (no tank sets it off)
+  by?: number; // tank whose shell set it off (directly or through a chain of blasts): the blast is theirs
 }
 
 interface AIState {
@@ -139,6 +144,7 @@ interface AIState {
   prowlY: number;
   prowlT: number;
   escape?: number; // direction to leave a mine just laid (iteration 13)
+  seed?: Mine; // AI-driven players (iteration 25): a seed of the Semeur worth a shot, right next to it
 }
 
 type Pt = { x: number; y: number };
@@ -268,7 +274,7 @@ export class Game {
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
       r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false, vx: 0, vy: 0,
     };
-    if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
+    if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : kind === 'sower' ? 3.2 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
@@ -622,19 +628,55 @@ export class Game {
 
   updateBoss(t: Tank) {
     const bs = t.boss!;
-    const thunder = t.kind === 'thunder';
+    const thunder = t.kind === 'thunder', sower = t.kind === 'sower';
     if (bs.warn > 0) {
       bs.warn -= DT;
-      if (bs.warn <= 0) { if (thunder) this.thunderCall(t); else this.bossVolley(t); }
+      if (bs.warn <= 0) { if (thunder) this.thunderCall(t); else if (sower) this.sow(t); else this.bossVolley(t); }
       return;
     }
     bs.volleyT -= DT;
     if (bs.volleyT <= 0) {
       // the Grondeur only raises its rod when someone is out there to strike
       if (thunder && !this.tanks.some((o) => o.alive && o.team !== t.team && !under(o))) { bs.volleyT = 0.5; return; }
-      bs.warn = thunder ? THUNDER_WARN : BOSS_VOLLEY_WARN;
-      bs.volleyT = (thunder ? THUNDER_EVERY : BOSS_VOLLEY_EVERY)[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
+      bs.warn = thunder ? THUNDER_WARN : sower ? SOWER_WARN : BOSS_VOLLEY_WARN;
+      bs.volleyT = (thunder ? THUNDER_EVERY : sower ? SOWER_EVERY : BOSS_VOLLEY_EVERY)[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
     }
+  }
+
+  /**
+   * The Semeur (iteration 25) sows: giant seed-mines fly out of its hopper, one in front of each foe (where it is
+   * heading), the rest all around itself. A seed bursts on its own after a few seconds (sparing the Semeur), or at once
+   * when a shell hits it: then its blast belongs to the shooter, and it hurts the Semeur too. Returns the seeds thrown.
+   */
+  sow(t: Tank): number {
+    const rage = t.boss!.rage ? 1 : 0;
+    const mine = this.mines.filter((m) => !m.dead && m.owner === t.id).length;
+    const n = Math.min(SOWER_SEEDS[rage], SOWER_MAX - mine);
+    const spots: Pt[] = [];
+    const ok = (x: number, y: number) => x > 0.6 && y > 0.6 && x < W - 0.6 && y < H - 0.6
+      && tileAt(this.tiles, Math.floor(x), Math.floor(y)) === Tile.Empty
+      && Math.hypot(x - t.x, y - t.y) > t.r + 0.7
+      && !spots.some((p) => Math.hypot(p.x - x, p.y - y) < 1.1)
+      && !this.mines.some((m) => !m.dead && Math.hypot(m.x - x, m.y - y) < 0.9);
+    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team && !under(o));
+    for (const f of foes) {
+      if (spots.length >= n) break;
+      for (let tries = 0; tries < 10; tries++) {
+        const a = f.body + (Math.random() - 0.5) * (0.9 + tries * 0.3), d = 1.3 + Math.random() * 0.9;
+        const x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d;
+        if (ok(x, y)) { spots.push({ x, y }); break; }
+      }
+    }
+    for (let tries = 0; spots.length < n && tries < 50; tries++) {
+      const a = Math.random() * Math.PI * 2, d = 1.5 + Math.random() * 2.8;
+      const x = t.x + Math.cos(a) * d, y = t.y + Math.sin(a) * d;
+      if (ok(x, y)) spots.push({ x, y });
+    }
+    for (const p of spots) {
+      this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: r2(p.x), y: r2(p.y), t: 0, fuse: -1, dead: false, blast: SEED_BLAST, seed: SEED_RIPEN[rage] });
+    }
+    if (spots.length) this.events.push(['sow', r2(t.x), r2(t.y), t.id, spots.length]);
+    return spots.length;
   }
 
   /**
@@ -1081,9 +1123,10 @@ export class Game {
     for (const b of this.bullets) {
       if (b.dead) continue;
       for (const m of this.mines) {
-        if (m.dead) continue;
-        if (Math.hypot(m.x - b.x, m.y - b.y) < MINE_R + BULLET_R) {
+        if (m.dead || (m.seed !== undefined && m.t < SEED_FLIGHT)) continue; // a seed still in the air: the shell flies under it
+        if (Math.hypot(m.x - b.x, m.y - b.y) < (m.seed !== undefined ? SEED_R : MINE_R) + BULLET_R) {
           b.dead = true;
+          m.by = b.owner;
           this.explodeMine(m);
           break;
         }
@@ -1121,7 +1164,7 @@ export class Game {
       if (m.dead) continue;
       m.t += dt;
       if (this.belts.length) [m.x, m.y] = beltStep(this.tiles, this.belts, m.x, m.y, MINE_R, dt); // mines ride the belts too
-      if (m.fuse < 0 && m.t > 0.4) {
+      if (m.fuse < 0 && m.t > 0.4 && m.seed === undefined) {
         for (const t of this.tanks) {
           if (!t.alive || t.team === m.team || t.id === m.owner || under(t)) continue;
           if (Math.hypot(t.x - m.x, t.y - m.y) < MINE_TRIGGER_R + t.r - TANK_R) { m.fuse = 0.55; break; }
@@ -1130,7 +1173,7 @@ export class Game {
       if (m.fuse >= 0) {
         m.fuse -= dt;
         if (m.fuse <= 0) this.explodeMine(m);
-      } else if (m.t >= MINE_FUSE) this.explodeMine(m);
+      } else if (m.t >= (m.seed ?? MINE_FUSE)) this.explodeMine(m);
     }
     this.mines = this.mines.filter((m) => !m.dead);
   }
@@ -1153,11 +1196,15 @@ export class Game {
     if (m.dead) return;
     m.dead = true;
     const R = m.blast ?? MINE_BLAST;
-    this.events.push(['mboom', r2(m.x), r2(m.y)]);
+    const ev: GameEvent = ['mboom', r2(m.x), r2(m.y)];
+    if (m.seed !== undefined) ev.push(R, m.owner); // a seed of the Semeur: a wider blast (older clients ignore it)
+    this.events.push(ev);
     const owner = this.tankById(m.owner);
+    const killer = m.by !== undefined ? this.tankById(m.by) ?? owner : owner;
     for (const t of this.tanks) {
       if (t === owner && t.ranks && t.ranks[1] >= 3) continue; // « Sang-froid »: one's own mines spare one
-      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, owner);
+      if (t === owner && m.seed !== undefined && m.by === undefined) continue; // a ripe seed spares the Semeur: only a shot one hurts it
+      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, killer);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
@@ -1165,6 +1212,7 @@ export class Game {
     for (const o of this.mines) {
       if (!o.dead && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < R + 0.3) {
         if (o.fuse < 0 || o.fuse > 0.12) o.fuse = 0.12;
+        o.by ??= m.by; // a chain of blasts set off by a shell stays the shooter's
       }
     }
     const minX = Math.floor(m.x - R - 1), maxX = Math.floor(m.x + R + 1);
@@ -1314,7 +1362,11 @@ export class Game {
     return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), b.rocket ? 1 : 0, b.owner]);
   }
   netMines(): NetMine[] {
-    return this.mines.map((m) => [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0]);
+    return this.mines.map((m): NetMine => {
+      if (m.seed === undefined) return [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0];
+      // a seed (iteration 25): fifth field, its age in tenths of a second plus one (older clients ignore it)
+      return [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > m.seed - SEED_BLINK ? 1 : 0, 1 + Math.round(m.t * 10)];
+    });
   }
 
   // -------------------------------------------------------------- AI
@@ -1395,6 +1447,8 @@ export class Game {
     if (ai.think <= 0) {
       ai.think = spec.skill >= 2 ? 0.18 : 0.3;
       this.aiThinkAim(t, foe);
+      ai.seed = t.kind === 'player' ? this.seedTarget(t) : undefined;
+      if (ai.seed) { ai.aim = Math.atan2(ai.seed.y - t.y, ai.seed.x - t.x); ai.aimValid = true; }
       if (spec.mines > 0 && ai.mineCd <= 0 && this.ownMines(t) < spec.mines) {
         const d = Math.hypot(foe.x - t.x, foe.y - t.y);
         const allyNear = this.tanks.some((o) => o.alive && o !== t && o.team === t.team && Math.hypot(o.x - t.x, o.y - t.y) < MINE_BLAST + 0.6);
@@ -1427,7 +1481,11 @@ export class Game {
     if (t.fireCd <= 0 && ai.hesitate <= 0 && this.ownBullets(t) < spec.maxBullets) {
       const aligned = spec.skill === 0 || Math.abs(angDiff(t.turret, ai.aim)) < 0.06;
       const res = aligned ? this.traceShot(t, t.turret, spec.bounces) : undefined;
-      if (res?.hit && res.hit.team !== t.team && this.canSee(t, res.hit)) {
+      const seed = ai.seed;
+      if (seed && !seed.dead && Math.abs(angDiff(t.turret, Math.atan2(seed.y - t.y, seed.x - t.x))) < 0.05) {
+        // the seed is in the sights: no hesitation, it will not dodge
+        if (this.tryFire(t)) { ai.seed = undefined; ai.hesitate = 0.3; }
+      } else if (res?.hit && res.hit.team !== t.team && this.canSee(t, res.hit)) {
         if (!ai.locked) {
           // spotted a shot: take a human-ish moment before pulling the trigger
           ai.locked = true;
@@ -1449,6 +1507,28 @@ export class Game {
     }
 
     if (spec.speed > 0) this.aiMove(t, (t.follow && this.followSpot(t)) || foe);
+  }
+
+  /**
+   * A seed of the Semeur worth shooting (iteration 25): landed, right next to the Semeur so its blast hurts it, far
+   * enough from the shooter and its friends, with nothing in the way. Used by AI-driven players (teammates, rivals, demo).
+   */
+  seedTarget(t: Tank): Mine | undefined {
+    let best: Mine | undefined, bd = Infinity;
+    for (const sw of this.tanks) {
+      if (!sw.alive || sw.kind !== 'sower' || sw.team === t.team) continue;
+      for (const m of this.mines) {
+        if (m.dead || m.seed === undefined || m.owner !== sw.id || m.t < SEED_FLIGHT + 0.1) continue;
+        const R = m.blast ?? SEED_BLAST;
+        if (Math.hypot(m.x - sw.x, m.y - sw.y) > R + sw.r * 0.4 - 0.15) continue;
+        const d = Math.hypot(m.x - t.x, m.y - t.y);
+        if (d < R + 0.9 || d > 12 || d >= bd) continue;
+        if (this.tanks.some((o) => o.alive && o.team === t.team && Math.hypot(o.x - m.x, o.y - m.y) < R + 0.6)) continue;
+        if (this.traceShot(t, Math.atan2(m.y - t.y, m.x - t.x), 0).len < d - t.r - 0.5) continue; // a wall or a tank in the way
+        best = m; bd = d;
+      }
+    }
+    return best;
   }
 
   /** Night, nobody in sight: sweep the turret and creep toward the last sighting, or prowl around. */
@@ -1533,9 +1613,10 @@ export class Game {
       if (d < 1e-3) { ax += -b.vy; ay += b.vx; } else { ax += (cx / d) * (1.2 - tt); ay += (cy / d) * (1.2 - tt); }
     }
     for (const m of this.mines) {
+      if (m.seed !== undefined && m.owner === t.id) continue; // the Semeur strolls among its own seeds
       const dx = t.x - m.x, dy = t.y - m.y;
       const d = Math.hypot(dx, dy);
-      if (d >= MINE_BLAST + 0.7) continue;
+      if (d >= (m.blast ?? MINE_BLAST) + 0.7) continue;
       threat = true;
       if (d < 0.08) {
         // sitting right on it (a mine just laid): there is no « away », take the planned way out (iteration 13: they
@@ -1610,9 +1691,11 @@ export class Game {
       }
     }
     for (const m of this.mines) {
-      for (let cy = Math.floor(m.y - 2); cy <= Math.floor(m.y + 2); cy++)
-        for (let cx = Math.floor(m.x - 2); cx <= Math.floor(m.x + 2); cx++)
-          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < MINE_BLAST + 0.4) blocked[cy * W + cx] = 1;
+      if (m.seed !== undefined && m.owner === t.id) continue;
+      const R = (m.blast ?? MINE_BLAST) + 0.4, k = Math.ceil(R);
+      for (let cy = Math.floor(m.y - k); cy <= Math.floor(m.y + k); cy++)
+        for (let cx = Math.floor(m.x - k); cx <= Math.floor(m.x + k); cx++)
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < R) blocked[cy * W + cx] = 1;
     }
     for (const bo of this.bolts) {
       for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++)

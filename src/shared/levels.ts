@@ -7,9 +7,9 @@ import { BELT_CHARS, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
 //         > < ^ V conveyor belts (iteration 16): tanks, mines and crates ride them (the cell stays floor underneath)
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower',
 };
 
 export interface LevelDef {
@@ -1125,23 +1125,77 @@ const THUNDER_ARENAS: string[][] = [
   ],
 ];
 
-export type BossKind = 'boss' | 'drill' | 'thunder';
-/** Which boss holds a boss mission, in turn: the Colosse (10, 40, 70…), the Foreur (20, 50, 80…), the Grondeur (30, 60, 90…). */
+/** The Semeur's fields (iteration 25): cork hedges its seeds blow away, short walls to duck behind, room to run. */
+const SOWER_ARENAS: string[][] = [
+  [
+    '......................',
+    '......................',
+    '..1.....oo....oo......',
+    '..........##..........',
+    '..2...................',
+    '.....#..........#.....',
+    '.....#...o..o...#.....',
+    '......................',
+    '...oo......S......oo..',
+    '......................',
+    '.....#...o..o...#.....',
+    '.....#..........#.....',
+    '......................',
+    '..........##..........',
+    '........oo....oo......',
+    '......................',
+    '......................',
+  ],
+  [
+    '......................',
+    '.1.......o....o.......',
+    '.........o....o.......',
+    '.2..##...........##...',
+    '......................',
+    '.......oooo..oooo.....',
+    '......................',
+    '...HH.............HH..',
+    '...........S..........',
+    '...HH.............HH..',
+    '......................',
+    '.......oooo..oooo.....',
+    '......................',
+    '....##...........##...',
+    '.........o....o.......',
+    '.........o....o.......',
+    '......................',
+  ],
+];
+
+export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower';
+/**
+ * Which boss holds a boss mission, in turn: the Colosse (10, 50, 90…), the Foreur (20, 60, 100…), the Grondeur
+ * (30, 70, 110…) and, since iteration 25, the Semeur (40, 80, 120…).
+ */
 export function bossOf(mission: number): BossKind {
-  const k = Math.round(mission / 10) % 3;
-  return k === 2 ? 'drill' : k === 0 ? 'thunder' : 'boss';
+  const k = Math.round(mission / 10) % 4;
+  return k === 2 ? 'drill' : k === 3 ? 'thunder' : k === 0 ? 'sower' : 'boss';
 }
 
 /** Endless-mode boss fights: an open arena, the boss and two escorts that get nastier. */
 export function bossLevel(mission: number, who: BossKind = bossOf(mission)): ParsedLevel {
+  const cycle = Math.floor(mission / 40); // how many times the four bosses came round already
+  if (who === 'sower') {
+    const lvl = parseLevel({ name: `Le Semeur · ${mission}`, map: SOWER_ARENAS[cycle % SOWER_ARENAS.length] });
+    const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
+    lvl.enemies.push({ kind: esc[0], x: 19.5, y: 2.5 }, { kind: esc[1], x: 19.5, y: 14.5 });
+    // from the second time round, every other field is sown in the wind (80, 160…; it blows down the table)
+    if (cycle % 2 === 0) { lvl.wind = Math.PI / 2; lvl.name = `Le Semeur dans le vent · ${mission}`; }
+    return lvl;
+  }
   if (who === 'thunder') {
-    const lvl = parseLevel({ name: `Le Grondeur · ${mission}`, map: THUNDER_ARENAS[Math.round(mission / 30) % THUNDER_ARENAS.length], storm: true });
+    const lvl = parseLevel({ name: `Le Grondeur · ${mission}`, map: THUNDER_ARENAS[cycle % THUNDER_ARENAS.length], storm: true });
     const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
     lvl.enemies.push({ kind: esc[0], x: 19.5, y: 4.5 }, { kind: esc[1], x: 19.5, y: 12.5 });
     return lvl; // a storm sky: once the Grondeur falls, its lightning runs wild until the mission ends
   }
   if (who === 'drill') {
-    const lvl = parseLevel({ name: `Le Foreur · ${mission}`, map: DRILL_ARENAS[(mission / 20) % DRILL_ARENAS.length | 0] });
+    const lvl = parseLevel({ name: `Le Foreur · ${mission}`, map: DRILL_ARENAS[cycle % DRILL_ARENAS.length] });
     const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
     lvl.enemies.push({ kind: esc[0], x: 19.5, y: 2.5 }, { kind: esc[1], x: 19.5, y: 14.5 });
     return lvl; // always by day: you need to see the ground shake
@@ -1149,8 +1203,8 @@ export function bossLevel(mission: number, who: BossKind = bossOf(mission)): Par
   const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
   const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
   lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });
-  // every other Colosse from the 40th fights at night (40, 100, 160…)
-  if (mission >= 40 && Math.round((mission / 10 - 1) / 3) % 2 === 1) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
+  // every other Colosse from the 50th fights at night (50, 130, 210…)
+  if (mission >= 50 && cycle % 2 === 1) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
   return lvl;
 }
 

@@ -1,7 +1,7 @@
 import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
-import { EXTRA_LEVELS, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
+import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
 import { BOLT_R, BULLET_SPEED, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
@@ -446,11 +446,11 @@ console.log('total', Date.now() - t0, 'ms');
 // the Foreur (iteration 11): the boss of even tens; it digs, burrows toward a foe, shakes the ground, then bursts out
 {
   const fail = (m: string) => { console.error('FOREUR:', m); process.exitCode = 1; };
-  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'boss'], [50, 'drill'], [60, 'thunder'], [70, 'boss'], [90, 'thunder']] as const) {
+  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'boss'], [60, 'drill'], [70, 'thunder'], [80, 'sower'], [90, 'boss'], [130, 'boss']] as const) {
     if (!getMission(mission).enemies.some((e) => e.kind === kind)) fail(`la mission ${mission} devrait opposer ${kind}`);
   }
-  if (getMission(20).night || getMission(50).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
-  if (!getMission(40).night || getMission(70).night) fail('un Colosse sur deux se bat de nuit, à partir du 40ᵉ');
+  if (getMission(20).night || getMission(60).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
+  if (!getMission(50).night || getMission(90).night || getMission(10).night) fail('un Colosse sur deux se bat de nuit, à partir du 50ᵉ');
   // the daily « Le Colosse attend » keeps its Colosse
   for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 14; day++) {
     if (dailyTwist(day) === 'colosse' && !dailyLevel(day, DAILY_STAGES).enemies.some((e) => e.kind === 'boss')) fail('le défi « Le Colosse attend » a perdu son Colosse');
@@ -899,7 +899,7 @@ console.log('total', Date.now() - t0, 'ms');
 // the Grondeur (iteration 18): the third boss calls the lightning on each foe; its own strikes never touch it
 {
   const fail = (m: string) => { console.error('GRONDEUR : ' + m); process.exitCode = 1; };
-  for (const m of [30, 60, 90]) {
+  for (const m of [30, 70, 110]) {
     const lvl = getMission(m);
     if (!lvl.storm || lvl.enemies.filter((e) => e.kind === 'thunder').length !== 1) fail(`la mission ${m} devrait opposer le Grondeur, sous l’orage`);
     for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un ennemi part dans un mur`);
@@ -1299,7 +1299,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (!wm.includes(33) || !wm.includes(34)) fail('missions 33 et 34 sans vent');
   if (wm.some((m) => m < 33)) fail('du vent avant la 33ᵉ mission');
   if (wm.length < 12) fail(`trop peu de missions venteuses (${wm.length})`);
-  if (wm.some((m) => m % 10 === 0)) fail('du vent sur un boss');
+  if (wm.some((m) => m % 10 === 0 && bossOf(m) !== 'sower')) fail('du vent sur un boss (seul le Semeur y a droit, un sur deux)');
   for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).wind !== undefined) fail('vent dans le défi du jour');
   for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).wind !== undefined) fail('vent dans la taupe');
   if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].some((r) => versusArena(r).wind !== undefined)) fail('pas de vent en versus');
@@ -1459,4 +1459,82 @@ console.log('total', Date.now() - t0, 'ms');
   if (caps < rounds * 0.7) fail(`seulement ${caps}/${rounds} manches gagnées par une capture`);
   if (worst > 1) fail(`${worst.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`drapeaux OK (${CTF_ARENA_COUNT} arènes, ${caps}/${rounds} manches gagnées par une capture, Bleus ${capsBy[0]} · ${capsBy[1]} Rouges, ${(ticksAll / rounds / 30).toFixed(0)} s en moyenne, ${worst.toFixed(3)} ms/tick au pire)`);
+}
+
+// the Semeur (iteration 25): the fourth boss sows giant seeds; ripe ones spare it, a shot one hurts it and is the shooter's
+{
+  const fail = (m: string) => { console.error('SEMEUR : ' + m); process.exitCode = 1; };
+  for (const m of [40, 80, 120, 160]) {
+    const lvl = getMission(m);
+    if (lvl.enemies.filter((e) => e.kind === 'sower').length !== 1 || lvl.night || lvl.storm) fail(`la mission ${m} devrait opposer le Semeur, de jour`);
+    for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un ennemi part dans un mur`);
+  }
+  if (getMission(40).wind !== undefined || getMission(80).wind === undefined) fail('un Semeur sur deux se bat dans le vent, à partir du 80ᵉ');
+  // it sows: seeds fly out, one in front of the player, none on a wall, none under itself
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const sw = g.addTank('sower', 99, 15.5, 8.5, 0);
+  g.frozen = false;
+  if (!sw.boss || sw.hp !== 8 || !isBossKind('sower')) fail('le Semeur devrait être un boss à 8 PV');
+  const n = g.sow(sw);
+  if (n < 3) fail(`trop peu de graines (${n})`);
+  const seeds = g.mines.filter((m) => m.seed !== undefined);
+  if (seeds.length !== n || seeds.some((m) => Math.hypot(m.x - sw.x, m.y - sw.y) < sw.r + 0.6)) fail('graines mal semées');
+  if (!seeds.some((m) => Math.hypot(m.x - p.x, m.y - p.y) < 2.5)) fail('aucune graine devant le joueur');
+  if (!g.events.some((e) => e[0] === 'sow')) fail('pas d’événement « sow »');
+  if (g.netMines().some((m) => m.length !== 5)) fail('le réseau ne distingue pas les graines');
+  // driving over a seed does not set it off; it ripens and bursts on its own, sparing the Semeur
+  const s0 = seeds[0];
+  p.x = s0.x; p.y = s0.y; p.buffs.shield = true;
+  for (let i = 0; i < 20; i++) g.step(new Map());
+  if (s0.dead) fail('une graine a sauté au contact');
+  p.x = 4.5; p.y = 8.5; p.buffs.shield = false;
+  s0.x = sw.x + 1.4; s0.y = sw.y;
+  for (let i = 0; i < 30 * 7 && !s0.dead; i++) g.step(new Map());
+  if (!s0.dead) fail('une graine mûre n’éclate pas');
+  if (sw.hp !== 8) fail('une graine mûre a blessé le Semeur');
+  // a shell hits a seed next to it: the blast hurts it, and the hit is the shooter's
+  const h = new Game(new Array(W * H).fill(Tile.Empty));
+  const q = h.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const z = h.addTank('sower', 99, 15.5, 8.5, 0);
+  const e = h.addTank('pink', 99, 13.5, 9.5, 0);
+  h.frozen = false;
+  z.ai = undefined; e.ai = undefined; // they hold still
+  z.boss!.volleyT = 99;
+  h.mines.push({ id: 999, owner: z.id, team: 99, x: 13.5, y: 8.5, t: 0, fuse: -1, dead: false, blast: 2.2, seed: 5 });
+  let killer: unknown;
+  h.onKill = (v, k) => { if (v === e) killer = k; };
+  q.turret = 0; q.fireCd = 0;
+  h.tryFire(q);
+  for (let i = 0; i < 2 && h.mines.length; i++) h.step(new Map()); // still in the air: the shell flies under it
+  for (let i = 0; i < 90 && h.mines.length; i++) h.step(new Map());
+  if (h.mines.length) fail('l’obus n’a pas fait sauter la graine');
+  if (z.hp !== 7) fail(`le Semeur devrait perdre 1 PV (${z.hp})`);
+  if (e.alive || killer !== q) fail('l’escorte soufflée devrait être à mettre au compte du tireur');
+  // AI-driven players see the trick
+  const a = new Game(new Array(W * H).fill(Tile.Empty));
+  const r = a.addTank('player', 0, 4.5, 8.5, 0x3d7bff);
+  a.enableAI(r, { skill: 2 });
+  const w = a.addTank('sower', 99, 15.5, 8.5, 0);
+  w.ai = undefined; w.boss!.volleyT = 99;
+  a.frozen = false;
+  a.mines.push({ id: 998, owner: w.id, team: 99, x: 13.6, y: 8.5, t: 1, fuse: -1, dead: false, blast: 2.2, seed: 5 });
+  if (a.seedTarget(r)?.id !== 998) fail('l’IA ne repère pas la graine à tirer');
+  // a real Semeur fight stays cheap
+  const lvl = getMission(40);
+  const sim = new Game(lvl.tiles, lvl.belts);
+  for (const [x, y] of lvl.spawns) { const pl = sim.addTank('player', 0, x, y, 0x3d7bff); sim.enableAI(pl, { skill: 2 }); }
+  for (const en of lvl.enemies) sim.addTank(en.kind, 99, en.x, en.y, 0);
+  sim.frozen = false;
+  let sows = 0, bursts = 0, hurts = 0;
+  const t1 = performance.now();
+  for (let i = 0; i < 30 * 60; i++) {
+    sim.step(new Map());
+    for (const ev of sim.events) { if (ev[0] === 'sow') sows++; if (ev[0] === 'mboom' && ev[3]) bursts++; if (ev[0] === 'hurt') hurts++; }
+    sim.events = [];
+  }
+  const per = (performance.now() - t1) / (30 * 60);
+  if (per > 1) fail(`${per.toFixed(3)} ms par tick`);
+  if (!sows) fail('pas de semailles en 60 s');
+  if (process.exitCode !== 1) console.log(`Semeur OK (${sows} semailles, ${bursts} graines éclatées, ${hurts} coup(s) encaissé(s) en 60 s, ${per.toFixed(3)} ms/tick)`);
 }

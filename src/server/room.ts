@@ -486,9 +486,11 @@ export class Room extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment | null;
     let tanks = this.game.tankInfos();
     // tabs older than iteration 10 don't know the steel tank: they draw a grey one instead of crashing
-    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' || t.kind === 'mason' || t.kind === 'thief' || t.kind === 'rampart' ? { ...t, kind: 'ash' } : t.kind === 'drill' || t.kind === 'thunder' ? { ...t, kind: 'boss' } : t));
+    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' || t.kind === 'mason' || t.kind === 'thief' || t.kind === 'rampart' ? { ...t, kind: 'ash' } : t.kind === 'drill' || t.kind === 'thunder' || t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
     // and tabs older than iteration 22 draw the Rempart as a plain grey tank (without its shield)
-    else if (att.v < 22) tanks = tanks.map((t) => (t.kind === 'rampart' ? { ...t, kind: 'ash' } : t));
+    else if (att.v < 22) tanks = tanks.map((t) => (t.kind === 'rampart' ? { ...t, kind: 'ash' } : t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
+    // tabs older than iteration 25 draw the Semeur as a Colosse (its seeds look like plain mines to them)
+    else if (att.v < 25) tanks = tanks.map((t) => (t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,

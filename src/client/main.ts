@@ -1,4 +1,4 @@
-import { BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -352,6 +352,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
+  const sowerFight = enemies.some((e) => e.kind === 'sower');
   if (coopLike(msg.mode)) {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
     if (msg.daily) {
@@ -362,7 +363,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
     } else if (msg.mode === 'atelier') {
       banner(`Atelier · mission maison${wx}`, msg.name, `Tanks ennemis : ${enemies.length} · ${ATELIER_LIVES} vies`, `intro atelier${wxCls}${bossFight ? ' boss' : ''}`);
-    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, thunderFight ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !' : drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', `intro boss${thunderFight ? ' storm' : ''}`);
+    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, thunderFight ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !' : sowerFight ? 'Il sème des graines géantes qui explosent. Tire sur celles qui poussent à ses pieds !' : drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', `intro boss${thunderFight ? ' storm' : ''}`);
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
@@ -373,6 +374,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
+  else if (sowerFight) setTimeout(() => toast('Le Semeur : ses graines mûres l’épargnent, mais une graine touchée par ton obus explose aussitôt… et le blesse s’il est à côté !', 4600), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
@@ -634,7 +636,7 @@ function onlineFrame(dt: number) {
   }
   renderer.syncBullets(bullets, dt);
   lastBullets = bullets;
-  const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3] }));
+  const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3], seed: m[4] ? (m[4] - 1) / 10 : undefined }));
   renderer.syncMines(mines);
   lastMines = mines;
   renderer.syncBonuses(a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4] })));
@@ -666,7 +668,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
         renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
-        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : 0xf2c14e), i * 180);
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : 0xf2c14e), i * 180);
         floater(e[1], e[2], `${specOf(kind).label} vaincu !`, 0xf2c14e);
         if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
         if (online && bossFight) setMusicIntensity(1);
@@ -687,7 +689,17 @@ function handleEvent(e: GameEvent, audible: boolean) {
     }
     case 'mboom':
       renderer.explosion(e[1], e[2], true);
-      if (audible) sfx.boom(true);
+      if (e[3]) {
+        // a seed of the Semeur bursts (iteration 25): a much wider blast
+        renderer.seedBurst(e[1], e[2], e[3]);
+        floater(e[1], e[2], 'Pataboum !', 0x7fd05a);
+        if (audible) sfx.seedBurst();
+      } else if (audible) sfx.boom(true);
+      break;
+    case 'sow':
+      renderer.sow(e[1], e[2], e[3]);
+      floater(e[1], e[2], 'Il sème !', enemyColor('sower'));
+      if (audible) sfx.sow(e[4]);
       break;
     case 'block':
       renderer.removeBlock(e[1], e[2]);
@@ -870,7 +882,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   const bar = $('#boss-bar');
   for (const t of tanks) {
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
-    if (on && !charging.has(t.id) && online && renderer.tankKind(t.id) === 'boss') sfx.bossCharge();
+    if (on && !charging.has(t.id) && online && (renderer.tankKind(t.id) === 'boss' || renderer.tankKind(t.id) === 'sower')) sfx.bossCharge();
     if (on) charging.add(t.id); else charging.delete(t.id);
     const seen = !!((t.fx ?? 0) & FLAG_ALERT) && t.alive;
     if (seen && !alerted.has(t.id) && online && performance.now() - lastAlert > 400) { sfx.alert(); lastAlert = performance.now(); }
@@ -890,6 +902,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   $('#boss-name').textContent = specOf(bossKind).label;
   bar.classList.toggle('drill', bossKind === 'drill');
   bar.classList.toggle('thunder', bossKind === 'thunder');
+  bar.classList.toggle('sower', bossKind === 'sower');
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
@@ -1633,7 +1646,7 @@ function attractFrame(dt: number) {
     const o = g.tankById(b.owner);
     return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, color: o?.kind === 'player' ? o.color : undefined };
   }), dt);
-  renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 })));
+  renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined })));
   renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
   if (g.flags) renderer.syncFlags(g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })));
   if (attractOpts.drapeau && attractCtf) {
@@ -1805,6 +1818,27 @@ function renderJournal() {
       <ul>${j.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
     </article>`).join('');
 }
+// the bestiary (iteration 25): every enemy, in the order players meet them, and what its colour says
+const BESTIARY: [TankKind, string][] = [
+  ['brown', 'immobile, il tire lentement'],
+  ['ash', 'roule et tire tout droit'],
+  ['marine', 'lance des fusées rapides, sans rebond'],
+  ['yellow', 'sème des mines en fuyant'],
+  ['pink', 'tire en rafale et vise les ricochets'],
+  ['green', 'immobile, fusées à deux rebonds : un tireur d’élite'],
+  ['violet', 'rapide, mines et rafales'],
+  ['white', 'invisible ! seules ses traces le trahissent'],
+  ['black', 'le plus rapide de tous, fusées sans rebond'],
+  ['steel', 'son blindage encaisse un coup, puis il s’énerve'],
+  ['mason', 'bâtit des murs de liège entre toi et lui'],
+  ['thief', 'file voler les caisses bonus avant toi'],
+  ['rampart', 'son bouclier renvoie les obus : prends-le de côté'],
+  ['boss', 'boss : salves d’obus tout autour de lui'],
+  ['drill', 'boss : creuse sous la table et jaillit sous toi'],
+  ['thunder', 'boss : appelle la foudre sur ta tête'],
+  ['sower', 'boss : sème des graines géantes qui explosent'],
+];
+$('#bestiary-list').innerHTML = BESTIARY.map(([k, line]) => `<li class="${isBossKind(k) ? 'boss' : ''}" style="--c:${hex(enemyColor(k))}"><span><b>${escapeHtml(specOf(k).label)}</b> : ${escapeHtml(line)}</span></li>`).join('');
 $('#iteration-stamp').textContent = `Itération ${META.iteration}`;
 $('#iteration-stamp').title = META.title;
 $('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; sfx.click(); });
@@ -2093,6 +2127,18 @@ if (params.has('demo')) {
       setTimeout(hideBanner, 2600);
       return a.name;
     },
+    /** Show the home screen with its bestiary open for a moment (iteration 25). */
+    bestiary(ms = 5000) {
+      const d = $('#bestiary') as HTMLDetailsElement;
+      d.open = true;
+      show('home');
+      const list = $('#bestiary-list');
+      list.scrollTop = 0;
+      const home = $('#home');
+      requestAnimationFrame(() => (home.scrollTop = home.scrollHeight)); // the bestiary sits at the bottom of the card
+      const roll = setInterval(() => (list.scrollTop += 1), 30);
+      setTimeout(() => { clearInterval(roll); d.open = false; home.scrollTop = 0; show('game'); $('#hud').hidden = true; }, ms);
+    },
     /** Show the home screen (and its daily challenge card) over the demo for a moment. */
     home(ms = 4000) {
       show('home');
@@ -2158,6 +2204,36 @@ if (params.has('demo')) {
       let n = 0;
       for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'drill' && t.boss && t.boss.dig === 0) { t.boss.digT = 0; n++; }
       return n;
+    },
+    /** Make the Semeur sow right now (iteration 25, to catch its seeds flying on camera). */
+    sow() {
+      let n = 0;
+      for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'sower' && t.boss && t.boss.warn <= 0) { t.boss.volleyT = 0; n++; }
+      return n;
+    },
+    /**
+     * A hero shoots the landed seed nearest to the Semeur (iteration 25, to film the blast that hurts it).
+     * Returns true when a shell left.
+     */
+    seedShot() {
+      const g = attract;
+      const sw = g?.tanks.find((t) => t.alive && t.kind === 'sower');
+      if (!g || !sw) return false;
+      const seeds = g.mines.filter((m) => !m.dead && m.seed !== undefined && m.t > 0.6);
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      if (!seeds.length || !heroes.length) return false;
+      const m = seeds.reduce((a, b) => (Math.hypot(a.x - sw.x, a.y - sw.y) <= Math.hypot(b.x - sw.x, b.y - sw.y) ? a : b));
+      for (const h of heroes.sort((a, b) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(b.x - m.x, b.y - m.y))) {
+        const ang = Math.atan2(m.y - h.y, m.x - h.x);
+        if (g.traceShot(h, ang, 0).len + 0.4 < Math.hypot(m.x - h.x, m.y - h.y) - h.r) continue; // a wall in the way
+        const keep = h.turret;
+        h.turret = ang;
+        h.fireCd = 0;
+        const ok = g.tryFire(h);
+        h.turret = keep;
+        if (ok) return true;
+      }
+      return false;
     },
     /** Make the boss charge its ring of shells right now (to catch it on camera). */
     volley() {

@@ -50,7 +50,7 @@ export type NetTank = [number, number, number, number, number, number, (number |
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
 // mine: [id, x, y, blinking]
-export type NetMine = [number, number, number, number];
+export type NetMine = [number, number, number, number] | [number, number, number, number, number]; // 5th: a seed of the Semeur (iteration 25), 1 + its age in tenths of a second
 // bonus crate: [id, x, y, kind (index in BONUS_KINDS), blinking]
 export type NetBonus = [number, number, number, number, number];
 
@@ -60,7 +60,7 @@ export type GameEvent =
   | ['pop', number, number]
   | ['boom', number, number, number] // x y tankId
   | ['mineSet', number, number]
-  | ['mboom', number, number]
+  | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number]
   | ['bonus', number, number, number, number] // x y kind tankId (picked up)
   | ['shield', number, number, number] // x y tankId (a shield absorbed a hit)
@@ -80,6 +80,7 @@ export type GameEvent =
   | ['call', number, number, number, number] // x y tankId strikes: the Grondeur calls the lightning (iteration 18; older clients ignore it, the strikes are plain 'zap')
   | ['rally', number, number, number, number] // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
   | ['deflect', number, number, number] // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
+  | ['sow', number, number, number, number] // x y tankId seeds: the Semeur throws its seeds (iteration 25; older clients ignore it, the seeds are plain mines to them)
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
