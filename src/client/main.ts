@@ -6,7 +6,9 @@ import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep } from '../shared/physics';
-import type { AtelierMap, BoardDay, ClientMsg, DailyState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
+import { BOSS_NAMES, RUSH_DUO_HP, RUSH_LIVES, RUSH_STAGES, rushLevel, rushOrder, rushDuo, weekLabel, weekNumber } from '../shared/rush';
+import type { BossKind } from '../shared/levels';
+import type { AtelierMap, BoardDay, ClientMsg, DailyState, RushState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
 import { Game, driveStep, slideDrive } from '../shared/sim';
 import { BRANCHES, TRAINING_SECONDS, XP_PER_GALON, canBuy, cleanRanks, canBuyAny, freeGalons, trainSpec, type Progress, type Ranks } from '../shared/skills';
 import { renderTree } from './skills';
@@ -126,7 +128,7 @@ let everOpened = false;
 let lobbyPlayers: PlayerInfo[] = [];
 let lobbyMode: Mode = 'coop';
 let lobbyFrom = 1; // coop checkpoint picked by the host
-let wantDaily = false; // « Relever le défi » from the home screen: switch the new room to the daily challenge
+let wantMode: Mode | undefined; // « Relever le défi » (or « Lancer la ronde », iteration 28) from the home screen: switch the new room to that mode
 let wantAtelier: AtelierMap | undefined; // « Jouer en ligne » from the workshop: hand the mission to the new room
 let lobbyAtelier: AtelierMap | undefined; // the workshop mission of the room (iteration 14)
 let phase: Phase = 'lobby';
@@ -232,6 +234,7 @@ let currentMission = 0;
 let currentLevelName = '';
 let dailyState: DailyState | undefined; // daily challenge in progress (stage, fighting time)
 let dailyK = 0; // server tick when dailyState arrived, to run the clock between messages
+let rushState: RushState | undefined; // « La ronde des boss » in progress (iteration 28): its clock runs like the daily one
 let myRole: boolean | undefined; // mole mode: true when this player is the mole
 let council: CouncilState | undefined; // mole mode: the vote in progress
 let councilAt = 0; // performance.now() when the council state arrived (its timer runs locally)
@@ -258,9 +261,9 @@ function onMessage(msg: ServerMsg) {
       lobbyFrom = msg.from ?? 1;
       phase = msg.phase;
       lobbyAtelier = msg.atelier;
-      if (wantDaily && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
-        wantDaily = false;
-        if (msg.mode !== 'daily') send({ t: 'mode', mode: 'daily' });
+      if (wantMode && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
+        if (msg.mode !== wantMode) send({ t: 'mode', mode: wantMode });
+        wantMode = undefined;
       }
       if (wantAtelier && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
         send({ t: 'atelier', ...wantAtelier });
@@ -340,9 +343,12 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   $('#hud-wind').hidden = levelWind === undefined;
   setMusicIntensity(0);
   dailyState = msg.daily;
+  rushState = msg.mode === 'rush' ? msg.rush : undefined;
   dailyK = msg.tick;
   $('#hud-mission').innerHTML = msg.daily
     ? `<b>Défi · étape ${msg.daily.stage}/${msg.daily.stages}</b><span>${escapeHtml(msg.name)}</span>`
+    : rushState
+    ? `<b>Ronde des boss · ${rushState.stage}/${rushState.stages}</b><span>${escapeHtml(msg.name)}</span>`
     : msg.mode === 'taupe'
     ? `<b>La taupe · étape ${msg.mission}/${TAUPE_STAGES}</b><span>${escapeHtml(msg.name)}</span>`
     : msg.mode === 'coop'
@@ -366,11 +372,16 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       const tw = TWIST_INFO[msg.daily.twist];
       banner(`Défi du jour · étape ${msg.daily.stage}/${msg.daily.stages}${wx}`, msg.name,
         `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${wxCls}${bossFight ? ' boss' : ''}`);
+    } else if (msg.mode === 'rush') {
+      const st = rushState?.stage ?? msg.mission;
+      const finale = st >= RUSH_STAGES;
+      banner(finale ? `Ronde des boss · le bouquet final${wx}` : `Ronde des boss · boss ${st}/${RUSH_STAGES}${wx}`, msg.name,
+        finale ? 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !' : bossTip(thunderFight, sowerFight, drillFight), `intro boss rush${wxCls}`);
     } else if (msg.mode === 'taupe') {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
     } else if (msg.mode === 'atelier') {
       banner(`Atelier · mission maison${wx}`, msg.name, `Tanks ennemis : ${enemies.length} · ${ATELIER_LIVES} vies`, `intro atelier${wxCls}${bossFight ? ' boss' : ''}`);
-    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, thunderFight ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !' : sowerFight ? 'Il sème des graines géantes qui explosent. Tire sur celles qui poussent à ses pieds !' : drillFight ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !' : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !', `intro boss${thunderFight ? ' storm' : ''}`);
+    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, bossTip(thunderFight, sowerFight, drillFight), `intro boss${thunderFight ? ' storm' : ''}`);
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
@@ -398,6 +409,14 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
+/** One line on how to beat the boss of the table (the intro banner of a boss fight). */
+function bossTip(thunder: boolean, sower: boolean, drill: boolean) {
+  return thunder ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !'
+    : sower ? 'Il sème des graines géantes qui explosent. Tire sur celles qui poussent à ses pieds !'
+    : drill ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !'
+    : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !';
+}
+
 function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   const prev = phase;
   phase = msg.phase;
@@ -406,6 +425,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   if (Array.isArray(msg.teams)) teamScores = [msg.teams[0] | 0, msg.teams[1] | 0];
   if (typeof msg.left === 'number' && Number.isFinite(msg.left)) { ctfLeft = msg.left; ctfLeftAt = performance.now(); }
   if (msg.daily) { dailyState = msg.daily; dailyK = latestK; }
+  if (msg.rush && currentMode === 'rush') { rushState = msg.rush; dailyK = latestK; }
   enemiesLeft = msg.enemies;
   onProgress(msg, prev);
   renderHud();
@@ -436,6 +456,13 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
       if (msg.daily) {
         const last = msg.daily.stage >= msg.daily.stages;
         banner('Bravo !', last ? 'Défi relevé !' : `Étape ${msg.daily.stage} réussie`, `Chrono : ${formatTicks(msg.daily.ticks)}`, 'good');
+      } else if (msg.rush && currentMode === 'rush') {
+        const r = msg.rush;
+        const split = r.splits[r.splits.length - 1];
+        const last = r.stage >= r.stages;
+        const who = r.bosses.map((b) => BOSS_NAMES[b as BossKind] ?? 'le boss');
+        banner(last ? 'La ronde est bouclée !' : `Boss ${r.stage}/${r.stages} vaincu !`, last ? 'Les quatre boss sont tombés… et le duo aussi !' : `${cap(who.join(' et '))} ${who.length > 1 ? 'sont tombés' : 'est tombé'}`,
+          `${split !== undefined ? `En ${formatTicks(split)} · ` : ''}chrono : ${formatTicks(r.ticks)}${!last && r.stage + 1 >= r.stages ? ' · Prochain : le bouquet final !' : ''}`, 'good');
       } else if (currentMode === 'atelier') banner('Bravo !', 'Mission réussie', currentLevelName, 'good');
       else banner('Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : '', 'good');
       break;
@@ -898,8 +925,9 @@ const alerted = new Set<number>();
 let lastAlert = 0;
 /** Health bar of the toughest enemy on the table, and the warning whine when the boss charges a volley. */
 function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: number) => number) {
-  let boss: RTank | undefined;
-  for (const t of tanks) if (t.alive && maxOf(t.id) > 1 && isBossKind(renderer.tankKind(t.id) ?? '')) { boss = t; break; }
+  // the finale of « La ronde des boss » (iteration 28) has two bosses: the bar adds them up
+  const bosses = tanks.filter((t) => t.alive && maxOf(t.id) > 1 && isBossKind(renderer.tankKind(t.id) ?? ''));
+  const boss: RTank | undefined = bosses[0];
   const bar = $('#boss-bar');
   for (const t of tanks) {
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
@@ -913,14 +941,16 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
     if (bossKey) { bar.hidden = true; bar.classList.remove('rage'); bossKey = ''; }
     return;
   }
-  const hp = hpOf(boss.id), max = maxOf(boss.id);
-  const key = `${boss.id}:${hp}/${max}`;
+  let hp = 0, max = 0;
+  for (const b of bosses) { hp += hpOf(b.id); max += maxOf(b.id); }
+  const key = `${bosses.map((b) => b.id).join('+')}:${hp}/${max}`;
   if (key === bossKey) return;
   bossKey = key;
   bar.hidden = false;
-  bar.classList.toggle('rage', hp <= max / 2);
+  bar.classList.toggle('rage', bosses.some((b) => hpOf(b.id) <= maxOf(b.id) / 2));
   const bossKind = renderer.tankKind(boss.id) ?? 'boss';
-  $('#boss-name').textContent = specOf(bossKind).label;
+  $('#boss-name').textContent = bosses.map((b) => specOf(renderer.tankKind(b.id) ?? 'boss').label).join(' + ');
+  bar.classList.toggle('duo', bosses.length > 1);
   bar.classList.toggle('drill', bossKind === 'drill');
   bar.classList.toggle('thunder', bossKind === 'thunder');
   bar.classList.toggle('sower', bossKind === 'sower');
@@ -1215,6 +1245,8 @@ function renderLobby() {
   const today = dayNumber();
   $('#mode-desc').textContent = lobbyMode === 'daily'
     ? `Défi du jour (${dayLabel(today)}) : ${DAILY_STAGES} missions générées, les mêmes pour tout le monde aujourd’hui, avec 3 vies et sans vie bonus. Consigne du jour : ${TWIST_INFO[dailyTwist(today)].label.toLowerCase()}. ${TWIST_INFO[dailyTwist(today)].desc} Le chrono décide du classement.`
+    : lobbyMode === 'rush'
+    ? `La ronde des boss : ${cap(rushOrder(weekNumber(today)).map((b) => BOSS_NAMES[b]).join(', '))}, l’un après l’autre, puis le bouquet final : ${BOSS_NAMES[rushDuo(weekNumber(today))[0]]} et ${BOSS_NAMES[rushDuo(weekNumber(today))[1]]} ensemble. ${RUSH_LIVES} vies, sans vie bonus ; les coups portés restent acquis quand on recommence. L’ordre change chaque lundi, et le chrono décide du classement de la semaine.`
     : lobbyMode === 'taupe'
     ? `La taupe (${TAUPE_MIN_PLAYERS} ou 4 joueurs) : ${TAUPE_STAGES} missions en coop… mais l’un de vous, tiré au sort en secret, veut les faire échouer. Après chaque mission, le conseil vote : démasquez la taupe pour gagner, mais accuser un innocent coûte une vie. La taupe gagne si vous perdez vos 3 vies.`
     : lobbyMode === 'atelier'
@@ -1316,7 +1348,7 @@ const workshop = new Workshop($('#atelier'), {
       return;
     }
     wantAtelier = a;
-    void createRoom($<HTMLButtonElement>('#btn-atelier'), false);
+    void createRoom($<HTMLButtonElement>('#btn-atelier'));
   },
 });
 
@@ -1357,21 +1389,25 @@ $('#btn-atelier').addEventListener('click', () => { sfx.click(); openWorkshop();
 /** Running time of the daily run, ticking locally while the fight is on. */
 function updateClock() {
   const el = $('#hud-clock');
-  el.hidden = !dailyState || !online;
-  if (el.hidden || !dailyState) return;
+  const st = dailyState ?? rushState;
+  el.hidden = !st || !online;
+  if (el.hidden || !st) return;
   const extra = phase === 'playing' ? Math.max(0, latestK - dailyK) : 0;
-  el.innerHTML = `⏱ ${formatTicks(dailyState.ticks + extra)}<span>${escapeHtml(TWIST_INFO[dailyState.twist]?.label ?? '')}</span>`;
+  const label = dailyState ? TWIST_INFO[dailyState.twist]?.label ?? '' : `Semaine du ${weekLabel(rushState!.week)}`;
+  el.innerHTML = `⏱ ${formatTicks(st.ticks + extra)}<span>${escapeHtml(label)}</span>`;
 }
+
+function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 const ordinal = (n: number) => `${n}<sup>${n === 1 ? 'er' : 'e'}</sup>`;
 
-function boardHtml(b: BoardDay | undefined, highlight?: number) {
+function boardHtml(b: BoardDay | undefined, highlight?: number, stages = DAILY_STAGES, rush = false) {
   if (!b) return '<li class="empty">Classement indisponible pour l’instant.</li>';
-  if (!b.entries.length) return '<li class="empty">Personne n’a encore relevé ce défi : à toi l’honneur !</li>';
+  if (!b.entries.length) return !rush ? '<li class="empty">Personne n’a encore relevé ce défi : à toi l’honneur !</li>' : '<li class="empty">Personne n’a encore bouclé la ronde cette semaine : à toi l’honneur !</li>';
   return b.entries
     .map((e, i) => `<li class="${i + 1 === highlight ? 'me' : ''}"><span class="who">${e.team
       .map((p) => `<i style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}`)
-      .join(', ')}</span><span class="stg">${e.cleared}/${DAILY_STAGES}</span><span class="time">${formatTicks(e.ticks)}</span></li>`)
+      .join(', ')}</span><span class="stg">${e.cleared}/${stages}</span><span class="time">${formatTicks(e.ticks)}</span></li>`)
     .join('');
 }
 
@@ -1387,8 +1423,50 @@ function dailyResultHtml(d: NonNullable<Results['daily']>) {
   </div>`;
 }
 
+/** « La ronde des boss » (iteration 28): the time of each boss, then the weekly board. */
+function rushResultHtml(d: NonNullable<Results['rush']>) {
+  const b = d.board;
+  const rank = d.cleared > 0 && b?.rank
+    ? `${ordinal(b.rank)} sur ${b.total} équipe${b.total > 1 ? 's' : ''} cette semaine`
+    : d.cleared === 0 ? 'Aucun boss vaincu : pas de chrono au classement. Retente ta chance !' : '';
+  const order = rushStagesOf(d.state.week);
+  const splits = order.map((bosses, i) => {
+    const t = d.state.splits[i];
+    return `<li class="${t === undefined ? 'todo' : 'done'}">${rushChip(bosses)}<span>${escapeHtml(cap(bosses.map((k) => BOSS_NAMES[k]).join(' et ')))}</span><em>${t === undefined ? '—' : formatTicks(t)}</em></li>`;
+  }).join('');
+  return `<div class="daily-result rush-result">
+    <div class="big">${d.cleared}/${d.state.stages} boss · <em>${formatTicks(d.state.ticks)}</em></div>
+    <ol class="rush-splits">${splits}</ol>
+    ${rank ? `<p class="muted center">${rank}</p>` : ''}
+    <ol class="board">${boardHtml(b, d.cleared > 0 ? b?.rank : undefined, RUSH_STAGES, true)}</ol>
+  </div>`;
+}
+
+/** The bosses of each stage of a week: one by one, then the duo. */
+function rushStagesOf(week: number): BossKind[][] { return [...rushOrder(week).map((b) => [b]), rushDuo(week)]; }
+/** A round badge in the colours of the boss (two halves for the duo). */
+function rushChip(bosses: BossKind[]) {
+  const [a, b = a] = bosses.map((k) => hex(enemyColor(k)));
+  return `<i class="rush-chip${bosses.length > 1 ? ' duo' : ''}" style="--a:${a};--b:${b}"></i>`;
+}
+
+/** The home screen card of « La ronde des boss »: this week's order and best runs. */
+async function loadRush() {
+  const week = weekNumber(dayNumber());
+  $('#rush-week').textContent = `Semaine du ${weekLabel(week)}`;
+  $('#rush-order').innerHTML = rushStagesOf(week).map((bs, i) =>
+    `<li title="${escapeHtml(cap(bs.map((k) => BOSS_NAMES[k]).join(' et ')))}">${rushChip(bs)}<span>${i < 4 ? escapeHtml(specOf(bs[0]).label) : 'Duo'}</span></li>`).join('<li class="arrow">›</li>');
+  try {
+    const b = await fetch('/api/rush').then((r) => (r.ok ? (r.json() as Promise<BoardDay>) : undefined));
+    $('#rush-board').innerHTML = boardHtml(b?.entries ? { ...b, entries: b.entries.slice(0, 3) } : undefined, undefined, RUSH_STAGES, true);
+  } catch {
+    $('#rush-board').innerHTML = boardHtml(undefined, undefined, RUSH_STAGES, true);
+  }
+}
+
 /** The home screen card: today's twist and best runs. */
 async function loadDaily() {
+  void loadRush();
   const day = dayNumber();
   const tw = TWIST_INFO[dailyTwist(day)];
   $('#daily-date').textContent = dayLabel(day);
@@ -1421,6 +1499,7 @@ function showResults(r: Results) {
   const kinds = Object.keys(SPECS).filter((k) => k !== 'player') as (keyof typeof SPECS)[];
   const title = r.daily
     ? (r.daily.cleared >= r.daily.state.stages ? 'Défi du jour relevé !' : `Défi du jour · ${r.daily.cleared}/${r.daily.state.stages} étapes`)
+    : r.rush ? (r.rush.cleared >= r.rush.state.stages ? 'La ronde des boss est bouclée !' : `Ronde des boss · ${r.rush.cleared}/${r.rush.state.stages} boss`)
     : r.taupe ? (r.taupe.winner === 'taupe' ? 'La taupe l’emporte !' : 'Les loyaux l’emportent !')
     : r.atelier ? (r.atelier.won ? `« ${r.atelier.name} » réussie !` : `« ${r.atelier.name} » : plus de vies…`)
     : r.drapeau ? (r.drapeau.winner ? `Les ${TEAM_NAMES[r.drapeau.winner - 1]} remportent les drapeaux ! (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})` : `Égalité aux drapeaux (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})`)
@@ -1442,7 +1521,7 @@ function showResults(r: Results) {
           }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
-    </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
+    </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
   show('results');
 }
 
@@ -1456,7 +1535,7 @@ let attractPrev = new Map<number, { x: number; y: number; body: number; turret: 
 interface AttractVersus { round: number; levels?: number[]; scores?: number[]; chain?: boolean }
 /** « Drapeaux » (iteration 24): two teams of AI rivals, for the videos and the home-screen background. */
 interface AttractFlags { round: number; levels?: number[]; teams?: [number, number]; chain?: boolean; carry?: boolean } // carry: the round opens with a Bleu already holding the red flag, by the Rouges' base (videos)
-interface AttractOpts { drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
+interface AttractOpts { drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -1470,7 +1549,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
-  if (!opts.versus && !opts.drapeau && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe) {
+  if (!opts.versus && !opts.drapeau && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
     const r = Math.random();
     if (r < 0.1) { startAttractVersus({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; }
     if (r < 0.2) { startAttractFlags({ round: Math.floor(Math.random() * 12), levels: [1, 2, 2, 1] }); return; } // and, from iteration 24, a flag round
@@ -1479,7 +1558,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   if (opts.drapeau) { startAttractFlags(opts.drapeau, opts.arms); return; }
   attractCtf = undefined;
   if (document.body.classList.contains('vs-demo')) { document.body.classList.remove('vs-demo'); $('#hud').hidden = true; }
-  const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
+  const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : opts.rush ? rushLevel(opts.rush.week, opts.rush.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
   const g = new Game(lvl.tiles, lvl.belts);
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
@@ -1507,6 +1586,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   lvl.enemies.forEach((e) => {
     const t = g.addTank(e.kind === 'white' && !opts.heroes ? 'ash' : e.kind, 2, e.x, e.y, 0);
     if (opts.bossHp && t.maxHp > 1) g.setHp(t, opts.bossHp, t.maxHp);
+    else if (opts.rush && opts.rush.stage >= RUSH_STAGES && t.boss) g.setHp(t, RUSH_DUO_HP, RUSH_DUO_HP); // the finale's lighter bosses
   });
   // friendly fire between heroes: the same « Tir ami ! » as online
   g.onKill = (v, k) => { if (v.kind === 'player' && k?.kind === 'player') g.events.push(['ff', v.x, v.y, v.id, k.id]); };
@@ -1742,12 +1822,12 @@ function unlockAudio() {
 addEventListener('pointerdown', unlockAudio, { once: false });
 addEventListener('keydown', unlockAudio, { once: false });
 
-async function createRoom(btn: HTMLButtonElement, daily: boolean) {
+async function createRoom(btn: HTMLButtonElement, mode?: Mode) {
   sfx.click();
   btn.disabled = true;
   try {
     const r = await fetch('/api/new').then((r) => r.json() as Promise<{ room: string }>);
-    wantDaily = daily;
+    wantMode = mode;
     connect(r.room);
     show('lobby');
   } catch {
@@ -1756,8 +1836,9 @@ async function createRoom(btn: HTMLButtonElement, daily: boolean) {
     btn.disabled = false;
   }
 }
-$('#btn-create').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-create'), false));
-$('#btn-daily').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-daily'), true));
+$('#btn-create').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-create')));
+$('#btn-daily').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-daily'), 'daily'));
+$('#btn-rush').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-rush'), 'rush'));
 
 function joinFromInput() {
   const code = $<HTMLInputElement>('#join-code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -1976,7 +2057,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -2092,6 +2173,34 @@ if (params.has('demo')) {
       banner(`Défi du jour · étape ${stage}/${DAILY_STAGES}`, lvl.name, TWIST_INFO[dailyTwist(day)].label, `intro daily${lvl.night ? ' night' : ''}`);
       setTimeout(hideBanner, 2600);
       return day;
+    },
+    /**
+     * « La ronde des boss » (iteration 28): play a stage of this week's run (or of `week`) with the heroes,
+     * with its banner and the HUD clock. Stage 5 is the finale, two bosses at once.
+     */
+    rush(stage = 1, arms?: Weapon[], week = weekNumber(dayNumber()), bossHp?: number) {
+      attract = undefined;
+      startAttract({ heroes: true, rush: { week, stage }, arms: arms?.filter(isWeapon), bossHp });
+      const lvl = rushLevel(week, stage);
+      const finale = stage >= RUSH_STAGES;
+      banner(finale ? 'Ronde des boss · le bouquet final' : `Ronde des boss · boss ${stage}/${RUSH_STAGES}`, lvl.name,
+        finale ? 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !' : `Puis ${stage + 1 >= RUSH_STAGES ? 'le bouquet final' : `boss ${stage + 1}`} : le chrono tourne`, `intro boss rush${lvl.night ? ' night' : ''}`);
+      setTimeout(hideBanner, 2600);
+      return lvl.name;
+    },
+    /** « La ronde des boss »: made-up results over the demo (the time of each boss and the weekly board), for the videos. */
+    rushResults(ms = 5000, week = weekNumber(dayNumber())) {
+      const splits = [1712, 2380, 1954, 2655, 4120];
+      const ticks = splits.reduce((n, v) => n + v, 0);
+      const team = (k: number) => [0, 1].map((i) => ({ name: FUN_NAMES[(k * 3 + i * 5) % FUN_NAMES.length] + (11 + k * 17 + i * 23), color: PLAYER_COLORS[(k + i * 2) % PLAYER_COLORS.length] }));
+      const entries = [ticks - 1460, ticks, ticks + 905, ticks + 2210].map((t, k) => ({ team: k === 1 ? [{ name: myName, color: myColor }, team(9)[1]] : team(k), cleared: RUSH_STAGES, ticks: t, lives: 1 + (k % 2) }));
+      showResults({
+        mode: 'rush', mission: RUSH_STAGES,
+        players: [{ id: pid, name: myName, color: myColor, kills: { thunder: 1, boss: 1, sower: 1, violet: 2, pink: 1 }, deaths: 1, score: 6, ff: 0 },
+          { id: 'demo2', name: team(9)[1].name, color: team(9)[1].color, kills: { drill: 2, sower: 1, green: 2, black: 1 }, deaths: 1, score: 6, ff: 0 }],
+        rush: { state: { week, stage: RUSH_STAGES, stages: RUSH_STAGES, ticks, splits, bosses: rushDuo(week) }, cleared: RUSH_STAGES, board: { day: week, twist: dailyTwist(0), entries, total: 23, rank: 2 } },
+      });
+      setTimeout(() => { show('game'); $('#hud').hidden = true; }, ms);
     },
     /** Mole mode: play a stage of a mole game (heroes driven by the AI, arsenal optional). */
     taupe(stage = 1, seed = 8, arms?: Weapon[]) {

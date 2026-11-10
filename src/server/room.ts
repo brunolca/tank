@@ -3,8 +3,9 @@ import META from '../shared/meta.json';
 import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, isCheckpoint, isWeapon } from '../shared/constants';
 import { ATELIER_LIVES, atelierLevel, checkAtelier, cleanName } from '../shared/atelier';
 import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
+import { RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_LIVES, RUSH_STAGES, rushLevel, rushStageBosses, weekNumber } from '../shared/rush';
 import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
-import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, ServerMsg } from '../shared/protocol';
+import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, RushState, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon, rivalMode } from '../shared/rivals';
 import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
@@ -72,7 +73,9 @@ export class Room extends DurableObject<Env> {
   private phaseTimer = 0;
   private day = 0; // daily challenge: the day the run started (it keeps it past midnight)
   private runTicks = 0; // daily challenge: ticks spent fighting
-  private board?: BoardDay; // daily challenge: the board once the run is over
+  private board?: BoardDay; // daily challenge (and « La ronde des boss »): the board once the run is over
+  private week = 0; // « La ronde des boss » (iteration 28): the week the run started (it keeps it past Monday)
+  private splits: number[] = []; // « La ronde des boss »: fighting time of each stage cleared
   private mole?: string; // mole mode: pid of the hidden saboteur
   private taupeSeed = 0; // mole mode: seed of the stages
   private council?: CouncilState; // mole mode: the vote in progress (or its verdict)
@@ -219,7 +222,7 @@ export class Room extends DurableObject<Env> {
         }
         break;
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush')) {
           this.mode = msg.mode;
           if (!rivalMode(this.mode)) this.rivals = [];
           await this.ctx.storage.put('mode', this.mode);
@@ -385,7 +388,7 @@ export class Room extends DurableObject<Env> {
     this.training.clear();
     for (const r of this.rivals) { r.score = 0; r.kills = {}; r.deaths = 0; }
     this.mission = this.mode === 'coop' ? this.from : 1;
-    this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : this.mode === 'atelier' ? ATELIER_LIVES : 3;
+    this.lives = this.mode === 'daily' ? DAILY_LIVES : this.mode === 'rush' ? RUSH_LIVES : this.mode === 'taupe' ? TAUPE_LIVES : this.mode === 'atelier' ? ATELIER_LIVES : 3;
     this.atelierWon = false;
     this.mole = this.mode === 'taupe' ? active[Math.floor(Math.random() * active.length)].pid : undefined;
     this.taupeSeed = (Math.random() * 2 ** 31) >>> 0;
@@ -395,6 +398,8 @@ export class Room extends DurableObject<Env> {
     this.teams = [0, 0];
     this.caps.clear();
     this.day = dayNumber();
+    this.week = weekNumber(this.day);
+    this.splits = [];
     this.runTicks = 0;
     this.board = undefined;
     this.killedEnemies.clear();
@@ -416,6 +421,7 @@ export class Room extends DurableObject<Env> {
     this.training.clear();
     this.level = this.mode === 'coop' ? getMission(this.mission)
       : this.mode === 'daily' ? dailyLevel(this.day, this.mission)
+      : this.mode === 'rush' ? rushLevel(this.week, this.mission)
       : this.mode === 'taupe' ? taupeLevel(this.taupeSeed, this.mission)
       : this.mode === 'atelier' && this.atelier ? atelierLevel(this.atelier)
       : this.mode === 'drapeau' ? ctfArena(this.round)
@@ -461,7 +467,9 @@ export class Room extends DurableObject<Env> {
       const t = game.addTank(e.kind, 99, e.x, e.y, 0);
       if (t.maxHp > 1) {
         // only the boss grows tougher with a crowd; steel tanks always have their two hits
-        const max = t.boss ? t.maxHp + BOSS_HP_PER_PLAYER * Math.max(0, participants.length + rivals.length - 1) : t.maxHp; // teammates count too
+        const crowd = Math.max(0, participants.length + rivals.length - 1); // teammates count too
+        const duo = this.mode === 'rush' && this.mission >= RUSH_STAGES; // « La ronde des boss »: the finale's two bosses are lighter
+        const max = !t.boss ? t.maxHp : duo ? RUSH_DUO_HP + RUSH_DUO_HP_PER_PLAYER * crowd : t.maxHp + BOSS_HP_PER_PLAYER * crowd;
         game.setHp(t, this.enemyHp.get(idx) ?? max, max);
       }
       this.enemyIndexByTank.set(t.id, idx);
@@ -509,6 +517,7 @@ export class Room extends DurableObject<Env> {
       fog: this.level.fog,
       belts: this.game.belts.length ? this.game.belts : undefined,
       daily: this.dailyState(),
+      rush: this.rushState(),
       bases: this.bases?.flat(),
     });
     if (this.mode === 'taupe') {
@@ -600,6 +609,7 @@ export class Room extends DurableObject<Env> {
       scores,
       results: this.phase === 'gameover' ? this.results() : undefined,
       daily: this.dailyState(),
+      rush: this.rushState(),
       council: this.council && this.phase === 'council' ? { ...this.council, left: Math.max(0, +this.phaseTimer.toFixed(1)) } : undefined,
       stages: this.mode === 'taupe' ? TAUPE_STAGES : undefined,
       prog: this.progress(),
@@ -615,27 +625,37 @@ export class Room extends DurableObject<Env> {
     return { day: this.day, twist: dailyTwist(this.day), stage: this.mission, stages: DAILY_STAGES, ticks: this.runTicks };
   }
 
-  /** Stages cleared in the current daily run. */
-  private dailyCleared() {
-    return this.phase === 'gameover' && this.lives > 0 ? DAILY_STAGES : this.mission - 1;
+  private rushState(): RushState | undefined {
+    if (this.mode !== 'rush') return undefined;
+    return { week: this.week, stage: this.mission, stages: RUSH_STAGES, ticks: this.runTicks, splits: this.splits.slice(), bosses: rushStageBosses(this.week, this.mission) };
   }
 
-  /** End of a daily run (all stages cleared, or no lives left): post it to the board, then show everyone the results. */
+  /** Stages cleared in the current daily run (or « La ronde des boss »). */
+  private dailyCleared() {
+    const stages = this.mode === 'rush' ? RUSH_STAGES : DAILY_STAGES;
+    return this.phase === 'gameover' && this.lives > 0 ? stages : this.mission - 1;
+  }
+
+  /**
+   * End of a daily run, or of « La ronde des boss » (all stages cleared, or no lives left): post it to its board
+   * (the daily board by day, the boss board by week), then show everyone the results.
+   */
   private async finishDaily() {
     this.setPhase('gameover', 14);
-    const state = this.dailyState()!;
+    const mode = this.mode;
+    const key = mode === 'rush' ? this.week : this.day;
     const cleared = this.dailyCleared();
     try {
-      const board = this.env.BOARD.get(this.env.BOARD.idFromName('daily'));
+      const board = this.env.BOARD.get(this.env.BOARD.idFromName(mode === 'rush' ? 'rush' : 'daily'));
       const team = [...this.players.values()].filter((p) => p.inGame).sort((a, b) => a.joined - b.joined).map((p) => ({ name: p.name, color: p.color }));
       const res = cleared > 0
-        ? await board.submit(state.day, { team, cleared, ticks: this.runTicks, lives: this.lives })
-        : await board.get(state.day);
+        ? await board.submit(key, { team, cleared, ticks: this.runTicks, lives: this.lives })
+        : await board.get(key);
       this.board = res;
     } catch {
       this.board = undefined; // the board is down: results without a rank
     }
-    if (this.phase === 'gameover' && this.mode === 'daily') this.broadcastPhase();
+    if (this.phase === 'gameover' && this.mode === mode) this.broadcastPhase();
   }
 
   private broadcastPhase() {
@@ -661,11 +681,12 @@ export class Room extends DurableObject<Env> {
       drapeau = { teams: [this.teams[0], this.teams[1]], winner };
     }
     const daily = this.mode === 'daily' ? { state: this.dailyState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
+    const rush = this.mode === 'rush' ? { state: this.rushState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
     const taupe = this.mode === 'taupe' && this.taupeEnd
       ? { ...this.taupeEnd, cleared: this.taupeEnd.why === 'missions' ? TAUPE_STAGES : this.mission - 1, stages: TAUPE_STAGES }
       : undefined;
     const atelier = this.mode === 'atelier' && this.atelier ? { name: this.atelier.name, won: this.atelierWon } : undefined;
-    return { mode: this.mode, mission: this.mode === 'drapeau' ? this.round + 1 : this.mission, players, winner: pvp(this.mode) ? players[0]?.id : undefined, daily, taupe, atelier, drapeau };
+    return { mode: this.mode, mission: this.mode === 'drapeau' ? this.round + 1 : this.mission, players, winner: pvp(this.mode) ? players[0]?.id : undefined, daily, rush, taupe, atelier, drapeau };
   }
 
   private tick() {
@@ -706,7 +727,7 @@ export class Room extends DurableObject<Env> {
     }
 
     this.phaseTimer -= DT;
-    if (this.phase === 'playing' && this.mode === 'daily') this.runTicks++;
+    if (this.phase === 'playing' && (this.mode === 'daily' || this.mode === 'rush')) this.runTicks++;
     switch (this.phase) {
       case 'intro':
         if (this.phaseTimer <= 0) { this.setPhase('playing', 0); this.broadcastPhase(); }
@@ -722,6 +743,7 @@ export class Room extends DurableObject<Env> {
         }
         if (this.phaseTimer <= 0) {
           if (this.mode === 'daily' && this.mission >= DAILY_STAGES) { void this.finishDaily(); break; }
+          if (this.mode === 'rush' && this.mission >= RUSH_STAGES) { void this.finishDaily(); break; }
           if (this.mode === 'atelier') { this.atelierWon = true; this.setPhase('gameover', 10); this.broadcastPhase(); break; }
           this.mission++;
           this.killedEnemies.clear();
@@ -735,7 +757,7 @@ export class Room extends DurableObject<Env> {
           if (this.mode === 'taupe') {
             if (this.lives <= 0) this.finishTaupe('taupe', 'vies');
             else this.startCouncil('failed');
-          } else if (this.lives <= 0 && this.mode === 'daily') void this.finishDaily();
+          } else if (this.lives <= 0 && (this.mode === 'daily' || this.mode === 'rush')) void this.finishDaily();
           else if (this.lives <= 0) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else this.loadStage();
         }
@@ -819,6 +841,7 @@ export class Room extends DurableObject<Env> {
         this.settle += DT;
         game.storm = false; // the sky calms down once the mission is won (strikes already announced still fall)
         if (game.bullets.length === 0 || this.settle >= SETTLE_MAX) {
+          if (this.mode === 'rush') this.splits.push(this.runTicks - this.splits.reduce((n, v) => n + v, 0)); // time spent on this boss, retries included
           this.setPhase('cleared', this.clearedTraining());
           this.broadcastPhase();
         } else if (this.lastEnemyCount !== 0) this.broadcastPhase();

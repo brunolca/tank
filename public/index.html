@@ -98,6 +98,7 @@
         <ul id="bestiary-list" class="bestiary"></ul>
       </details>
     </div>
+    <div class="side-cards">
     <div id="daily-card" class="card daily">
       <div class="daily-head">
         <div>
@@ -109,6 +110,20 @@
       <p id="daily-desc" class="muted"></p>
       <ol id="daily-board" class="board"></ol>
       <button id="btn-daily" class="btn primary">Relever le défi</button>
+    </div>
+    <div id="rush-card" class="card daily rush">
+      <div class="daily-head">
+        <div>
+          <div class="kicker">La ronde des boss</div>
+          <div id="rush-week" class="daily-date"></div>
+        </div>
+        <span class="twist">5 combats</span>
+      </div>
+      <p class="muted">Les quatre boss à la suite, puis deux à la fois. 3 vies, seul ou à plusieurs : le meilleur chrono de la semaine gagne.</p>
+      <ol id="rush-order" class="rush-order"></ol>
+      <ol id="rush-board" class="board"></ol>
+      <button id="btn-rush" class="btn primary">Lancer la ronde</button>
+    </div>
     </div>
   </section>
 
@@ -131,6 +146,7 @@
       <div id="mode-select" class="segmented">
         <button data-mode="coop">Campagne coop</button>
         <button data-mode="daily">Défi du jour</button>
+        <button data-mode="rush">Ronde des boss</button>
         <button data-mode="versus">Versus</button>
         <button data-mode="drapeau">Drapeaux</button>
         <button data-mode="taupe">La taupe</button>

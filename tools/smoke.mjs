@@ -13,6 +13,9 @@ try {
   const daily = await fetch(server.url + '/api/daily').then((r) => r.json());
   if (!Array.isArray(daily.entries) || !daily.twist) fail(`/api/daily ne renvoie pas de classement : ${JSON.stringify(daily).slice(0, 200)}`);
 
+  const rushBoard = await fetch(server.url + '/api/rush').then((r) => r.json());
+  if (!Array.isArray(rushBoard.entries)) fail(`/api/rush ne renvoie pas de classement : ${JSON.stringify(rushBoard).slice(0, 200)}`);
+
   const page = async (name, url) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const p = await ctx.newPage();
@@ -146,6 +149,25 @@ try {
   if (co.phase === 'playing' && !co.rallies) fail('la touche T n’a pas appelé le coéquipier (« Suis-moi ! »)');
   await mate.context().close();
 
+  // « La ronde des boss » (iteration 28): from the home card, the first boss of the week, its health bar and the clock
+  const rush = await page('ronde', server.url + '/');
+  await sleep(1500);
+  if (!(await rush.locator('#rush-order li .rush-chip').count())) fail('la carte de la ronde des boss ne montre pas l’ordre de la semaine');
+  await rush.click('#btn-rush');
+  await rush.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1500);
+  if (!(await rush.locator('#mode-select button[data-mode="rush"].on').count())) fail('« Lancer la ronde » ne passe pas la salle en mode ronde des boss');
+  await rush.click('#btn-start');
+  await sleep(5000); // intro
+  const ru = await state(rush);
+  if (!ru.online || ru.myTankId < 0) fail(`ronde des boss : pas en partie (écran ${ru.screen}, phase ${ru.phase})`);
+  if (!ru.rush || ru.rush.stage !== 1 || ru.rush.bosses?.length !== 1) fail(`ronde des boss : état absent (${JSON.stringify(ru.rush)})`);
+  else {
+    if (!ru.rush.clock) fail('ronde des boss : le chrono n’est pas affiché');
+    if (!ru.rush.bar && ru.phase === 'playing') fail('ronde des boss : pas de barre de vie du boss');
+  }
+  await rush.context().close();
+
   const d = await page('démo', server.url + '/?demo=1&mission=3');
   await sleep(1500);
   const t0 = (await d.evaluate(() => window.__demo.state)).tick;
@@ -160,5 +182,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, coop avec un coéquipier, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, coop avec un coéquipier, ronde des boss, mode démo).');
 process.exit(0);

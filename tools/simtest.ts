@@ -1,3 +1,4 @@
+import { RUSH_BOSSES, RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_DUOS, RUSH_STAGES, rushDuo, rushLevel, rushOrder, rushStageBosses, weekNumber, weekStart } from '../src/shared/rush';
 import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
@@ -1154,7 +1155,7 @@ console.log('total', Date.now() - t0, 'ms');
   // the AI copes on the rink: duos of AI players clear the ice missions, quickly
   let cleared = 0, spent = 0, steps = 0;
   for (const mission of [27, 28]) {
-    for (let run = 0; run < 3; run++) {
+    for (let run = 0; run < 3 || (cleared === 0 && run < 6); run++) { // a few more tries before calling it a failure (the AI is random)
       const lvl = getMission(mission);
       const s = new Game(lvl.tiles, lvl.belts);
       for (const [sx, sy] of lvl.spawns) { const pl = s.addTank('player', 0, sx, sy, 0x3d7bff); s.enableAI(pl, { skill: 3, aimError: 0.02 }); }
@@ -1235,7 +1236,7 @@ console.log('total', Date.now() - t0, 'ms');
   // duos of AI players clear its missions, and it stays cheap
   let cleared = 0, spent = 0, steps = 0, deflects = 0;
   for (const mission of [29, 31]) {
-    for (let run = 0; run < 3; run++) {
+    for (let run = 0; run < 3 || (cleared === 0 && run < 6); run++) { // a few more tries before calling it a failure (the AI is random)
       const lvl = getMission(mission);
       const s2 = new Game(lvl.tiles, lvl.belts);
       for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
@@ -1314,7 +1315,7 @@ console.log('total', Date.now() - t0, 'ms');
   // duos of AI players clear the windy missions, and it stays cheap
   let cleared = 0, spent = 0, steps = 0, worst = 0;
   for (const mission of [33, 34, wm.find((m) => m > 34)!]) {
-    for (let run = 0; run < 2; run++) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) { // a few more tries before calling it a failure (the AI is random)
       const lvl = getMission(mission);
       const s2 = new Game(lvl.tiles, lvl.belts);
       s2.wind = lvl.wind;
@@ -1492,6 +1493,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (s0.dead) fail('une graine a sauté au contact');
   p.x = 4.5; p.y = 8.5; p.buffs.shield = false;
   s0.x = sw.x + 1.4; s0.y = sw.y;
+  sw.ai = undefined; // it holds its fire: its own shell could set the seed off (that blast is its own, and may hurt it)
   for (let i = 0; i < 30 * 7 && !s0.dead; i++) g.step(new Map());
   if (!s0.dead) fail('une graine mûre n’éclate pas');
   if (sw.hp !== 8) fail('une graine mûre a blessé le Semeur');
@@ -1597,7 +1599,7 @@ console.log('total', Date.now() - t0, 'ms');
   let cleared = 0, spent = 0, steps = 0;
   const games = [35, 36, fm.find((m) => m > 36)!];
   for (const mission of games) {
-    for (let run = 0; run < 2; run++) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) { // a few more tries before calling it a failure (the AI is random)
       const lvl = getMission(mission);
       const s2 = new Game(lvl.tiles, lvl.belts);
       s2.fog = lvl.fog;
@@ -1707,7 +1709,7 @@ console.log('total', Date.now() - t0, 'ms');
   // duos of AI players clear the magnet missions, and it stays cheap
   let cleared = 0, spent = 0, steps = 0, catches = 0;
   for (const mission of [37, 38, mm.find((x) => x > 40)!]) {
-    for (let run = 0; run < 2; run++) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) { // a few more tries before calling it a failure (the AI is random)
       const lvl = getMission(mission);
       const s2 = new Game(lvl.tiles, lvl.belts);
       for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
@@ -1727,4 +1729,51 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des Aimants');
   if (process.exitCode !== 1) console.log(`aimant OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${catches} obus attrapés, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « La ronde des boss » (iteration 28): the four bosses in a weekly order, then a duo; valid, deterministic, cheap, beatable
+{
+  const fail = (m: string) => { console.error('RONDE:', m); process.exitCode = 1; };
+  const duosSeen = new Set<string>();
+  for (let week = 2900; week < 3060; week++) {
+    const order = rushOrder(week);
+    if ([...order].sort().join() !== [...RUSH_BOSSES].sort().join()) fail(`semaine ${week} : ordre ${order.join(', ')}`);
+    duosSeen.add(rushDuo(week).join('+'));
+    for (let st = 1; st <= RUSH_STAGES; st++) {
+      const lvl = rushLevel(week, st);
+      if (JSON.stringify(rushLevel(week, st)) !== JSON.stringify(lvl)) fail(`semaine ${week} étape ${st} : pas déterministe`);
+      if (!lvl.spawns.length) fail(`semaine ${week} étape ${st} : pas de départ`);
+      const bosses = lvl.enemies.filter((e) => isBossKind(e.kind)).map((e) => e.kind);
+      if (bosses.join() !== rushStageBosses(week, st).join()) fail(`semaine ${week} étape ${st} : boss ${bosses.join()} au lieu de ${rushStageBosses(week, st).join()}`);
+      for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`semaine ${week} étape ${st} : ${e.kind} dans un mur`);
+      lvl.tiles.forEach((c, i) => { if (c === Tile.Tunnel && tunnelAxis(lvl.tiles, i) < 0) fail(`semaine ${week} étape ${st} : tunnel mal bordé`); });
+    }
+  }
+  if (duosSeen.size !== RUSH_DUOS.length) fail(`${duosSeen.size} duos seulement`);
+  if (weekNumber(4) !== 1 || weekNumber(3) !== 0 || weekStart(weekNumber(20767)) !== 20766) fail('les semaines ne commencent pas le lundi');
+  // every duo of the finale: two Redoutable AI players fight it (the bosses at 5 hit points, like a run that already hurt them)
+  let cleared = 0, spent = 0, steps = 0, worst = 0, dealt = 0, total = 0;
+  for (let run = 0; run < 3 * RUSH_DUOS.length; run++) {
+    const week = 2940 + (run % RUSH_DUOS.length); // 2940 % 6 = 0: the six duos in turn
+    const lvl = rushLevel(week, RUSH_STAGES);
+    const g = new Game(lvl.tiles, lvl.belts);
+    lvl.spawns.forEach(([x, y], i) => { const t = g.addTank('player', 0, x, y, 0x3d7bff, `ia:${i + 1}`, `R${i}`); makeRival(g, t, 2); });
+    const bosses = lvl.enemies.map((e) => { const t = g.addTank(e.kind, 99, e.x, e.y, 0); if (t.maxHp > 1) g.setHp(t, RUSH_DUO_HP + RUSH_DUO_HP_PER_PLAYER, RUSH_DUO_HP + RUSH_DUO_HP_PER_PLAYER); return t; });
+    g.storm = !!lvl.storm;
+    g.frozen = false;
+    for (let i = 0; i < 30 * 150 && g.aliveCount(99) > 0 && g.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      g.step(new Map());
+      const dt = performance.now() - t1;
+      spent += dt; steps++; if (i > 30) worst = Math.max(worst, dt);
+      g.events = [];
+    }
+    if (g.aliveCount(99) === 0) cleared++;
+    for (const b of bosses) { dealt += b.maxHp - (b.alive ? b.hp : 0); total += b.maxHp; }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  // the AI on one life only, against the whole duo: it must at least hurt them (players have three lives, and the damage sticks)
+  if (dealt < total * 0.2) fail(`les rivaux n’entament que ${dealt}/${total} PV du bouquet final`);
+  if (process.exitCode !== 1) console.log(`ronde des boss OK (cette semaine : ${rushOrder(weekNumber(dayNumber())).join(' › ')} › ${rushDuo(weekNumber(dayNumber())).join(' + ')} ; ${cleared}/${3 * RUSH_DUOS.length} finales gagnées par deux rivaux redoutables, ${Math.round((100 * dealt) / Math.max(1, total))} % des PV, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
 }

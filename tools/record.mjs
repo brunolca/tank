@@ -7,12 +7,13 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 37, arms: ['canon', 'ricochet'], seconds: 16, magnetShots: [1.5, 8.5], caption: 'Nouveau : l’Aimant', sub: 'Son champ bleu attire les obus et les avale…' },
-  { mission: 38, arms: ['ricochet', 'canon'], seconds: 14, magnetShots: [2, 9], caption: '… puis il te les renvoie tous d’un coup', sub: 'Les pôles : deux Aimants protègent leurs alliés' },
-  { mission: 44, arms: ['canon', 'fusee'], seconds: 10, magnetShots: [3], caption: 'Tire quand le champ s’éteint', sub: 'Ou pose une mine : des Aimants dès la 41ᵉ mission' },
-  { bestiary: 5, seconds: 5, caption: 'Au bestiaire', sub: 'Dix-huit tanks, chacun sa couleur, chacun sa ruse' },
-  { mission: 35, arms: ['canon', 'ricochet'], seconds: 9, caption: 'Et toujours le brouillard', sub: 'Au cœur de la brume, un tank ne se voit que de près' },
-  { mission: 40, arms: ['canon', 'ricochet'], seconds: 8, sows: [1, 5], seedShots: [3], caption: 'Et le Semeur', sub: 'Quatre boss se relaient toutes les dix missions' },
+  { home: 5, seconds: 5, caption: 'Nouveau : la ronde des boss', sub: 'Les quatre boss à la suite… et le meilleur chrono de la semaine' },
+  { rush: 1, arms: ['canon', 'ricochet'], seconds: 11, caption: 'Les quatre boss, l’un après l’autre', sub: 'Trois vies pour toute la ronde, le chrono tourne' },
+  { rush: 3, arms: ['fusee', 'canon'], seconds: 9, hits: [4], caption: 'Un ordre différent chaque lundi', sub: 'Le même pour tout le monde' },
+  { rush: 5, arms: ['canon', 'ricochet'], seconds: 17, volley: true, hits: [7, 11], caption: 'Le bouquet final', sub: 'Deux boss à la fois : la barre de vie compte les deux' },
+  { rush: 5, rushWeek: 2, arms: ['ricochet', 'sapeur'], seconds: 11, caption: 'Un duo différent chaque semaine', sub: 'Le Colosse et le Grondeur, le Foreur et le Semeur…' },
+  { rushResults: 6, seconds: 6, caption: 'Ton temps contre chaque boss', sub: 'Et le classement de la semaine' },
+  { mission: 37, arms: ['canon', 'ricochet'], seconds: 8, magnetShots: [1.5], caption: 'Et toujours l’Aimant', sub: 'Dix-huit tanks au bestiaire, quatre boss en rotation' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -62,6 +63,8 @@ try {
       else if (shot.drapeau) d.drapeau(shot.drapeau[0], shot.drapeau[1], shot.arms, true, !!shot.drapeau[2]); // « Drapeaux » (iteration 24)
       else if (shot.rivals) d.rivals(shot.rivals * 1000, shot.lobby); // the game goes on behind the lobby (versus, or coop teammates)
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);
+      else if (shot.rushResults) d.rushResults(shot.rushResults * 1000); // « La ronde des boss » (iteration 28): the results
+      else if (shot.rush) d.rush(shot.rush, shot.arms, shot.rushWeek === undefined ? undefined : 2940 + shot.rushWeek); // a stage (2940 % 6 = 0: rushWeek picks the duo)
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
       else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm, shot.ranks);
       if (shot.skills) d.skills(shot.skills[0] * 1000, shot.skills[1], shot.skills[2], shot.skills[3]); // the skill tree over the table (iteration 19)

@@ -1,6 +1,7 @@
 import META from '../shared/meta.json';
 
 import { dayNumber } from '../shared/daily';
+import { weekNumber } from '../shared/rush';
 import { parseFeedbackForm } from './feedback';
 
 export { Room } from './room';
@@ -29,6 +30,15 @@ export default {
       const day = dayNumber();
       try {
         return Response.json(await board.get(day), { headers: { 'cache-control': 'no-store' } });
+      } catch {
+        return Response.json({ error: 'Classement indisponible.' }, { status: 503 });
+      }
+    }
+    if (url.pathname === '/api/rush') {
+      // this week's board of « La ronde des boss » (iteration 28): same Board class, its own instance, one row set per week
+      const board = env.BOARD.get(env.BOARD.idFromName('rush'));
+      try {
+        return Response.json(await board.get(weekNumber(dayNumber())), { headers: { 'cache-control': 'no-store' } });
       } catch {
         return Response.json({ error: 'Classement indisponible.' }, { status: 503 });
       }

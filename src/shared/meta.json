@@ -1,7 +1,7 @@
 {
-  "iteration": 27,
+  "iteration": 28,
   "date": "2026-11-10",
-  "title": "L’Aimant",
+  "title": "La ronde des boss",
   "journal": [
     {
       "iteration": 1,
@@ -329,6 +329,18 @@
         "Puis le champ s’éteint et il te renvoie tout d’un coup, en éventail : « Retour à l’envoyeur ! ». Les obus qu’il garde tournent au-dessus de sa tourelle, compte-les.",
         "Pour l’abattre, tire pendant que son champ est éteint, ou pose-lui une mine : l’aimant n’y peut rien.",
         "Deux nouvelles missions, « L’aimant » (37) et « Les pôles » (38), puis des Aimants dans les missions générées dès la 41ᵉ ; il rejoint aussi le bestiaire et la palette de l’atelier."
+      ]
+    },
+    {
+      "iteration": 28,
+      "date": "2026-11-10",
+      "title": "La ronde des boss",
+      "notes": [
+        "Nouveau mode : la ronde des boss. Le Colosse, le Foreur, le Grondeur et le Semeur t’attendent l’un après l’autre, avec 3 vies pour tout le monde.",
+        "Le bouquet final : deux boss à la fois sur la même table, un duo différent chaque semaine. La barre de vie compte les deux.",
+        "L’ordre des boss change chaque lundi et il est le même pour tous. Le chrono tourne pendant les combats, et le meilleur temps de la semaine monte au classement.",
+        "Une nouvelle carte sur l’accueil montre les boss de la semaine et les trois meilleures équipes ; « Lancer la ronde » ouvre une salle en un clic.",
+        "À la fin, les résultats donnent ton temps contre chaque boss, pour savoir lequel te coûte le plus cher."
       ]
     }
   ]

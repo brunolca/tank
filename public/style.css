@@ -577,8 +577,27 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 18
 /* ---------- daily challenge ---------- */
 @media (min-width: 980px) {
   #home { grid-auto-flow: column; justify-content: center; align-items: center; gap: 22px; }
-  #daily-card { width: 380px; }
+  #daily-card, .side-cards { width: 380px; }
 }
+.side-cards { display: grid; gap: 14px; align-content: center; }
+/* « La ronde des boss » (iteration 28) */
+#rush-card { border-color: rgba(226, 69, 60, 0.45); }
+#rush-card .twist { background: linear-gradient(180deg, #ff8a7a, #e2453c); color: #fff; transform: rotate(-3deg); box-shadow: 0 0 18px rgba(226, 69, 60, 0.4); }
+#rush-card > p { margin: 6px 0; font-size: 13px; }
+.rush-order { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+.rush-order li { display: grid; justify-items: center; gap: 3px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.rush-order li.arrow { color: var(--accent); font-size: 18px; font-weight: 900; }
+.rush-chip { display: inline-block; width: 26px; height: 26px; border-radius: 50%; flex: none;
+  background: linear-gradient(90deg, var(--a) 50%, var(--b) 50%); border: 2px solid #f2c14e; box-shadow: 0 0 10px rgba(242, 193, 78, 0.45), inset 0 -4px 0 rgba(0, 0, 0, 0.25); }
+.rush-chip.duo { width: 34px; border-radius: 13px; }
+.rush-splits { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-variant-numeric: tabular-nums; }
+.rush-splits li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 5px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); font-size: 14px; }
+.rush-splits li .rush-chip { width: 20px; height: 20px; }
+.rush-splits li .rush-chip.duo { width: 28px; }
+.rush-splits li em { font-style: normal; font-weight: 800; }
+.rush-splits li.todo { opacity: 0.45; }
+#banner.rush .b-kicker { color: #ff8a7a; }
+#boss-bar.duo .boss-top b::before { content: '👑 '; }
 #home { row-gap: 18px; }
 .daily-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .daily-date { font-size: 22px; font-weight: 900; line-height: 1.15; }
@@ -889,3 +908,5 @@ body.vs-demo .hud-left, body.vs-demo .hud-right { visibility: hidden; }
 #banner.ctf.team2 .b-title { color: #ff9a8f; text-shadow: 0 0 24px rgba(226, 69, 60, 0.6); }
 #hud-enemies.hurry { color: #ff6b5e; animation: hurry 0.8s ease-in-out infinite alternate; }
 @keyframes hurry { to { color: #ffd0cb; } }
+#mode-select { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#mode-select button { padding-left: 4px; padding-right: 4px; }

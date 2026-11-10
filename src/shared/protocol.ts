@@ -8,7 +8,8 @@ import type { NetFlag } from './drapeau';
 // 'taupe' (the hidden mole) came with iteration 8, and its 'council' phase: older tabs show a coop game that pauses.
 // 'atelier' (a mission drawn in the workshop) came with iteration 14: older tabs are told to reload anyway (welcome.v).
 // 'drapeau' (capture the flag, Bleus against Rouges) came with iteration 24: older tabs are told to reload (welcome.v).
-export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau';
+// 'rush' (« La ronde des boss »: the four bosses, then two at once) came with iteration 28: older tabs are told to reload (welcome.v).
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
@@ -114,11 +115,22 @@ export interface DailyState {
   ticks: number; // fighting time so far
 }
 
+/** « La ronde des boss » in progress (iteration 28), sent with the level and phase messages. */
+export interface RushState {
+  week: number; // weeks since 1970, from Monday (see rush.ts): the order of the bosses and the board
+  stage: number;
+  stages: number;
+  ticks: number; // fighting time so far
+  splits: number[]; // fighting time of each stage cleared
+  bosses: string[]; // the boss kinds of the stage (two for the finale)
+}
+
 export interface Results {
   mode: Mode;
   mission?: number;
   daily?: { state: DailyState; cleared: number; board?: BoardDay };
   taupe?: TaupeResult & { cleared: number; stages: number };
+  rush?: { state: RushState; cleared: number; board?: BoardDay }; // « La ronde des boss » (iteration 28): the weekly board
   atelier?: { name: string; won: boolean }; // workshop mission (iteration 14)
   drapeau?: { teams: [number, number]; winner: number }; // « Drapeaux » (iteration 24): rounds won by each team, the winning team (1 or 2)
   // ff: teammates destroyed (coop-like modes, iteration 8)
@@ -146,10 +158,11 @@ export type ServerMsg =
       fog?: number; // fog (iteration 26): the seed of the drifting banks of mist (see fog.ts); older clients just see the enemies hesitate
       belts?: number[]; // conveyor belts, one code per cell (iteration 16; older tabs are told to reload, at worst they see tanks glide)
       daily?: DailyState;
+      rush?: RushState; // « La ronde des boss » (iteration 28)
       bases?: number[]; // « Drapeaux » (iteration 24): x1 y1 x2 y2, the bases of the Bleus (team 1) and the Rouges (team 2)
     }
   | {
-      t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState;
+      t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState; rush?: RushState;
       council?: CouncilState; // mole mode: the vote after each mission
       stages?: number; // mole mode: number of stages
       prog?: Record<string, Progress>; // coop campaign (iteration 19): experience, galons and skills of each player
