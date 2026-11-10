@@ -60,7 +60,7 @@ export interface Progress {
 /** Experience for destroying an enemy: the tough and the tricky ones are worth more, a boss a lot. */
 export function killXp(kind: TankKind | string): number {
   if (kind === 'boss' || kind === 'drill' || kind === 'thunder' || kind === 'sower') return 8;
-  if (kind === 'steel' || kind === 'mason' || kind === 'thief' || kind === 'rampart' || kind === 'white' || kind === 'black' || kind === 'green') return 2;
+  if (kind === 'steel' || kind === 'mason' || kind === 'thief' || kind === 'rampart' || kind === 'magnet' || kind === 'white' || kind === 'black' || kind === 'green') return 2;
   return 1;
 }
 

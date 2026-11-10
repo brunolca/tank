@@ -3,7 +3,7 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { BOLT_R, BULLET_SPEED, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -1617,4 +1617,114 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout du brouillard');
   if (process.exitCode !== 1) console.log(`brouillard OK (missions : ${fm.join(', ')}, ${(share * 100).toFixed(0)} % de la table dans la brume, ${cleared}/6 parties gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the Aimant (iteration 27): with its field on, it bends the shells around it and catches them, then throws them all back
+{
+  const fail = (m: string) => { console.error('AIMANT:', m); process.exitCode = 1; };
+  const setup = () => {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const m = g.addTank('magnet', 99, 11.5, 8.5, 0);
+    m.ai = undefined; // hold still
+    g.frozen = false;
+    return { g, p, m };
+  };
+  // field on: a shell fired at it is caught, the magnet is unharmed, the flags say so
+  {
+    const { g, p, m } = setup();
+    m.mag!.on = true; m.mag!.t = MAGNET_ON;
+    p.turret = 0;
+    g.tryFire(p);
+    let caught = 0;
+    for (let i = 0; i < 45; i++) { g.step(new Map()); caught += g.events.filter((e) => e[0] === 'catch').length; g.events = []; }
+    if (!m.alive) fail('détruit alors que son champ est allumé');
+    if (caught !== 1 || m.mag!.held !== 1) fail(`obus pas attrapé (${caught}, ${m.mag!.held})`);
+    const fx = g.netTanks().find((n) => n[0] === m.id)![5];
+    if (!(fx & FLAG_MAGNET) || ((fx >> MAGNET_HELD_SHIFT) & 7) !== 1) fail('drapeaux réseau incohérents');
+    // a shell aimed to pass beside it (1.4 tiles off) is pulled in too
+    p.x = 4.5; p.y = 7.1; p.turret = 0; p.fireCd = 0;
+    g.tryFire(p);
+    for (let i = 0; i < 45; i++) { g.step(new Map()); g.events = []; }
+    if (m.mag!.held !== 2) fail('un obus qui le frôle n’est pas attiré');
+    // a shell far from the field flies straight on
+    p.x = 4.5; p.y = 3.5; p.turret = 0; p.fireCd = 0;
+    g.tryFire(p);
+    const b = g.bullets[g.bullets.length - 1];
+    for (let i = 0; i < 20; i++) { g.step(new Map()); g.events = []; }
+    if (Math.abs(b.vy) > 1e-6 || MAGNET_R > 5) fail('un obus loin du champ est dévié');
+    // the field drops: both shells fly back in a fan at the player
+    m.mag!.t = 0.01;
+    g.step(new Map());
+    const un = g.events.find((e) => e[0] === 'unload');
+    if (!un || un[4] !== 2) fail(`pas de gerbe au retour (${un?.[4]})`);
+    const back = g.bullets.filter((x) => x.owner === m.id);
+    if (back.length !== 2 || back.some((x) => x.vx >= 0)) fail('les obus renvoyés ne repartent pas vers le joueur');
+    if (m.mag!.held !== 0 || m.mag!.on) fail('il garde ses obus ou son champ');
+  }
+  // field off: one shell is enough
+  {
+    const { g, p, m } = setup();
+    m.mag!.on = false; m.mag!.t = 9;
+    p.turret = 0;
+    g.tryFire(p);
+    for (let i = 0; i < 45 && m.alive; i++) { g.step(new Map()); g.events = []; }
+    if (m.alive) fail('pas détruit champ éteint');
+  }
+  // a mine gets it even with the field on; the AI does not fire into its field
+  {
+    const { g, p, m } = setup();
+    m.mag!.on = true; m.mag!.t = 9;
+    if (g.traceShot(p, 0, 0).hit === m) fail('l’IA croit pouvoir le toucher champ allumé');
+    m.mag!.on = false;
+    if (g.traceShot(p, 0, 0).hit !== m) fail('l’IA ne le voit plus champ éteint');
+    m.mag!.on = true;
+    g.mines.push({ id: 999, owner: p.id, team: 0, x: 11.5, y: 8.5, t: 1, fuse: -1, dead: false });
+    g.explodeMine(g.mines[0]);
+    if (m.alive) fail('une mine ne le détruit pas');
+  }
+  // its field turns on and off by itself
+  {
+    const { g, m } = setup();
+    let ons = 0, prev = m.mag!.on;
+    for (let i = 0; i < 30 * 20; i++) { g.step(new Map()); if (m.mag!.on && !prev) ons++; prev = m.mag!.on; g.events = []; }
+    if (ons < 2) fail(`le champ ne s’allume pas en rythme (${ons})`);
+  }
+  // the missions: handmade 37 and 38, then some generated ones; never in the daily challenge nor the mole
+  const mm: number[] = [];
+  for (let mission = 1; mission <= 120; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'magnet')) mm.push(mission);
+  if (!mm.includes(37) || !mm.includes(38)) fail('missions 37 et 38 sans Aimant');
+  if (mm.some((x) => x < 37)) fail('Aimant avant la 37ᵉ mission');
+  if (mm.length < 8) fail(`trop peu de missions avec des Aimants (${mm.length})`);
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'magnet')) fail('Aimant dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'magnet')) fail('Aimant dans la taupe');
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'A' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Aimant refusé (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Pôle', map }));
+  if (back?.map[8][15] !== 'A') fail('atelier : l’Aimant se perd dans le code');
+  if (killXp('magnet') !== 2) fail('galons de l’Aimant');
+  // duos of AI players clear the magnet missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, catches = 0;
+  for (const mission of [37, 38, mm.find((x) => x > 40)!]) {
+    for (let run = 0; run < 2; run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        catches += s2.events.filter((e) => e[0] === 'catch').length;
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des Aimants');
+  if (process.exitCode !== 1) console.log(`aimant OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${catches} obus attrapés, ${per.toFixed(3)} ms/tick)`);
 }

@@ -387,6 +387,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'magnet')) setTimeout(() => toast('L’Aimant : quand son champ bleu brille, il attire et avale tes obus… puis te les renvoie tous d’un coup. Tire quand le champ s’éteint, ou pose une mine !', 4800), 2200);
   else if (enemies.some((e) => e.kind === 'rampart')) setTimeout(() => toast('Le Rempart renvoie tous les obus qui frappent son bouclier. Prends-le de côté, par-derrière… ou à la mine !', 4400), 2200);
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
@@ -782,6 +783,18 @@ function handleEvent(e: GameEvent, audible: boolean) {
       }
       break;
     }
+    case 'catch':
+      // the Aimant's magnet caught a shell (iteration 27)
+      renderer.magnetCatch(e[3], e[1], e[2]);
+      if (e[4] === 1) floater(e[1], e[2], 'Clac !', 0x6fbaff);
+      if (audible) sfx.magnetCatch(e[4]);
+      break;
+    case 'unload':
+      // and throws them all back (iteration 27)
+      renderer.magnetUnload(e[3], e[1], e[2]);
+      if (e[4] > 0) floater(e[1], e[2], e[4] > 1 ? `Retour à l’envoyeur ×${e[4]} !` : 'Retour à l’envoyeur !', 0x6fbaff);
+      if (audible) sfx.magnetUnload(e[4]);
+      break;
     case 'deflect':
       // a shell bounced off the Rempart's shield (iteration 22)
       renderer.deflect(e[3], e[1], e[2]);
@@ -1849,6 +1862,7 @@ const BESTIARY: [TankKind, string][] = [
   ['mason', 'bâtit des murs de liège entre toi et lui'],
   ['thief', 'file voler les caisses bonus avant toi'],
   ['rampart', 'son bouclier renvoie les obus : prends-le de côté'],
+  ['magnet', 'son champ avale les obus et te les renvoie : tire quand il s’éteint'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -2168,6 +2182,30 @@ if (params.has('demo')) {
     armor() {
       let n = 0;
       for (const t of attract?.tanks ?? []) if (t.alive && t.kind === 'steel' && t.hp > 1) { t.buffs.invuln = 0; attract!.killTank(t, undefined); n++; }
+      return n;
+    },
+    /**
+     * The Aimant (iteration 27): its field comes on, every hero fires a shell just beside it (to show the shells
+     * bending into the magnet), and the field drops a couple of seconds later, throwing them back on camera.
+     */
+    magnetShot() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const m of g.tanks) {
+        if (!m.alive || !m.mag) continue;
+        if (!m.mag.on) m.mag.on = true;
+        m.mag.t = 2.6;
+        for (const h of g.tanks) {
+          if (!h.alive || h.kind !== 'player' || Math.hypot(h.x - m.x, h.y - m.y) > 12) continue;
+          const keep = h.turret;
+          const d = Math.hypot(m.x - h.x, m.y - h.y);
+          h.turret = Math.atan2(m.y - h.y, m.x - h.x) + Math.min(0.35, 1.3 / Math.max(1, d)) * (n % 2 ? 1 : -1);
+          h.fireCd = 0;
+          if (g.tryFire(h)) n++;
+          h.turret = keep;
+        }
+      }
       return n;
     },
     /** A hero fires straight into each Rempart's shield (to catch the shell bouncing back on camera). */

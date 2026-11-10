@@ -1,7 +1,7 @@
 {
-  "iteration": 26,
-  "date": "2026-11-09",
-  "title": "Le brouillard",
+  "iteration": 27,
+  "date": "2026-11-10",
+  "title": "L’Aimant",
   "journal": [
     {
       "iteration": 1,
@@ -317,6 +317,18 @@
         "Deux nouvelles missions, « Purée de pois » (35ᵉ) et « Les marais » (36ᵉ), puis une mission générée sur cinq dans la brume, les jours sans vent.",
         "En versus, une manche sur sept se joue à cache-cache dans le brouillard. Dans l’atelier, une nouvelle case « Brouillard » pour tes missions maison.",
         "Une corne de brume résonne au loin de temps en temps. Écoute bien !"
+      ]
+    },
+    {
+      "iteration": 27,
+      "date": "2026-11-10",
+      "title": "L’Aimant",
+      "notes": [
+        "Un nouvel ennemi entre en scène : l’Aimant, un tank gris anthracite qui porte un gros aimant rouge en fer à cheval sur sa tourelle.",
+        "Quand son champ bleu s’allume, il attire tous les obus qui passent près de lui, les tiens comme ceux de ses alliés, et les avale sans une égratignure.",
+        "Puis le champ s’éteint et il te renvoie tout d’un coup, en éventail : « Retour à l’envoyeur ! ». Les obus qu’il garde tournent au-dessus de sa tourelle, compte-les.",
+        "Pour l’abattre, tire pendant que son champ est éteint, ou pose-lui une mine : l’aimant n’y peut rien.",
+        "Deux nouvelles missions, « L’aimant » (37) et « Les pôles » (38), puis des Aimants dans les missions générées dès la 41ᵉ ; il rejoint aussi le bestiaire et la palette de l’atelier."
       ]
     }
   ]

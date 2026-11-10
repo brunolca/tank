@@ -172,6 +172,22 @@ export const sfx = {
     tone(t, 0.08, 1200, 2400, 0.06, 'triangle');
     noise(t, 0.08, 7000, 1.5, 0.18, 'highpass');
   },
+  /** The Aimant catches a shell (iteration 27): a metallic snap, a little higher with each shell it holds. */
+  magnetCatch(held = 1) {
+    if (!ctx) return;
+    const t = ctx.currentTime, f = 520 + held * 70;
+    tone(t, 0.12, f * 1.6, f, 0.09, 'square');
+    tone(t, 0.25, f * 2, f * 2.02, 0.04, 'sine');
+    noise(t, 0.05, 5000, 1.2, 0.12, 'highpass');
+  },
+  /** And throws them all back: a rising electric whoosh. */
+  magnetUnload(n = 1) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.35, 180, 900, 0.1, 'sawtooth');
+    tone(t + 0.05, 0.3, 360, 1500, 0.05, 'square');
+    noise(t, 0.3, 2400, 0.8, 0.12 + Math.min(6, n) * 0.02, 'bandpass');
+  },
   /** The boss takes a hit: a heavy metal clang. */
   bossHit() {
     if (!ctx) return;

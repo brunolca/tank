@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 35, arms: ['canon', 'ricochet'], seconds: 16, caption: 'Nouveau : le brouillard', sub: 'Des bancs de brume dérivent sur la table et cachent les tanks' },
-  { mission: 36, arms: ['ricochet', 'canon'], seconds: 14, caption: 'Les marais', sub: 'Au cœur de la brume, un tank ne se voit que de près… ou quand il tire' },
-  { versus: [5, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 12, caption: 'Cache-cache en versus', sub: 'Une manche sur sept se joue dans le brouillard' },
-  { mission: 52, arms: ['canon', 'fusee'], seconds: 9, caption: 'Missions de brume', sub: 'Une mission générée sur cinq, les jours sans vent' },
-  { mission: 40, arms: ['canon', 'ricochet'], seconds: 9, sows: [1, 6], seedShots: [3, 7.5], caption: 'Et toujours le Semeur', sub: 'Quatre boss se relaient toutes les dix missions' },
-  { drapeau: [3, [2, 2, 2, 2]], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 8, caption: 'Et les drapeaux', sub: 'Les Bleus contre les Rouges, à quatre en ligne' },
+  { mission: 37, arms: ['canon', 'ricochet'], seconds: 16, magnetShots: [1.5, 8.5], caption: 'Nouveau : l’Aimant', sub: 'Son champ bleu attire les obus et les avale…' },
+  { mission: 38, arms: ['ricochet', 'canon'], seconds: 14, magnetShots: [2, 9], caption: '… puis il te les renvoie tous d’un coup', sub: 'Les pôles : deux Aimants protègent leurs alliés' },
+  { mission: 44, arms: ['canon', 'fusee'], seconds: 10, magnetShots: [3], caption: 'Tire quand le champ s’éteint', sub: 'Ou pose une mine : des Aimants dès la 41ᵉ mission' },
+  { bestiary: 5, seconds: 5, caption: 'Au bestiaire', sub: 'Dix-huit tanks, chacun sa couleur, chacun sa ruse' },
+  { mission: 35, arms: ['canon', 'ricochet'], seconds: 9, caption: 'Et toujours le brouillard', sub: 'Au cœur de la brume, un tank ne se voit que de près' },
+  { mission: 40, arms: ['canon', 'ricochet'], seconds: 8, sows: [1, 5], seedShots: [3], caption: 'Et le Semeur', sub: 'Quatre boss se relaient toutes les dix missions' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -79,6 +79,7 @@ try {
       for (const s of shot.beltCrates ?? []) setTimeout(() => d.beltCrate?.(), s * 1000);
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
+      for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
       for (const s of shot.sows ?? []) setTimeout(() => d.sow?.(), s * 1000); // the Semeur sows (iteration 25)
       for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it

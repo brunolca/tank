@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -45,6 +45,14 @@ export interface Tank {
   vx: number; // speed the tank carries (tiles/s), only used on tables with ice (iteration 21)
   vy: number;
   slid?: boolean; // drove this tick (tables with ice): if not, it still slides on
+  mag?: MagnetState; // the Aimant (iteration 27)
+}
+
+/** The Aimant: whether its field is on, seconds left in that phase, and the shells it caught. */
+export interface MagnetState {
+  on: boolean;
+  t: number;
+  held: number;
 }
 
 /** The Maçon: when it lays its next block, and the cells of the blocks it laid. */
@@ -151,7 +159,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -281,6 +289,7 @@ export class Game {
     };
     if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : kind === 'sower' ? 3.2 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
+    if (kind === 'magnet') t.mag = { on: false, t: 1.2 + Math.random() * 1.6, held: 0 };
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
     return t;
@@ -361,6 +370,7 @@ export class Game {
         if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
       } else if (t.boss) this.updateBoss(t);
       if (t.build) this.updateMason(t);
+      if (t.mag) this.updateMagnet(t);
       t.slid = false;
       if (t.ai) {
         this.updateAI(t);
@@ -896,6 +906,64 @@ export class Game {
     if (t.ai) { t.ai.path = []; t.ai.pathT = 0; }
   }
 
+  // -------------------------------------------------------------- the Aimant (iteration 27)
+
+  /** Its field goes on and off in turn; when it goes off, every shell it caught flies back in a fan. */
+  updateMagnet(t: Tank) {
+    const m = t.mag!;
+    m.t -= DT;
+    if (m.t > 0) return;
+    if (!m.on) { m.on = true; m.t = MAGNET_ON; return; }
+    m.on = false;
+    m.t = MAGNET_OFF;
+    if (m.held > 0) this.unload(t);
+  }
+
+  /** The Aimant throws back the shells it holds, in a fan centred on its nearest foe (or where its turret points). */
+  unload(t: Tank): number {
+    const m = t.mag!;
+    const n = m.held;
+    m.held = 0;
+    if (n <= 0) return 0;
+    const foe = this.nearestFoe(t);
+    const aim = foe ? Math.atan2(foe.y - t.y, foe.x - t.x) : t.turret;
+    t.turret = aim;
+    const half = Math.min(MAGNET_FAN_MAX, MAGNET_FAN_STEP * (n - 1));
+    const volley = this.nextId;
+    const tip = t.r + 0.22;
+    let fired = 0;
+    for (let i = 0; i < n; i++) {
+      const a = aim + (n > 1 ? -half + (2 * half * i) / (n - 1) : 0);
+      const dx = Math.cos(a), dy = Math.sin(a);
+      const x = t.x + dx * tip, y = t.y + dy * tip;
+      if (bulletBlocked(this.tiles, x, y, BULLET_R)) continue;
+      this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * BULLET_SPEED, vy: dy * BULLET_SPEED, bounces: 1, rocket: false, dead: false, volley });
+      fired++;
+    }
+    t.reveal = NIGHT_REVEAL;
+    this.events.push(['unload', r2(t.x), r2(t.y), t.id, fired]);
+    return fired;
+  }
+
+  /** The Aimant's field turns the shells around it toward it (never its own shells): the closer, the faster they turn. */
+  magnetPull(dt: number) {
+    for (const t of this.tanks) {
+      if (!t.alive || !t.mag?.on) continue;
+      const [p0, p1] = MAGNET_PULL;
+      for (const b of this.bullets) {
+        if (b.dead || b.owner === t.id) continue;
+        const dx = t.x - b.x, dy = t.y - b.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > MAGNET_R * MAGNET_R) continue;
+        const d = Math.sqrt(d2);
+        const turn = (p0 + (p1 - p0) * (1 - d / MAGNET_R)) * dt;
+        const sp = Math.hypot(b.vx, b.vy);
+        const a = rotateToward(Math.atan2(b.vy, b.vx), Math.atan2(dy, dx), turn);
+        b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+      }
+    }
+  }
+
   /** Best free cell for a cover block between the Maçon and a foe (-1 when none fits). */
   masonSpot(t: Tank, foe: Pt): number {
     let ux = foe.x - t.x, uy = foe.y - t.y;
@@ -1070,6 +1138,8 @@ export class Game {
 
   stepBullets(dt: number) {
     const windy = this.wind !== undefined, [gx, gy] = this.gust;
+    const magnets = this.tanks.some((t) => t.alive && t.mag?.on);
+    if (magnets) this.magnetPull(dt);
     for (const b of this.bullets) {
       if (b.dead) continue;
       if (windy) [b.vx, b.vy] = bend(b.vx, b.vy, gx, gy, dt); // the wind bends it, never speeds it up
@@ -1105,6 +1175,7 @@ export class Game {
         const rr = t.r + BULLET_R;
         if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
           if (t.kind === 'rampart' && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22)
+          if (t.mag?.on && b.owner !== t.id) { this.catchShell(t, b); break; } // the Aimant catches it (iteration 27)
           b.dead = true;
           this.killTank(t, this.tankById(b.owner));
           break;
@@ -1140,6 +1211,14 @@ export class Game {
       }
     }
     this.bullets = this.bullets.filter((b) => !b.dead);
+  }
+
+  /** The Aimant's field is on: the shell sticks to its magnet (it will throw it back), the tank is unharmed. */
+  catchShell(t: Tank, b: Bullet) {
+    b.dead = true;
+    const m = t.mag!;
+    if (m.held < MAGNET_HOLD) m.held++;
+    this.events.push(['catch', r2(b.x), r2(b.y), t.id, m.held]);
   }
 
   /** Is the point (x, y) in front of the Rempart's shield (within RAMPART_ARC of where its turret points)? */
@@ -1360,7 +1439,8 @@ export class Game {
     const b = t.buffs;
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
-      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0);
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
+      | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
   netBonuses(): NetBonus[] {
     return this.bonuses.map((c) => [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
@@ -1402,6 +1482,12 @@ export class Game {
       }
       // mines also stop bullets: shooting into a mine near us is bad, near foes is fine
       const segLen = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+      // an Aimant with its field on (iteration 27) catches whatever comes near: the shot is lost (and its own allies know it)
+      for (const o of this.tanks) {
+        if (o === t || !o.alive || !o.mag?.on) continue;
+        const u = segCircle(s, o.x, o.y, o.r + 0.9);
+        if (u >= 0 && u < bestT) return { len: acc + segLen * u };
+      }
       if (best && best.kind === 'rampart' && best !== t) {
         // the shield would send it back: no use (and the AI-driven players learn to go round it)
         const hx = s.x0 + (s.x1 - s.x0) * bestT, hy = s.y0 + (s.y1 - s.y0) * bestT;
@@ -1615,6 +1701,7 @@ export class Game {
       if (tt <= 0 || tt > notice) continue;
       if (t.spec.skill < 2 && (b.id + t.id) % 3 === 0) continue;
       if (t.kind === 'rampart' && this.shieldFaces(t, t.x - b.vx, t.y - b.vy)) continue; // head-on: it trusts its shield
+      if (t.mag?.on) continue; // its field will catch it
       const cx = rx - b.vx * tt, cy = ry - b.vy * tt;
       const d = Math.hypot(cx, cy);
       if (d > t.r + 0.55) continue;

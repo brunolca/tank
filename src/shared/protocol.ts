@@ -81,6 +81,8 @@ export type GameEvent =
   | ['rally', number, number, number, number] // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
   | ['deflect', number, number, number] // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
   | ['sow', number, number, number, number] // x y tankId seeds: the Semeur throws its seeds (iteration 25; older clients ignore it, the seeds are plain mines to them)
+  | ['catch', number, number, number, number] // x y tankId held: the Aimant's magnet catches a shell (iteration 27; older clients ignore it)
+  | ['unload', number, number, number, number] // x y tankId shells: the Aimant throws back the shells it caught (iteration 27; older clients ignore it)
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */

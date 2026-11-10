@@ -487,11 +487,13 @@ export class Room extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment | null;
     let tanks = this.game.tankInfos();
     // tabs older than iteration 10 don't know the steel tank: they draw a grey one instead of crashing
-    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' || t.kind === 'mason' || t.kind === 'thief' || t.kind === 'rampart' ? { ...t, kind: 'ash' } : t.kind === 'drill' || t.kind === 'thunder' || t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
+    if (!att?.v) tanks = tanks.map((t) => (t.kind === 'steel' || t.kind === 'mason' || t.kind === 'thief' || t.kind === 'rampart' || t.kind === 'magnet' ? { ...t, kind: 'ash' } : t.kind === 'drill' || t.kind === 'thunder' || t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
     // and tabs older than iteration 22 draw the Rempart as a plain grey tank (without its shield)
-    else if (att.v < 22) tanks = tanks.map((t) => (t.kind === 'rampart' ? { ...t, kind: 'ash' } : t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
+    else if (att.v < 22) tanks = tanks.map((t) => (t.kind === 'rampart' || t.kind === 'magnet' ? { ...t, kind: 'ash' } : t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
     // tabs older than iteration 25 draw the Semeur as a Colosse (its seeds look like plain mines to them)
-    else if (att.v < 25) tanks = tanks.map((t) => (t.kind === 'sower' ? { ...t, kind: 'boss' } : t));
+    else if (att.v < 25) tanks = tanks.map((t) => (t.kind === 'sower' ? { ...t, kind: 'boss' } : t.kind === 'magnet' ? { ...t, kind: 'ash' } : t));
+    // and tabs older than iteration 27 draw the Aimant as a plain grey tank (its field and its catches are not shown)
+    else if (att.v < 27) tanks = tanks.map((t) => (t.kind === 'magnet' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,

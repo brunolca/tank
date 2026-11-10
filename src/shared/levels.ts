@@ -7,9 +7,9 @@ import { BELT_CHARS, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
 //         > < ^ V conveyor belts (iteration 16): tanks, mines and crates ride them (the cell stays floor underneath)
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet',
 };
 
 export interface LevelDef {
@@ -794,6 +794,52 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 27: the Aimant's first stand, alone behind a low wall, two brown turrets cover it; wait for its field to drop
+  37: {
+    name: 'L’aimant',
+    map: [
+      '......................',
+      '......................',
+      '...............b......',
+      '..1.......#...........',
+      '..........#...........',
+      '..2.......#.....##....',
+      '................##....',
+      '......................',
+      '.......o.....A........',
+      '......................',
+      '................##....',
+      '..........#.....##....',
+      '..........#...........',
+      '..........#...........',
+      '...............b......',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 27: two Aimants guard a pink and a violet: their fields swallow the shots aimed at their friends
+  38: {
+    name: 'Les pôles',
+    map: [
+      '......................',
+      '..1............A......',
+      '.........##...........',
+      '..2......##......p....',
+      '......................',
+      '.....o.......####.....',
+      '.....o................',
+      '...........o..........',
+      '.........___......v...',
+      '...........o..........',
+      '.....o................',
+      '.....o.......####.....',
+      '......................',
+      '.........##......y....',
+      '.........##...........',
+      '...............A......',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -1001,6 +1047,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
       const rr = rng(mission * 6007 + 53);
       let n = 0;
       for (const e of enemies) if (n < 2 && (e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'violet') && rr() < 0.14) { e.kind = 'rampart'; n++; }
+    }
+    // the Aimant (iteration 27) shows up from the 41st: one more stream, at most one of them
+    if (opt.seed === undefined && mission > 40) {
+      const rg = rng(mission * 7331 + 67);
+      for (const e of enemies) if (e.kind !== 'steel' && e.kind !== 'mason' && e.kind !== 'thief' && e.kind !== 'rampart' && e.kind !== 'green' && e.kind !== 'brown' && rg() < 0.16) { e.kind = 'magnet'; break; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

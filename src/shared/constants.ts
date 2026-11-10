@@ -46,7 +46,8 @@ export type TankKind =
   | 'thief'
   | 'thunder'
   | 'rampart'
-  | 'sower';
+  | 'sower'
+  | 'magnet';
 
 export interface TankSpec {
   speed: number;
@@ -91,6 +92,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   rampart: { speed: 1.1, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.9, turretSpeed: 1.25, mines: 0, skill: 1, reaction: 0.55, aimError: 0.07, label: 'Rempart' },
   // iteration 25: the fourth boss, it sows giant seed-mines all over the table (see SOWER_*, SEED_*)
   sower: { speed: 1.1, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.25, turretSpeed: 2.3, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: SOWER_R, label: 'Semeur' },
+  // iteration 27: its magnet pulls in every shell around it and catches them, then throws them all back at once (see MAGNET_*)
+  magnet: { speed: 1.25, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.6, turretSpeed: 2.2, mines: 0, skill: 1, reaction: 0.55, aimError: 0.08, label: 'Aimant' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -124,6 +127,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   thunder: 0x34508f,
   rampart: 0x2f6f73,
   sower: 0x86b33a,
+  magnet: 0x474c58,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -187,6 +191,24 @@ export const SEED_RIPEN: [number, number] = [5.2, 4.2];
 export const SEED_BLINK = 1.3;
 /** Seconds a seed is in the air after it is thrown: shells fly under it. */
 export const SEED_FLIGHT = 0.5;
+
+// ------------------------------------------------------------------ the Aimant (iteration 27): the magnet tank
+/** Seconds its field stays on (it pulls in and catches every shell around it), then off (it can be hit). */
+export const MAGNET_ON = 4.6;
+export const MAGNET_OFF = 3.2;
+/** Reach of the field (tiles), and how fast it turns a shell toward the magnet at the edge and right next to it (rad/s). */
+export const MAGNET_R = 2.7;
+export const MAGNET_PULL: [number, number] = [0.8, 8];
+/** Most shells it can hold; it throws them all back in a fan when its field goes off. */
+export const MAGNET_HOLD = 6;
+/** Half-width of that fan (radians) per shell held, and at most. */
+export const MAGNET_FAN_STEP = 0.13;
+export const MAGNET_FAN_MAX = 0.6;
+/** Seconds of crackling warning (flag FLAG_CHARGING) before it throws the shells back. */
+export const MAGNET_WARN = 0.8;
+/** Tank flags: the field is on, and how many shells it holds (3 bits from MAGNET_HELD_SHIFT). */
+export const FLAG_MAGNET = 1024;
+export const MAGNET_HELD_SHIFT = 11;
 
 // ------------------------------------------------------------------ the Rempart (iteration 22): the tank with a shield
 /** Half-width of the shield's arc (radians), centred on where its turret points: shells hitting inside it bounce back. */

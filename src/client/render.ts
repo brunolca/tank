@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
@@ -197,7 +197,19 @@ interface TankView {
   hopper?: THREE.Group; // the Semeur (iteration 25): its seed hopper, which shakes as it sows
   shieldMat?: THREE.MeshStandardMaterial; // the Rempart (iteration 22): its brass shield, which flares when a shell bounces off
   shieldGlow?: number;
+  magnet?: MagnetView; // the Aimant (iteration 27)
   under?: boolean;
+}
+
+/** The Aimant (iteration 27): its field on the floor, a ripple running inward, and the shells it holds above its turret. */
+interface MagnetView {
+  field: THREE.Mesh;
+  ripple: THREE.Mesh;
+  orbit: THREE.Group;
+  held: THREE.Mesh[];
+  horseshoe: THREE.MeshStandardMaterial;
+  on: number; // eased 0..1
+  flash: number;
 }
 
 /** Red « ! » bubble shown above enemies that have spotted a foe at night. */
@@ -466,6 +478,16 @@ const rampartGeo = {
   crest: new THREE.ConeGeometry(0.05, 0.16, 4),
 };
 const rampartRimMat = new THREE.MeshStandardMaterial({ color: 0x8a5a26, roughness: 0.4, metalness: 0.7 });
+// the Aimant (iteration 27): a red horseshoe magnet with silver poles on its turret
+const magnetGeo = {
+  shoe: new THREE.TorusGeometry(0.15, 0.055, 10, 18, Math.PI),
+  pole: new THREE.BoxGeometry(0.11, 0.11, 0.11),
+  field: new THREE.RingGeometry(MAGNET_R - 0.06, MAGNET_R, 64),
+  ripple: new THREE.RingGeometry(0.92, 1, 48),
+  shell: new THREE.SphereGeometry(0.065, 10, 8),
+};
+const magnetPoleMat = new THREE.MeshStandardMaterial({ color: 0xdfe5ea, roughness: 0.2, metalness: 0.9, emissive: 0x1a2028, emissiveIntensity: 0.4 });
+const magnetShellMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.3, metalness: 0.6, emissive: 0x7fc8ff, emissiveIntensity: 0.5 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
 const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
 const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 1, flatShading: true });
@@ -861,6 +883,44 @@ function buildTank(info: TankInfo): TankView {
     view.shieldMat = shieldMat;
     view.shieldGlow = 0;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'magnet') {
+    const horseshoe = new THREE.MeshStandardMaterial({ color: 0xe03a32, roughness: 0.35, metalness: 0.3, emissive: 0x7fc8ff, emissiveIntensity: 0 });
+    const g = new THREE.Group();
+    g.position.set(-0.04, 0.29, 0);
+    g.scale.setScalar(1.45);
+    const inner = new THREE.Group();
+    inner.rotation.y = Math.PI / 2;
+    const shoe = new THREE.Mesh(magnetGeo.shoe, horseshoe);
+    shoe.rotation.x = -Math.PI / 2;
+    inner.add(shoe);
+    g.add(inner);
+    for (const z of [-0.15, 0.15]) {
+      const pole = new THREE.Mesh(magnetGeo.pole, magnetPoleMat);
+      pole.position.set(0.05, 0, z);
+      g.add(pole);
+    }
+    turret.add(g);
+    const fieldMat = new THREE.MeshBasicMaterial({ color: 0x2f8cff, transparent: true, opacity: 0, depthWrite: false });
+    const field = new THREE.Mesh(magnetGeo.field, fieldMat);
+    field.rotation.x = -Math.PI / 2;
+    field.position.y = 0.03;
+    const ripple = new THREE.Mesh(magnetGeo.ripple, fieldMat.clone());
+    ripple.rotation.x = -Math.PI / 2;
+    ripple.position.y = 0.035;
+    const orbit = new THREE.Group();
+    orbit.position.y = 0.95;
+    const held: THREE.Mesh[] = [];
+    for (let i = 0; i < 6; i++) {
+      const m = new THREE.Mesh(magnetGeo.shell, magnetShellMat);
+      m.position.set(Math.cos((i / 6) * Math.PI * 2) * 0.3, 0, Math.sin((i / 6) * Math.PI * 2) * 0.3);
+      m.visible = false;
+      orbit.add(m);
+      held.push(m);
+    }
+    root.add(field, ripple, orbit);
+    view.magnet = { field, ripple, orbit, held, horseshoe, on: 0, flash: 0 };
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o !== field && o !== ripple) o.castShadow = o.receiveShadow = true; });
   }
   if (armorGroup) {
     view.armor = armorGroup;
@@ -2019,6 +2079,7 @@ export class Renderer {
       v.turret.position.y = 0.37 * v.scale;
       this.tankGlow(v, t, dt);
       if (v.cloud) this.tankThunder(v, t, dt);
+      if (v.magnet) this.tankMagnet(v.magnet, t, dt);
       if (v.hopper) {
         const sh = (v.hopper.userData.shake = Math.max(0, (v.hopper.userData.shake ?? 0) - dt * 2.5));
         const charging = !!((t.fx ?? 0) & FLAG_CHARGING);
@@ -2253,7 +2314,7 @@ export class Renderer {
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
       glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
-      col = v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : 0xff5a20;
+      col = v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : 0xff5a20;
       if (Math.random() < 60 * dt) {
         // sparks sucked into the hull
         const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
@@ -2271,6 +2332,52 @@ export class Renderer {
       m.emissive.setHex(col);
       m.emissiveIntensity = glow;
     }
+  }
+
+  /** The Aimant (iteration 27): its field glows on the floor while it is on, a ripple runs inward, caught shells circle above. */
+  private tankMagnet(m: MagnetView, t: RTank, dt: number) {
+    const fx = t.fx ?? 0;
+    const on = fx & FLAG_MAGNET ? 1 : 0;
+    const held = (fx >> MAGNET_HELD_SHIFT) & 7;
+    m.on += (on - m.on) * Math.min(1, dt * 8);
+    m.flash = Math.max(0, m.flash - dt * 3);
+    const fm = m.field.material as THREE.MeshBasicMaterial, rm = m.ripple.material as THREE.MeshBasicMaterial;
+    fm.opacity = m.on * (0.6 + Math.sin(this.time * 5) * 0.15) + m.flash * 0.3;
+    const u = (this.time * 0.9 + t.id * 0.37) % 1;
+    const rs = MAGNET_R * (1 - u * 0.85);
+    m.ripple.scale.set(rs, rs, rs);
+    rm.opacity = m.on * 0.55 * Math.sin(u * Math.PI);
+    m.field.visible = m.ripple.visible = m.on > 0.02 || m.flash > 0.02;
+    m.horseshoe.emissiveIntensity = m.on * (0.25 + Math.sin(this.time * 9) * 0.12) + m.flash;
+    m.orbit.rotation.y += dt * (2 + held);
+    for (let i = 0; i < m.held.length; i++) m.held[i].visible = i < held;
+    m.orbit.position.y = 0.95 + Math.sin(this.time * 3) * 0.05;
+    if (on && Math.random() < 22 * dt) {
+      // blue sparks drawn in from the edge of the field
+      const a = Math.random() * Math.PI * 2, d = MAGNET_R * (0.8 + Math.random() * 0.2);
+      this.glow.emit({ x: t.x + Math.cos(a) * d, y: 0.12, z: t.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 1.6, vz: -Math.sin(a) * d * 1.6, life: 0.5, s0: 0.05, s1: 0.015, c0: 0xffffff, c1: 0x5fb0ff, drag: 0.6 });
+    }
+  }
+
+  /** The Aimant caught a shell: a blue snap where it struck. */
+  magnetCatch(id: number, x: number, y: number) {
+    const v = this.tanks.get(id);
+    if (v?.magnet) v.magnet.flash = 1;
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 2.5;
+      this.glow.emit({ x, y: 0.45, z: y, vx: Math.cos(a) * sp, vy: 0.5 + Math.random() * 2, vz: Math.sin(a) * sp, life: 0.25 + Math.random() * 0.2, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: 0x6fbaff, grav: 4, drag: 1.2 });
+    }
+  }
+
+  /** The Aimant throws its shells back: a ring of blue light bursts from it. */
+  magnetUnload(id: number, x: number, y: number) {
+    const v = this.tanks.get(id);
+    if (v) { v.recoil = 1; if (v.magnet) v.magnet.flash = 1; }
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2, sp = 4 + Math.random() * 1.5;
+      this.glow.emit({ x, y: 0.3, z: y, vx: Math.cos(a) * sp, vy: 0.3, vz: Math.sin(a) * sp, life: 0.35, s0: 0.08, s1: 0.02, c0: 0xffffff, c1: 0x4f9dff, drag: 2 });
+    }
+    this.shake = Math.max(this.shake, 0.12);
   }
 
   /** A shell bounced off the Rempart's shield (iteration 22): the brass flares, a fan of sparks flies off. */
