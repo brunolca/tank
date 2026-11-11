@@ -1,0 +1,407 @@
+{
+  "id": 25,
+  "created": "2026-11-11T03:49:22.443Z",
+  "category": "bug",
+  "text": "Ya toujours genre 10 secondes d'attente après chaque fin de partie",
+  "context": {
+    "game": {
+      "iteration": 28,
+      "iterationTitle": "La ronde des boss",
+      "screen": "lobby",
+      "online": false,
+      "room": "GMTP3",
+      "mode": "démo",
+      "players": [
+        {
+          "name": "Bruno",
+          "host": true,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 4.28,
+        "y": 9.46,
+        "alive": true,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "me": true,
+          "x": 4.28,
+          "y": 9.46,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "drill",
+          "label": "Foreur",
+          "team": 99,
+          "x": 2.5,
+          "y": 8.5,
+          "alive": false
+        },
+        {
+          "id": 3,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 99,
+          "x": 12.55,
+          "y": 6.45,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "black",
+          "label": "Noir",
+          "team": 99,
+          "x": 6.59,
+          "y": 12.5,
+          "alive": true
+        }
+      ],
+      "bullets": 5,
+      "mines": 0,
+      "recentEvents": [
+        [
+          1509,
+          "shot",
+          10.26,
+          8.24,
+          0.1,
+          1,
+          1
+        ],
+        [
+          1515,
+          "pop",
+          16.74,
+          8.25
+        ],
+        [
+          1522,
+          "shot",
+          10.25,
+          9.96,
+          -0.19,
+          1,
+          1
+        ],
+        [
+          1528,
+          "pop",
+          16.88,
+          8.95
+        ],
+        [
+          1529,
+          "hurt",
+          13.23,
+          9.98,
+          2,
+          6,
+          8
+        ],
+        [
+          1533,
+          "shot",
+          12.51,
+          10.34,
+          2.84,
+          0,
+          2
+        ],
+        [
+          1546,
+          "shot",
+          11.64,
+          12.07,
+          -0.78,
+          1,
+          1
+        ],
+        [
+          1550,
+          "hurt",
+          12.74,
+          10.23,
+          2,
+          5,
+          8
+        ],
+        [
+          1560,
+          "shot",
+          13.05,
+          11.94,
+          -1.94,
+          1,
+          1
+        ],
+        [
+          1564,
+          "hurt",
+          12.81,
+          9.97,
+          2,
+          4,
+          8
+        ],
+        [
+          1564,
+          "rage",
+          12.81,
+          9.97,
+          2
+        ],
+        [
+          1566,
+          "mineSet",
+          12.86,
+          9.95
+        ],
+        [
+          1576,
+          "shot",
+          14.81,
+          11.6,
+          -2.67,
+          1,
+          1
+        ],
+        [
+          1582,
+          "shot",
+          12.96,
+          9.65,
+          0.67,
+          0,
+          2
+        ],
+        [
+          1582,
+          "mboom",
+          12.86,
+          9.95
+        ],
+        [
+          1582,
+          "hurt",
+          12.34,
+          9.1,
+          2,
+          3,
+          8
+        ],
+        [
+          1595,
+          "bounce",
+          0.17,
+          14.19
+        ],
+        [
+          1601,
+          "shot",
+          15.16,
+          8.75,
+          -3.14,
+          1,
+          1
+        ],
+        [
+          1618,
+          "shot",
+          13.14,
+          9.24,
+          -0.9,
+          0,
+          2
+        ],
+        [
+          1620,
+          "shot",
+          13.94,
+          7.29,
+          1.66,
+          1,
+          1
+        ],
+        [
+          1622,
+          "pop",
+          13.81,
+          8.38
+        ],
+        [
+          1625,
+          "pop",
+          5.9,
+          16
+        ],
+        [
+          1629,
+          "pop",
+          5.18,
+          8.72
+        ],
+        [
+          1630,
+          "shot",
+          12.95,
+          6.37,
+          1.53,
+          1,
+          1
+        ],
+        [
+          1642,
+          "shot",
+          11.39,
+          6.34,
+          1.21,
+          1,
+          1
+        ],
+        [
+          1649,
+          "dig",
+          12.25,
+          9.73,
+          2
+        ],
+        [
+          1655,
+          "shot",
+          10.12,
+          7.38,
+          0.91,
+          1,
+          1
+        ],
+        [
+          1660,
+          "pop",
+          13.42,
+          16.86
+        ],
+        [
+          1666,
+          "shot",
+          9.16,
+          8.3,
+          0.45,
+          1,
+          1
+        ],
+        [
+          1670,
+          "pop",
+          14.86,
+          15.67
+        ],
+        [
+          1677,
+          "pop",
+          14.85,
+          13.59
+        ],
+        [
+          1678,
+          "shot",
+          7.99,
+          9.32,
+          0.08,
+          1,
+          1
+        ],
+        [
+          1690,
+          "pop",
+          16.89,
+          12.09
+        ],
+        [
+          1703,
+          "pop",
+          16.89,
+          10.02
+        ],
+        [
+          1740,
+          "quake",
+          9.5,
+          12.5,
+          0.95,
+          2
+        ],
+        [
+          1769,
+          "erupt",
+          9.5,
+          12.5,
+          2
+        ],
+        [
+          1773,
+          "pop",
+          9.92,
+          13.9
+        ],
+        [
+          1782,
+          "pop",
+          12.06,
+          13.9
+        ],
+        [
+          1783,
+          "crate",
+          15.5,
+          7.5,
+          2
+        ],
+        [
+          1791,
+          "boom",
+          11.99,
+          8.96,
+          1
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 39,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 121
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "viewport": "1512x828",
+      "screen": "1512x982",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/GMTP3",
+    "time": "2026-11-11T03:48:52.186Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}
