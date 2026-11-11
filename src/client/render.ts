@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
@@ -10,7 +10,7 @@ import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
-export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; color?: number } // color: the shooter's, for player shells
+export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; heavy?: boolean; color?: number } // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number } // seed: a seed of the Semeur (iteration 25), its age in seconds
 /** « Drapeaux » (iteration 24): a flag, state 0 at home, 1 carried by `carrier`, 2 dropped (`left` seconds before it flies home). */
 export interface RFlag { team: number; x: number; y: number; carrier: number; state: number; left: number }
@@ -199,6 +199,8 @@ interface TankView {
   shieldGlow?: number;
   magnet?: MagnetView; // the Aimant (iteration 27)
   under?: boolean;
+  ice?: THREE.Group; // « Gel » (iteration 29): the ice cube it is frozen in (in the scene, not the tank: it gives away invisible tanks)
+  iceT?: number; // seconds since it froze
 }
 
 /** The Aimant (iteration 27): its field on the floor, a ripple running inward, and the shells it holds above its turret. */
@@ -261,6 +263,22 @@ function crateTexture(kind: BonusKind) {
   } else if (kind === 'turbo') {
     for (const ox of [-10, 10]) { g.moveTo(52 + ox, 44); g.lineTo(70 + ox, 64); g.lineTo(52 + ox, 84); }
     g.stroke();
+  } else if (kind === 'freeze') {
+    // a snowflake (iteration 29)
+    g.lineWidth = 6;
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3, ca = Math.cos(a), sa = Math.sin(a);
+      g.moveTo(64, 64); g.lineTo(64 + ca * 32, 64 + sa * 32);
+      for (const sgn of [-1, 1]) {
+        const b = a + sgn * 0.7;
+        g.moveTo(64 + ca * 20, 64 + sa * 20); g.lineTo(64 + ca * 20 + Math.cos(b) * 10, 64 + sa * 20 + Math.sin(b) * 10);
+      }
+    }
+    g.stroke();
+  } else if (kind === 'heavy') {
+    // a big fat shell, nose up (iteration 29)
+    g.moveTo(48, 92); g.lineTo(48, 58); g.quadraticCurveTo(48, 34, 64, 30); g.quadraticCurveTo(80, 34, 80, 58); g.lineTo(80, 92); g.closePath(); g.fill();
+    g.fillStyle = col; g.fillRect(48, 70, 32, 7);
   } else {
     for (const a of [-0.55, 0, 0.55]) { g.moveTo(64, 86); g.lineTo(64 + Math.sin(a) * 40, 86 - Math.cos(a) * 40); }
     g.stroke();
@@ -409,6 +427,7 @@ const geo = {
   beam: new THREE.CylinderGeometry(0.3, 0.36, 1.8, 24, 1, true),
   halo: new THREE.CircleGeometry(0.5, 36),
   bubble: new THREE.SphereGeometry(0.62, 28, 16),
+  ice: new RoundedBoxGeometry(1.02, 0.78, 0.9, 2, 0.1),
   spike: new THREE.ConeGeometry(0.05, 0.13, 8),
   band: new THREE.TorusGeometry(0.205, 0.022, 8, 28),
   stud: new THREE.SphereGeometry(0.045, 10, 8),
@@ -1009,6 +1028,8 @@ export class Renderer {
   private mines = new Map<number, THREE.Group>();
   private crates = new Map<number, CrateView>();
   private crateMats = new Map<BonusKind, THREE.MeshStandardMaterial>();
+  private cubeMat = new THREE.MeshStandardMaterial({ color: 0xd6f2ff, emissive: 0x6fb8e0, emissiveIntensity: 0.35, transparent: true, opacity: 0.55, roughness: 0.08, metalness: 0.1, depthWrite: false });
+  private iceEdgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
   private bubbleMat = new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x2a9fd0, emissiveIntensity: 0.6, transparent: true, opacity: 0.4, roughness: 0.15, depthWrite: false });
   private glow: ParticleSystem;
   private smoke: ParticleSystem;
@@ -1412,7 +1433,7 @@ export class Renderer {
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
     this.rising = [];
-    for (const t of this.tanks.values()) this.scene.remove(t.root);
+    for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); }
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
     this.bullets.clear();
@@ -2064,6 +2085,7 @@ export class Renderer {
       if (v.seenT) v.seenT = Math.max(0, v.seenT - dt);
       const visible = t.alive && !(t.invisible && t.id !== myId && this.lightning < 0.45) && !this.lostInFog(t, v);
       v.root.visible = visible;
+      this.tankIce(v, t, dt);
       if (!t.alive) {
         if (v.wasAlive) this.deathMark(t.x, t.y, v.info);
         v.wasAlive = false;
@@ -2440,10 +2462,74 @@ export class Renderer {
       const bx = t.x - Math.cos(t.body) * 0.42, by = t.y - Math.sin(t.body) * 0.42;
       this.glow.emit({ x: bx + (Math.random() - 0.5) * 0.3, y: 0.15, z: by + (Math.random() - 0.5) * 0.3, vy: 0.4, life: 0.3, s0: 0.09, s1: 0.01, c0: 0xb8ff9a, c1: BONUS_INFO.turbo.color });
     }
-    for (const kind of ['bounce', 'fan'] as const) {
+    for (const kind of ['bounce', 'fan', 'heavy'] as const) {
       if (!(fx & BONUS_INFO[kind].flag) || Math.random() > 18 * dt) continue;
-      const a = this.time * 3 + (kind === 'fan' ? Math.PI : 0);
+      const a = this.time * 3 + (kind === 'fan' ? Math.PI : kind === 'heavy' ? Math.PI / 2 : 0);
       this.glow.emit({ x: t.x + Math.cos(a) * 0.5, y: 0.55, z: t.y + Math.sin(a) * 0.5, vy: 0.5, life: 0.45, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO[kind].color });
+    }
+  }
+
+  /**
+   * « Gel » (iteration 29): a frozen tank sits in an ice cube that pops up around it, glints, and shatters when the tank is
+   * destroyed. The cube lives in the scene, not in the tank, so it shows even an invisible tank (or one hidden in a tunnel).
+   */
+  private tankIce(v: TankView, t: RTank, dt: number) {
+    const frozen = t.alive && !!((t.fx ?? 0) & FLAG_FROZEN) && !v.under && !this.lostInFog(t, v);
+    if (frozen && !v.ice) {
+      const g = new THREE.Group();
+      const cube = new THREE.Mesh(geo.ice, this.cubeMat);
+      cube.renderOrder = 3;
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo.ice, 30), this.iceEdgeMat);
+      g.add(cube, edges);
+      g.position.y = 0.36;
+      this.scene.add(g);
+      v.ice = g;
+    }
+    if (!v.ice) return;
+    if (frozen) {
+      if (!v.ice.visible || v.iceT === undefined) {
+        v.iceT = 0;
+        v.ice.visible = true;
+        v.ice.rotation.y = Math.random() * 0.6 - 0.3;
+      }
+      v.iceT += dt;
+      const k = v.scale * Math.min(1, 0.3 + v.iceT * 5) * (1 + Math.sin(this.time * 3 + t.id) * 0.015);
+      v.ice.scale.set(k, k, k);
+      v.ice.position.x = t.x; v.ice.position.z = t.y;
+      if (Math.random() < 5 * dt) this.glow.emit({ x: t.x + (Math.random() - 0.5) * 0.8 * v.scale, y: 0.3 + Math.random() * 0.5, z: t.y + (Math.random() - 0.5) * 0.7 * v.scale, life: 0.35, s0: 0.08, s1: 0.01, c0: 0xffffff, c1: 0x9fdcff });
+    } else if (v.ice.visible) {
+      v.ice.visible = false;
+      v.iceT = undefined;
+      if (!t.alive) this.thaw(v.ice.position.x, v.ice.position.z, true); // shattered with its tank
+    }
+  }
+
+  /** Frost spreading from the one who grabbed the « Gel » crate. */
+  frostWave(x: number, y: number) {
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.07, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.7, size: 7 });
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 7;
+      this.glow.emit({ x, y: 0.3 + Math.random() * 0.4, z: y, vx: Math.cos(a) * sp, vy: Math.random() * 1.2, vz: Math.sin(a) * sp, life: 0.6 + Math.random() * 0.5, s0: 0.1, s1: 0.02, c0: 0xffffff, c1: 0x8fd0ff, drag: 2.5 });
+    }
+    this.flashT = Math.max(this.flashT, 0.12);
+  }
+
+  /** An ice cube cracks: shards and glitter (more of them when it shatters with its tank). */
+  thaw(x: number, y: number, big = false) {
+    for (let i = 0; i < (big ? 30 : 16); i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * (big ? 3.5 : 2);
+      this.debris.emit({
+        x: x + Math.cos(a) * 0.3, y: 0.4, z: y + Math.sin(a) * 0.3, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 3, vz: Math.sin(a) * sp,
+        life: 0.7 + Math.random() * 0.5, s0: 0.06 + Math.random() * 0.06, s1: 0.03, c0: 0xeaf8ff, c1: 0x9fd6f5, grav: 10, drag: 0.4,
+      });
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.5 + Math.random() * 2;
+      this.glow.emit({ x, y: 0.5, z: y, vx: Math.cos(a) * sp, vy: 0.5 + Math.random() * 1.5, vz: Math.sin(a) * sp, life: 0.4, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: 0xbfeaff, drag: 2 });
     }
   }
 
@@ -2565,6 +2651,7 @@ export class Renderer {
       if (!m) {
         m = new THREE.Mesh(geo.bullet, b.color === undefined ? (b.rocket ? this.rocketMat : this.bulletMat) : this.shellMat(b.color, b.rocket));
         m.castShadow = true;
+        if (b.heavy) m.scale.setScalar(1.75); // « Gros calibre » (iteration 29)
         m.rotation.order = 'YXZ';
         this.scene.add(m);
         this.bullets.set(b.id, m);
@@ -2573,6 +2660,7 @@ export class Renderer {
       m.rotation.y = -Math.atan2(b.vy, b.vx);
       m.rotation.z = Math.PI / 2;
       // trails
+      if (b.heavy && Math.random() < 50 * dt) this.glow.emit({ x: b.x, y: 0.45, z: b.y, life: 0.3, s0: 0.14, s1: 0.03, c0: 0xd8c8ff, c1: BONUS_INFO.heavy.color });
       if (b.rocket) {
         const back = 0.18 / Math.hypot(b.vx, b.vy);
         this.glow.emit({ x: b.x - b.vx * back, y: 0.45, z: b.y - b.vy * back, life: 0.18, s0: 0.1, s1: 0.02, c0: 0xffb040, c1: 0xff4010 });

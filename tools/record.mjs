@@ -7,13 +7,13 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { home: 5, seconds: 5, caption: 'Nouveau : la ronde des boss', sub: 'Les quatre boss à la suite… et le meilleur chrono de la semaine' },
-  { rush: 1, arms: ['canon', 'ricochet'], seconds: 11, caption: 'Les quatre boss, l’un après l’autre', sub: 'Trois vies pour toute la ronde, le chrono tourne' },
-  { rush: 3, arms: ['fusee', 'canon'], seconds: 9, hits: [4], caption: 'Un ordre différent chaque lundi', sub: 'Le même pour tout le monde' },
-  { rush: 5, arms: ['canon', 'ricochet'], seconds: 17, volley: true, hits: [7, 11], caption: 'Le bouquet final', sub: 'Deux boss à la fois : la barre de vie compte les deux' },
-  { rush: 5, rushWeek: 2, arms: ['ricochet', 'sapeur'], seconds: 11, caption: 'Un duo différent chaque semaine', sub: 'Le Colosse et le Grondeur, le Foreur et le Semeur…' },
-  { rushResults: 6, seconds: 6, caption: 'Ton temps contre chaque boss', sub: 'Et le classement de la semaine' },
-  { mission: 37, arms: ['canon', 'ricochet'], seconds: 8, magnetShots: [1.5], caption: 'Et toujours l’Aimant', sub: 'Dix-huit tanks au bestiaire, quatre boss en rotation' },
+  { cratesHelp: 5, seconds: 5, caption: 'Nouveau : deux caisses bonus', sub: 'Le Gel et le Gros calibre' },
+  { mission: 26, arms: ['canon', 'ricochet'], seconds: 10, freezes: [2.5], caption: 'Le Gel', sub: 'Tous tes adversaires figés dans un cube de glace' },
+  { mission: 24, arms: ['canon', 'ricochet'], seconds: 10, buffs: ['heavy'], caption: 'Le Gros calibre', sub: 'De gros obus qui traversent le liège et brisent ceux d’en face' },
+  { mission: 13, arms: ['canon', 'fusee'], seconds: 8, freezes: [2], caption: 'La glace trahit les fantômes', sub: 'Même les tanks invisibles se voient dans leur glaçon' },
+  { versus: [0], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 9, freezes: [3], caption: 'En versus aussi', sub: 'Gèle tes rivaux… et tire !' },
+  { mission: 40, arms: ['canon', 'ricochet'], seconds: 9, freezes: [3], hits: [5], caption: 'Même les boss frissonnent', sub: 'Mais ils se dégagent deux fois plus vite' },
+  { mission: 5, arms: ['canon', 'sapeur'], seconds: 8, crates: ['freeze', 'heavy'], caption: 'Six caisses bonus sur la table', sub: 'En campagne, au défi du jour, en versus et aux drapeaux' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -55,6 +55,7 @@ try {
     await page.evaluate((shot) => {
       const d = window.__demo;
       if (shot.home) d.home(shot.home * 1000);
+      else if (shot.cratesHelp) d.crates(shot.cratesHelp * 1000); // the list of crates on the home screen (iteration 29)
       else if (shot.bestiary) d.bestiary(shot.bestiary * 1000); // the bestiary on the home screen (iteration 25)
       else if (shot.atelier) d.atelier(shot.atelier * 1000);
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
@@ -85,6 +86,7 @@ try {
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
       for (const s of shot.sows ?? []) setTimeout(() => d.sow?.(), s * 1000); // the Semeur sows (iteration 25)
+      for (const s of shot.freezes ?? []) setTimeout(() => d.freeze?.(), s * 1000); // « Gel » (iteration 29)
       for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);

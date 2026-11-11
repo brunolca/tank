@@ -45,7 +45,7 @@ export interface Input {
 }
 
 // tank: [id, x, y, body, turret, flags, hp?]  flags: 1 alive, 2 invisible, then BONUS_INFO[*].flag (4 shield, 8 turbo, 16 bounce, 32 fan),
-// 64 boss charging a volley (or the Foreur spinning up), 128 boss enraged, 256 enemy has spotted a foe (night), 512 the Foreur is under the table. hp only for tanks with several hit points.
+// 64 boss charging a volley (or the Foreur spinning up), 128 boss enraged, 256 enemy has spotted a foe (night), 512 the Foreur is under the table, 16384 « Gros calibre », 32768 frozen (iteration 29). hp only for tanks with several hit points.
 // iteration 21, tables with ice only: then [.., hp or null, vx, vy], the speed the tank slides at.
 export type NetTank = [number, number, number, number, number, number, (number | null)?, number?, number?];
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
@@ -83,6 +83,8 @@ export type GameEvent =
   | ['deflect', number, number, number] // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
   | ['sow', number, number, number, number] // x y tankId seeds: the Semeur throws its seeds (iteration 25; older clients ignore it, the seeds are plain mines to them)
   | ['catch', number, number, number, number] // x y tankId held: the Aimant's magnet catches a shell (iteration 27; older clients ignore it)
+  | ['freeze', number, number, number, number] // x y tankId frozen: someone grabbed the « Gel » crate, n foes freeze (iteration 29; older clients ignore it)
+  | ['thaw', number, number, number] // x y tankId: its ice cube melts (iteration 29)
   | ['unload', number, number, number, number] // x y tankId shells: the Aimant throws back the shells it caught (iteration 27; older clients ignore it)
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 

@@ -1,7 +1,7 @@
 {
-  "iteration": 28,
-  "date": "2026-11-10",
-  "title": "La ronde des boss",
+  "iteration": 29,
+  "date": "2026-11-11",
+  "title": "Coup de froid",
   "journal": [
     {
       "iteration": 1,
@@ -341,6 +341,18 @@
         "L’ordre des boss change chaque lundi et il est le même pour tous. Le chrono tourne pendant les combats, et le meilleur temps de la semaine monte au classement.",
         "Une nouvelle carte sur l’accueil montre les boss de la semaine et les trois meilleures équipes ; « Lancer la ronde » ouvre une salle en un clic.",
         "À la fin, les résultats donnent ton temps contre chaque boss, pour savoir lequel te coûte le plus cher."
+      ]
+    },
+    {
+      "iteration": 29,
+      "date": "2026-11-11",
+      "title": "Coup de froid",
+      "notes": [
+        "Nouvelle caisse bonus : le Gel. Ramasse-la et tous tes adversaires se figent dans un cube de glace pendant 3 secondes et demie : ils ne roulent plus, ne visent plus, ne tirent plus. Les boss se dégagent plus vite.",
+        "Un tank gelé se brise toujours d’un seul obus, et la glace trahit même les tanks invisibles. Mais gare au Pilleur : s’il vole le Gel, c’est toi qui finis en glaçon !",
+        "Nouvelle caisse bonus : le Gros calibre. Pendant 10 secondes, tes obus énormes traversent les blocs de liège en les faisant sauter et brisent les obus d’en face sans s’arrêter.",
+        "Les deux nouvelles caisses tombent partout : en campagne, au défi du jour, en versus et aux drapeaux.",
+        "Sur l’accueil, un nouveau volet « Les caisses bonus » rappelle ce que contient chaque caisse, dans sa couleur."
       ]
     }
   ]

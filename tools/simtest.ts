@@ -4,7 +4,7 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -85,6 +85,62 @@ console.log('total', Date.now() - t0, 'ms');
     if (!fails()) console.log('bonus OK');
   }
   function fails() { return process.exitCode === 1; }
+}
+
+// « Gel » and « Gros calibre » (iteration 29): foes freeze (no driving, no shooting) then thaw; heavy shells cross cork and smash light shells
+{
+  const fail = (m: string) => { console.error('GEL:', m); process.exitCode = 1; };
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  for (let x = 0; x < W; x++) { tiles[x] = Tile.Wall; tiles[(H - 1) * W + x] = Tile.Wall; }
+  for (let y = 0; y < H; y++) { tiles[y * W] = Tile.Wall; tiles[y * W + W - 1] = Tile.Wall; }
+  const g = new Game(tiles);
+  g.frozen = false;
+  const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const mate = g.addTank('player', 0, 3.5, 3.5, 0x3dff7b, 'p2', 'Q');
+  const e = g.addTank('violet', 99, 15.5, 8.5, 0xffffff);
+  const boss = g.addTank('boss', 99, 15.5, 3.5, 0xffffff);
+  g.giveBonus(p, 'freeze');
+  if (e.chill === undefined || boss.chill === undefined) fail('les ennemis ne sont pas gelés');
+  if (mate.chill !== undefined || p.chill !== undefined) fail('un allié a gelé');
+  if (!g.events.some((ev) => ev[0] === 'freeze' && ev[4] === 2)) fail('pas d’événement freeze');
+  if (!(g.netTanks().find((n) => n[0] === e.id)![5] & FLAG_FROZEN)) fail('le drapeau « gelé » ne voyage pas');
+  const ex = e.x, ey = e.y, shots = g.bullets.length;
+  e.fireCd = 0;
+  for (let i = 0; i < 30; i++) g.step(new Map());
+  if (Math.hypot(e.x - ex, e.y - ey) > 1e-6) fail('un tank gelé a bougé');
+  if (g.bullets.length !== shots) fail('un tank gelé a tiré');
+  if (boss.chill !== undefined) { /* still frozen at 1 s: fine */ }
+  for (let i = 0; i < 30 * 3; i++) g.step(new Map());
+  if (e.chill !== undefined) fail('le tank ne dégèle pas');
+  if (!g.events.some((ev) => ev[0] === 'thaw')) fail('pas d’événement thaw');
+  // a frozen tank still dies to a shell, and its ice goes with it
+  g.giveBonus(p, 'freeze');
+  g.killTank(e, p);
+  if (e.alive || e.chill !== undefined) fail('un tank gelé doit pouvoir être détruit');
+  // the Pilleur's way round: an enemy grabbing it freezes the players
+  g.giveBonus(boss, 'freeze');
+  if (p.chill === undefined || mate.chill === undefined) fail('le gel d’un ennemi doit geler les joueurs');
+  p.chill = mate.chill = undefined;
+  // « Gros calibre »: a heavy shell through a cork block, then through an enemy shell
+  for (const t of g.tanks) t.alive = false;
+  p.alive = true; p.chill = undefined; g.bullets = [];
+  tiles[8 * W + 8] = Tile.Cork;
+  g.giveBonus(p, 'heavy');
+  if (!(g.buffFlags(p) & BONUS_INFO.heavy.flag)) fail('le drapeau « gros calibre » ne voyage pas');
+  p.fireCd = 0; p.turret = 0;
+  g.tryFire(p);
+  const hb = g.bullets[g.bullets.length - 1];
+  if (!hb?.heavy) fail('l’obus n’est pas lourd');
+  g.bullets.push({ id: 9999, owner: e.id, x: 13.5, y: 8.5, vx: -BULLET_SPEED, vy: 0, bounces: 1, rocket: false, dead: false });
+  for (let i = 0; i < 45 && g.bullets.includes(hb); i++) g.step(new Map());
+  if (g.tiles[8 * W + 8] !== Tile.Empty) fail('le liège n’a pas sauté');
+  if (g.bullets.some((b) => b.id === 9999)) fail('l’obus léger n’a pas été brisé');
+  if (!hb.dead && hb.x < 10) fail('l’obus lourd ne passe pas');
+  if (hb.dead && !g.events.some((ev) => ev[0] === 'bounce')) fail('l’obus lourd s’est arrêté trop tôt');
+  g.bullets = []; p.alive = true;
+  for (let i = 0; i < 30 * 11; i++) g.step(new Map());
+  if (p.alive && p.buffs.heavy !== undefined) fail(`le gros calibre ne s’arrête pas (${p.buffs.heavy})`);
+  if (process.exitCode !== 1) console.log('gel et gros calibre OK');
 }
 
 // boss: soaks hits, gets angry at half health, fires a ring of shells, then goes down

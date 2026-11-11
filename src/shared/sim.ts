@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -46,6 +46,7 @@ export interface Tank {
   vy: number;
   slid?: boolean; // drove this tick (tables with ice): if not, it still slides on
   mag?: MagnetState; // the Aimant (iteration 27)
+  chill?: number; // « Gel » (iteration 29): seconds left frozen in an ice cube
 }
 
 /** The Aimant: whether its field is on, seconds left in that phase, and the shells it caught. */
@@ -80,6 +81,7 @@ export interface Buffs {
   bounce: number;
   turbo: number;
   fan: number;
+  heavy?: number; // « Gros calibre » (iteration 29)
   invuln: number; // grace period right after a shield breaks
 }
 
@@ -104,6 +106,7 @@ export interface Bullet {
   dead: boolean;
   volley?: number; // shells fired together (fan shot) never collide with one another
   cork?: boolean; // « Brise-liège » (iteration 19): the shell blows up the cork it hits instead of bouncing off it
+  heavy?: boolean; // « Gros calibre » (iteration 29): it goes through cork (blowing it up) and smashes the lighter shells it meets
 }
 
 /** A lightning strike announced on the floor (storm missions): it falls when t reaches BOLT_WARN. */
@@ -355,6 +358,7 @@ export class Game {
       if (bf.bounce > 0) bf.bounce -= DT;
       if (bf.turbo > 0) bf.turbo -= DT;
       if (bf.fan > 0) bf.fan -= DT;
+      if (bf.heavy) bf.heavy = bf.heavy > DT ? bf.heavy - DT : undefined;
       if (bf.invuln > 0) bf.invuln -= DT;
       if (t.reveal > 0) t.reveal -= DT;
       if (t.reshield !== undefined && !bf.shield) {
@@ -365,6 +369,12 @@ export class Game {
           bf.shield = true;
           this.events.push(['bonus', r2(t.x), r2(t.y), BONUS_KINDS.indexOf('shield'), t.id]);
         }
+      }
+      if (t.chill !== undefined) {
+        // « Gel »: stuck in its ice cube, no driving, no aiming, no shooting (a belt still carries the cube along)
+        t.chill -= DT;
+        if (t.chill <= 0) { t.chill = undefined; this.events.push(['thaw', r2(t.x), r2(t.y), t.id]); }
+        else { t.vx = t.vy = 0; this.rideBelt(t); continue; }
       }
       if (t.boss && t.kind === 'drill') {
         if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
@@ -459,6 +469,7 @@ export class Game {
       t.alive = true;
       t.hp = t.maxHp;
       t.buffs.bounce = t.buffs.turbo = t.buffs.fan = 0;
+      t.buffs.heavy = t.chill = undefined;
       t.buffs.shield = false;
       t.buffs.invuln = CTF_SAFE;
       t.fireCd = 0.4;
@@ -634,6 +645,7 @@ export class Game {
 
   giveBonus(t: Tank, kind: BonusKind) {
     if (kind === 'shield') t.buffs.shield = true;
+    else if (kind === 'freeze') this.freezeFoes(t);
     else t.buffs[kind] = BONUS_INFO[kind].duration * (t.ranks && t.ranks[2] >= 2 ? LONG_BUFFS : 1);
   }
 
@@ -1082,14 +1094,15 @@ export class Game {
     const tip = t.r + 0.22;
     const x = t.x + dx * tip, y = t.y + dy * tip;
     const sp = t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED;
-    this.events.push(['shot', r2(x), r2(y), r2(t.turret), t.spec.rocket ? 1 : 0, t.id]);
+    this.events.push(['shot', r2(x), r2(y), r2(t.turret), (t.spec.rocket ? 1 : 0) | (t.buffs.heavy ? SHELL_HEAVY : 0), t.id]);
     if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, t.x + dx * t.r * 0.6, t.y + dy * t.r * 0.6, BULLET_R)) {
       this.events.push(['pop', r2(x), r2(y)]);
       return true;
     }
     const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0) + (t.kind === 'player' ? this.playerBounces : 0);
-    const cork = t.ranks && t.ranks[0] >= 3 ? true : undefined;
-    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, cork };
+    const heavy = t.buffs.heavy ? true : undefined;
+    const cork = heavy || (t.ranks && t.ranks[0] >= 3) ? true : undefined;
+    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, cork, heavy };
     this.bullets.push(main);
     if (t.buffs.fan > 0) {
       main.volley = main.id;
@@ -1098,7 +1111,7 @@ export class Game {
         const a = t.turret + da, ex = Math.cos(a), ey = Math.sin(a);
         const fx = t.x + ex * tip, fy = t.y + ey * tip;
         if (bulletBlocked(this.tiles, fx, fy, BULLET_R)) continue;
-        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id, cork });
+        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id, cork, heavy });
       }
     }
     return true;
@@ -1147,13 +1160,17 @@ export class Game {
       const ox = b.x, oy = b.y;
       const nx = b.x + b.vx * dt;
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
-        if (b.cork && this.breakCork(nx, b.y)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
-        b.vx = -b.vx; bounced = true;
+        if (b.cork && this.breakCork(nx, b.y)) {
+          if (!b.heavy) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+          if (!bulletBlocked(this.tiles, nx, b.y, BULLET_R)) b.x = nx; else { b.vx = -b.vx; bounced = true; } // « Gros calibre »: straight through
+        } else { b.vx = -b.vx; bounced = true; }
       } else b.x = nx;
       const ny = b.y + b.vy * dt;
       if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) {
-        if (b.cork && this.breakCork(b.x, ny)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
-        b.vy = -b.vy; bounced = true;
+        if (b.cork && this.breakCork(b.x, ny)) {
+          if (!b.heavy) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+          if (!bulletBlocked(this.tiles, b.x, ny, BULLET_R)) b.y = ny; else { b.vy = -b.vy; bounced = true; }
+        } else { b.vy = -b.vy; bounced = true; }
       } else b.y = ny;
       if (bounced) {
         b.bounces--;
@@ -1191,9 +1208,11 @@ export class Game {
         if (b.dead || (a.volley && a.volley === b.volley)) continue;
         const rr = BULLET_R * 2 + 0.06;
         if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 < rr * rr) {
-          a.dead = b.dead = true;
+          // « Gros calibre »: a heavy shell smashes a lighter one and flies on (two heavy ones still cancel out)
+          if (a.heavy !== b.heavy) (a.heavy ? b : a).dead = true;
+          else a.dead = b.dead = true;
           this.events.push(['pop', r2((a.x + b.x) / 2), r2((a.y + b.y) / 2)]);
-          break;
+          if (a.dead) break;
         }
       }
     }
@@ -1333,6 +1352,7 @@ export class Game {
       return;
     }
     t.alive = false;
+    t.chill = undefined;
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
     if (t.loot && this.bonusOn) this.dropLoot(t, t.loot);
     this.onKill?.(t, killer);
@@ -1439,14 +1459,29 @@ export class Game {
     const b = t.buffs;
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
+      | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
       | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
+  }
+  /**
+   * « Gel » (iteration 29): every foe of t still on the table (not under it) freezes in an ice cube for FREEZE_TIME
+   * seconds (bosses FREEZE_BOSS). Hits still count: a frozen tank shatters with its cube.
+   */
+  freezeFoes(t: Tank) {
+    let n = 0;
+    for (const o of this.tanks) {
+      if (!o.alive || o.team === t.team || under(o)) continue;
+      o.chill = Math.max(o.chill ?? 0, o.boss ? FREEZE_BOSS : FREEZE_TIME);
+      if (o.ai) o.ai.dodgeT = 0;
+      n++;
+    }
+    this.events.push(['freeze', r2(t.x), r2(t.y), t.id, n]);
   }
   netBonuses(): NetBonus[] {
     return this.bonuses.map((c) => [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
   }
   netBullets(): NetBullet[] {
-    return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), b.rocket ? 1 : 0, b.owner]);
+    return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), (b.rocket ? 1 : 0) | (b.heavy ? SHELL_HEAVY : 0), b.owner]);
   }
   netMines(): NetMine[] {
     return this.mines.map((m): NetMine => {

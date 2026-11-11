@@ -143,6 +143,28 @@ export const sfx = {
     tone(t, 0.25, 900, 300, 0.06, 'sine');
     noise(t + 0.4, 0.18, 700, 0.8, 0.35, 'lowpass', 150);
   },
+  /** « Gel » (iteration 29): a glassy glissando down, then frost crackling. */
+  freeze() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [1760, 1318, 1046, 784].forEach((f, i) => tone(t + i * 0.06, 0.5, f, f * 1.01, 0.09, 'sine'));
+    tone(t, 0.6, 2600, 900, 0.05, 'triangle');
+    for (let i = 0; i < 6; i++) noise(t + 0.1 + i * 0.05, 0.06, 5000 + Math.random() * 3000, 4, 0.12, 'bandpass');
+  },
+  /** An ice cube cracks open. */
+  thaw() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.09, 4200, 3, 0.18, 'bandpass', 1800);
+    tone(t, 0.12, 1500, 700, 0.05, 'triangle');
+  },
+  /** « Gros calibre »: a deep thump. */
+  heavyShot() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.2, 1400, 0.7, 0.5, 'lowpass', 150);
+    tone(t, 0.22, 110, 38, 0.6, 'triangle');
+  },
   bonus() {
     if (!ctx) return;
     const t = ctx.currentTime;

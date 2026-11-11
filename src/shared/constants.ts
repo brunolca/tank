@@ -278,7 +278,7 @@ export const TUNNEL_SIGHT = 1.6;
 
 // ------------------------------------------------------------------ bonus crates
 // The index in BONUS_KINDS is what travels on the wire: append new kinds, never reorder.
-export const BONUS_KINDS = ['shield', 'bounce', 'turbo', 'fan'] as const;
+export const BONUS_KINDS = ['shield', 'bounce', 'turbo', 'fan', 'freeze', 'heavy'] as const;
 export type BonusKind = (typeof BONUS_KINDS)[number];
 export const BONUS_R = 0.32;
 export const BONUS_LIFE = 16; // seconds a crate waits on the floor
@@ -287,7 +287,17 @@ export const BONUS_INFO: Record<BonusKind, { label: string; color: number; durat
   bounce: { label: 'Super-ricochet', color: 0xffb43d, duration: 12, flag: 16 },
   turbo: { label: 'Turbo', color: 0x6be36b, duration: 10, flag: 8 },
   fan: { label: 'Tir en éventail', color: 0xff6fb0, duration: 10, flag: 32 },
+  // iteration 29: « Gel » is instant (every foe of the one who grabs it freezes, see FREEZE_TIME), « Gros calibre » lasts
+  freeze: { label: 'Gel', color: 0xbfeaff, duration: 0, flag: 0 },
+  heavy: { label: 'Gros calibre', color: 0x8a6cff, duration: 10, flag: 16384 },
 };
+/** « Gel » (iteration 29): seconds every foe stays frozen in its ice cube (bosses shake it off sooner). */
+export const FREEZE_TIME = 3.5;
+export const FREEZE_BOSS = 1.6;
+/** Tank flag: frozen in an ice cube (no driving, no aiming, no shooting). */
+export const FLAG_FROZEN = 32768;
+/** Bullet field 5 (rocket) gets this bit for a « Gros calibre » shell (old tabs just see a rocket). */
+export const SHELL_HEAVY = 2;
 export const TURBO_MULT = 1.45;
 export const FAN_SPREAD = 0.2;
 

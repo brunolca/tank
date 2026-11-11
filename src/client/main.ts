@@ -1,4 +1,4 @@
-import { type TankKind, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -519,8 +519,13 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
 
 function predictStep(x: number, y: number, body: number, vx: number, vy: number, mx: number, my: number, s?: Snap): [number, number, number, number, number] {
   const snap = s ?? snaps[snaps.length - 1];
-  const turbo = (snap?.T.get(myTankId)?.[5] ?? 0) & BONUS_INFO.turbo.flag;
+  const fl = snap?.T.get(myTankId)?.[5] ?? 0;
+  const turbo = fl & BONUS_INFO.turbo.flag;
   const speed = mySpec.speed * (turbo ? TURBO_MULT : 1);
+  if (fl & FLAG_FROZEN) { // « Gel » (iteration 29): stuck in the ice cube, only a belt moves it, as on the server
+    if (belts.length) [x, y] = beltStep(tiles, belts, x, y, TANK_R, DT);
+    return [x, y, body, 0, 0];
+  }
   if (iceMap) [x, y, body, vx, vy] = slideDrive(tiles, belts, x, y, body, vx, vy, mx, my, speed, DT); // the ice keeps our momentum, as on the server
   else [x, y, body] = driveStep(tiles, x, y, body, mx, my, speed, DT);
   if (belts.length) [x, y] = beltStep(tiles, belts, x, y, TANK_R, DT); // the belt carries us after each drive step, as on the server
@@ -571,12 +576,13 @@ function clientTick() {
   if (playing) {
     [pred.x, pred.y, pred.body, pred.vx, pred.vy] = predictStep(pred.x, pred.y, pred.body, pred.vx, pred.vy, inp.mx, inp.my);
     const ceasefire = coopLike(currentMode) && enemiesLeft === 0; // the server no longer lets anyone fire
-    if (inp.f && localFireCd <= 0 && !ceasefire) {
+    const frozen = !!(meNet[5] & FLAG_FROZEN);
+    if (inp.f && localFireCd <= 0 && !ceasefire && !frozen) {
       let own = 0;
       for (const b of last.B.values()) if (b[6] === myTankId) own++;
       if (own < mySpec.maxBullets) {
         localFireCd = mySpec.fireCd;
-        sfx.shot(mySpec.rocket);
+        if (meNet[5] & BONUS_INFO.heavy.flag) sfx.heavyShot(); else sfx.shot(mySpec.rocket);
         const tip = TANK_R + 0.22;
         renderer.muzzle(px + Math.cos(aimAng) * tip, py + Math.sin(aimAng) * tip, aimAng, mySpec.rocket, myTankId);
       }
@@ -631,7 +637,7 @@ function onlineFrame(dt: number) {
     if (infos.get(ta[0])?.team === 99 && alive) enemiesAlive++;
     if (ta[0] === myTankId) {
       const latest = snaps[snaps.length - 1].T.get(myTankId)!;
-      tanks.push({ id: ta[0], x: pred.x + offset.x, y: pred.y + offset.y, body: pred.body, turret: latest[5] & 1 ? aimAng : latest[4], alive, invisible: false, fx: latest[5] });
+      tanks.push({ id: ta[0], x: pred.x + offset.x, y: pred.y + offset.y, body: pred.body, turret: latest[5] & 1 && !(latest[5] & FLAG_FROZEN) ? aimAng : latest[4], alive, invisible: false, fx: latest[5] });
       continue;
     }
     const tw = jumped(ta[1], ta[2], tb[1], tb[2], u); // through a portal: no sliding across the map
@@ -661,14 +667,14 @@ function onlineFrame(dt: number) {
   const ahead = Math.min(0.15, (performance.now() - latest.at) / 1000 + ping / 2000);
   for (const bl of latest.B.values()) {
     if (bl[6] !== myTankId) continue;
-    bullets.push({ id: bl[0], x: bl[1] + bl[3] * ahead, y: bl[2] + bl[4] * ahead, vx: bl[3], vy: bl[4], rocket: !!bl[5], color: shellColor(bl[6]) });
+    bullets.push({ id: bl[0], x: bl[1] + bl[3] * ahead, y: bl[2] + bl[4] * ahead, vx: bl[3], vy: bl[4], rocket: !!(bl[5] & 1), heavy: !!(bl[5] & SHELL_HEAVY), color: shellColor(bl[6]) });
   }
   for (const ba of a.B.values()) {
     if (ba[6] === myTankId) continue;
     const bb = b.B.get(ba[0]);
-    if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!ba[5], color: shellColor(ba[6]) }); continue; }
+    if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!(ba[5] & 1), heavy: !!(ba[5] & SHELL_HEAVY), color: shellColor(ba[6]) }); continue; }
     const bw = jumped(ba[1], ba[2], bb[1], bb[2], u);
-    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!ba[5], color: shellColor(ba[6]) });
+    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!(ba[5] & 1), heavy: !!(ba[5] & SHELL_HEAVY), color: shellColor(ba[6]) });
   }
   renderer.syncBullets(bullets, dt);
   lastBullets = bullets;
@@ -687,8 +693,8 @@ function handleEvent(e: GameEvent, audible: boolean) {
   switch (e[0]) {
     case 'shot':
       if (e[5] === myTankId && online) break;
-      renderer.muzzle(e[1], e[2], e[3], !!e[4], e[5]);
-      if (audible) sfx.shot(!!e[4]);
+      renderer.muzzle(e[1], e[2], e[3], !!(e[4] & 1), e[5]);
+      if (audible) { if (e[4] & SHELL_HEAVY) sfx.heavyShot(); else sfx.shot(!!(e[4] & 1)); }
       break;
     case 'bounce':
       renderer.spark(e[1], e[2]);
@@ -762,9 +768,19 @@ function handleEvent(e: GameEvent, audible: boolean) {
         break;
       }
       floater(e[1], e[2], `${info.label} !`, info.color);
-      if (audible) sfx.bonus();
+      if (audible && kind !== 'freeze') sfx.bonus(); // the frost has its own sound
       break;
     }
+    case 'freeze': // « Gel » (iteration 29): a wave of frost from the one who grabbed it
+      renderer.frostWave(e[1], e[2]);
+      if (audible) sfx.freeze();
+      if (e[4] > 0) floater(e[1], e[2] - 0.6, e[4] > 1 ? `${e[4]} tanks gelés !` : 'Un tank gelé !', BONUS_INFO.freeze.color);
+      if (renderer.tankKind(e[3]) !== 'player' && online) toast('Brrr ! Un ennemi a pris le gel : te voilà pris dans la glace.', 3000);
+      break;
+    case 'thaw':
+      renderer.thaw(e[1], e[2]);
+      if (audible) sfx.thaw();
+      break;
     case 'loot': {
       const kind = BONUS_KINDS[e[3]];
       floater(e[1], e[2], 'Le butin !', kind ? BONUS_INFO[kind].color : 0xffc94a);
@@ -1753,7 +1769,7 @@ function attractFrame(dt: number) {
   updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
   renderer.syncBullets(g.bullets.map((b) => {
     const o = g.tankById(b.owner);
-    return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, color: o?.kind === 'player' ? o.color : undefined };
+    return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, heavy: b.heavy, color: o?.kind === 'player' ? o.color : undefined };
   }), dt);
   renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined })));
   renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
@@ -1949,6 +1965,16 @@ const BESTIARY: [TankKind, string][] = [
   ['thunder', 'boss : appelle la foudre sur ta tête'],
   ['sower', 'boss : sème des graines géantes qui explosent'],
 ];
+// the crates (iteration 29): what each bonus does, in its colour
+const CRATES: [BonusKind, string][] = [
+  ['shield', 'une bulle encaisse un coup à ta place'],
+  ['bounce', 'tes obus rebondissent une fois de plus'],
+  ['turbo', 'tes chenilles vont bien plus vite'],
+  ['fan', 'trois obus d’un coup, en éventail'],
+  ['freeze', 'tous tes adversaires gèlent sur place, pris dans un cube de glace'],
+  ['heavy', 'de gros obus qui traversent le liège et brisent les obus d’en face'],
+];
+$('#crates-list').innerHTML = CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><span><b>${escapeHtml(BONUS_INFO[k].label)}</b> : ${escapeHtml(line)}</span></li>`).join('');
 $('#bestiary-list').innerHTML = BESTIARY.map(([k, line]) => `<li class="${isBossKind(k) ? 'boss' : ''}" style="--c:${hex(enemyColor(k))}"><span><b>${escapeHtml(specOf(k).label)}</b> : ${escapeHtml(line)}</span></li>`).join('');
 $('#iteration-stamp').textContent = `Itération ${META.iteration}`;
 $('#iteration-stamp').title = META.title;
@@ -2277,6 +2303,22 @@ if (params.has('demo')) {
       requestAnimationFrame(() => (home.scrollTop = home.scrollHeight)); // the bestiary sits at the bottom of the card
       const roll = setInterval(() => (list.scrollTop += 1), 30);
       setTimeout(() => { clearInterval(roll); d.open = false; home.scrollTop = 0; show('game'); $('#hud').hidden = true; }, ms);
+    },
+    /** Show the home screen with its list of crates open for a moment (iteration 29). */
+    crates(ms = 5000) {
+      const d = $('#crates-help') as HTMLDetailsElement;
+      d.open = true;
+      show('home');
+      const home = $('#home');
+      requestAnimationFrame(() => (home.scrollTop = home.scrollHeight));
+      setTimeout(() => { d.open = false; home.scrollTop = 0; show('game'); $('#hud').hidden = true; }, ms);
+    },
+    /** « Gel » (iteration 29): the first hero grabs the frost, every enemy freezes on camera. */
+    freeze() {
+      const h = attract?.tanks.find((t) => t.alive && t.kind === 'player');
+      if (!attract || !h) return 0;
+      attract.giveBonus(h, 'freeze');
+      return attract.tanks.filter((t) => t.chill !== undefined).length;
     },
     /** Show the home screen (and its daily challenge card) over the demo for a moment. */
     home(ms = 4000) {
