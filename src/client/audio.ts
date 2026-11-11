@@ -324,6 +324,16 @@ export const sfx = {
     tone(t + 0.15, 0.2, 700, 720, 0.18, 'square');
     tone(t + 0.15, 0.2, 350, 360, 0.08, 'triangle');
   },
+  /** « Les bulles » (iteration 30): a squeak of a rubber toy, its tune by line (cheerful up, « Oups » down, « Attention » twice). */
+  emote(n: number) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const tunes: [number, number][][] = [[[660, 990]], [[700, 880]], [[620, 380]], [[560, 760]], [[880, 880], [880, 880]], [[520, 780], [780, 600]]];
+    (tunes[n] ?? tunes[0]).forEach(([a, b], i) => {
+      tone(t + i * 0.13, 0.12, a, b, 0.09, 'triangle');
+      tone(t + i * 0.13, 0.12, a * 2, b * 2, 0.025, 'sine');
+    });
+  },
   /** A foghorn far away (iteration 26): two long, low notes, the second one lower, and the breath of the mist. */
   foghorn() {
     if (!ctx) return;

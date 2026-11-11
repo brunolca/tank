@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -40,6 +40,7 @@ export interface Tank {
   build?: MasonState; // the Maçon (iteration 12)
   loot?: BonusKind; // the Pilleur (iteration 15): the last bonus it stole, dropped when it is destroyed
   ranks?: Ranks; // player tanks in the coop campaign (iteration 19): skills bought with galons
+  quip?: number; // « Les bulles » (iteration 30): the tick of its last bubble
   follow?: { id: number; t: number }; // an AI teammate answering « Suis-moi ! » (iteration 20): the leader's tank id, seconds left
   reshield?: number; // « Bouclier qui revient »: seconds until the broken shield grows back
   vx: number; // speed the tank carries (tiles/s), only used on tables with ice (iteration 21)
@@ -435,6 +436,7 @@ export class Game {
           if (flags.some((o) => o.carrier === t.id)) continue;
           f.state = 1; f.carrier = t.id; f.dropT = 0;
           this.events.push(['flag', r2(f.x), r2(f.y), f.team, t.id, 0]);
+          this.botSay(t, EMOTE_ICI); // « Par ici ! »: a rival carrying the flag calls its team
           break;
         } else if (f.state === 2) { this.flagHome(f, t.id); break; } // a touch from a teammate sends it home
       }
@@ -1124,6 +1126,7 @@ export class Game {
     const blast = t.ranks && t.ranks[1] >= 2 ? MINE_BLAST * BIG_BLAST : undefined;
     this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: t.x, y: t.y, t: 0, fuse: -1, dead: false, blast });
     this.events.push(['mineSet', r2(t.x), r2(t.y)]);
+    if (this.roll(t.id, 4) === 0) this.botSay(t, EMOTE_ATTENTION); // an AI teammate or rival warns about its own mine
     return true;
   }
 
@@ -1356,6 +1359,60 @@ export class Game {
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
     if (t.loot && this.bonusOn) this.dropLoot(t, t.loot);
     this.onKill?.(t, killer);
+    this.quips(t, killer);
+  }
+
+  // ---------------------------------------------------------------- « Les bulles » (iteration 30)
+
+  /**
+   * A tank shows a quick-chat bubble (index in EMOTES). The players' bubbles come through here from the room;
+   * false when the line is unknown or the tank spoke less than EMOTE_GAP seconds ago.
+   */
+  emote(t: Tank, n: number, gap = EMOTE_GAP): boolean {
+    if (!Number.isInteger(n) || n < 0 || n >= EMOTES.length) return false;
+    if (t.quip !== undefined && this.tick - t.quip < gap / DT) return false;
+    t.quip = this.tick;
+    this.events.push(['emote', r2(t.x), r2(t.y), t.id, n]);
+    return true;
+  }
+
+  /** A die with n faces that leaves the random generator alone (the missions play out exactly as before). */
+  private roll(salt: number, n: number) {
+    return ((this.tick * 7 + salt * 13) % n + n) % n;
+  }
+
+  /** The AI-driven player tanks (teammates, rivals, the heroes of the demo) chat too, but sparingly. */
+  private botSay(t: Tank | undefined, n: number) {
+    if (!t || !t.alive || t.kind !== 'player' || !t.ai) return false;
+    return this.emote(t, n, EMOTE_BOT_GAP);
+  }
+
+  /** The round is won: the AI tanks of that team still standing celebrate (« Bravo ! », « Hé hé ! »). */
+  cheer(team: number) {
+    let k = 0;
+    for (const t of this.tanks) {
+      if (t.alive && t.ai && t.kind === 'player' && t.team === team) this.emote(t, k++ % 2 ? EMOTE_HEHE : EMOTE_BRAVO, 0);
+    }
+  }
+
+  /** What the AI tanks say when a tank goes down. */
+  private quips(victim: Tank, killer: Tank | undefined) {
+    if (!killer || killer === victim) return;
+    const r = this.roll(victim.id + killer.id, 10);
+    if (killer.kind === 'player' && killer.team === victim.team) { this.botSay(killer, EMOTE_OUPS); return; } // a teammate hit by mistake
+    if (killer.ai && killer.kind === 'player') {
+      if (r < (victim.kind === 'player' ? 4 : 2)) this.botSay(killer, EMOTE_HEHE);
+      return;
+    }
+    if (killer.kind !== 'player' || r >= 5) return;
+    // a player's good shot: the nearest AI teammate cheers, or thanks them when the foe was right on top of it
+    let best: Tank | undefined, bd = 9;
+    for (const o of this.tanks) {
+      if (o === killer || !o.alive || !o.ai || o.kind !== 'player' || o.team !== killer.team) continue;
+      const d = Math.hypot(o.x - victim.x, o.y - victim.y);
+      if (d < bd) { bd = d; best = o; }
+    }
+    if (best) this.botSay(best, bd < 3 ? EMOTE_MERCI : EMOTE_BRAVO);
   }
 
   /** A Pilleur falls: the crate it stole tumbles out of its sack, on the free cell nearest to the wreck. */

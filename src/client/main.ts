@@ -1,4 +1,4 @@
-import { type TankKind, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -299,6 +299,7 @@ function onMessage(msg: ServerMsg) {
 
 function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   stopAttract();
+  clearBubbles();
   online = true;
   currentMode = msg.mode;
   if (msg.mode !== 'taupe') myRole = undefined;
@@ -556,6 +557,7 @@ $('#hud-rally').addEventListener('click', (e) => { (e.currentTarget as HTMLEleme
 
 function clientTick() {
   const s = controls.sample();
+  if (s.emote >= 0) sayEmote(s.emote); // the d-pad (iteration 30), even from the wreck
   localFireCd -= DT;
   const last = snaps[snaps.length - 1];
   const meNet = last?.T.get(myTankId);
@@ -876,6 +878,11 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1], e[2], 'Broum !', 0xd9822b);
       if (audible) sfx.erupt();
       break;
+    case 'emote':
+      // « Les bulles » (iteration 30): a quick-chat bubble above the tank
+      showBubble(e[3], e[4], e[1], e[2]);
+      if (audible || attract) sfx.emote(e[4]);
+      break;
     case 'rally': {
       // « Suis-moi ! » (iteration 20): a horn, a ring around the leader, and the teammates answer
       // the demo has no tank list from a room: its own game knows the teams
@@ -973,6 +980,77 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
+
+// ------------------------------------------------------------------ « Les bulles » (iteration 30): quick chat
+
+const bubbles = new Map<number, { el: HTMLDivElement; until: number; x: number; y: number }>();
+let bubblesShown = 0;
+
+/** A comic-strip bubble above a tank, in its colour, that follows it for EMOTE_TIME seconds. */
+function showBubble(id: number, n: number, x: number, y: number) {
+  const text = EMOTES[n];
+  if (!text) return;
+  bubbles.get(id)?.el.remove();
+  const el = document.createElement('div');
+  el.className = 'bubble';
+  el.style.setProperty('--c', hex(attract?.tankById(id)?.color ?? renderer.tankColor(id) ?? infos.get(id)?.color ?? 0xffffff));
+  const inner = document.createElement('span');
+  inner.className = `e${n}`;
+  inner.textContent = text;
+  el.appendChild(inner);
+  floatLayer.appendChild(el);
+  bubbles.set(id, { el, until: performance.now() + EMOTE_TIME * 1000, x, y });
+  bubblesShown++;
+  placeBubbles();
+}
+
+function placeBubbles() {
+  if (!bubbles.size) return;
+  const now = performance.now();
+  for (const [id, b] of bubbles) {
+    if (now > b.until) { b.el.remove(); bubbles.delete(id); continue; }
+    const t = lastTanks.find((k) => k.id === id);
+    if (t) { b.x = t.x; b.y = t.y; }
+    const p = renderer.arenaToScreen(b.x, b.y, 1.2);
+    b.el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`;
+    if (now > b.until - 300) b.el.classList.add('out');
+  }
+}
+
+function clearBubbles() {
+  for (const b of bubbles.values()) b.el.remove();
+  bubbles.clear();
+}
+
+let lastEmoteAt = 0;
+/** Ask the room to show line n above my tank (keys 1 to 6, the d-pad or the « Bulles » button). */
+function sayEmote(n: number) {
+  closeEmotePad();
+  if (!online || screen !== 'game' || !EMOTES[n]) return;
+  const now = performance.now();
+  if (now - lastEmoteAt < EMOTE_GAP * 1000) return;
+  lastEmoteAt = now;
+  send({ t: 'emote', n });
+}
+
+const emotePad = $('#emote-pad');
+emotePad.innerHTML = EMOTES.map((t, i) => `<button data-emote="${i}" class="e${i}"><kbd>${i + 1}</kbd>${t}</button>`).join('');
+function closeEmotePad() { $('#emote-pad').hidden = true; } // (safe before the pad is filled)
+$('#hud-emote').addEventListener('click', (e) => {
+  (e.currentTarget as HTMLElement).blur();
+  emotePad.hidden = !emotePad.hidden;
+  if (!emotePad.hidden) sfx.click();
+});
+emotePad.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-emote]');
+  if (b) { b.blur(); sayEmote(Number(b.dataset.emote)); }
+});
+addEventListener('keydown', (e) => {
+  const tag = (e.target as HTMLElement)?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.repeat || council || treeOpen || !online || screen !== 'game') return;
+  const m = e.code.match(/^(?:Digit|Numpad)([1-6])$/);
+  if (m) sayEmote(Number(m[1]) - 1);
+});
 
 // ------------------------------------------------------------------ name tags
 
@@ -1199,6 +1277,8 @@ function renderHud() {
   livesEl.innerHTML = coopLike(currentMode) ? `<span class="tank-ico"></span> × ${lives}` : '';
   renderRole();
   $('#hud-rally').hidden = !hasMates();
+  $('#hud-emote').hidden = !online;
+  if (!online) closeEmotePad();
   const sb = $('#scoreboard');
   if (currentMode === 'drapeau') {
     sb.innerHTML = TEAM_NAMES.map((n, i) => `<div class="sb-row ctf${myTeam === i + 1 ? ' mine' : ''}"><i style="--c:${hex(TEAM_COLORS[i])}"></i><span>${n}</span><b>${teamScores[i]}</b></div>`).join('');
@@ -1538,6 +1618,11 @@ function showResults(r: Results) {
         })
         .join('')}</tbody>
     </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
+  const over = online && phase === 'gameover';
+  $('#btn-results-ok').textContent = over ? 'Retour au salon' : 'Continuer';
+  const again = $<HTMLButtonElement>('#btn-results-again');
+  again.hidden = !over || !lobbyPlayers.find((p) => p.id === pid)?.host;
+  again.disabled = false;
   show('results');
 }
 
@@ -1563,6 +1648,7 @@ function attractMission() {
 
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
+  clearBubbles();
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
   if (!opts.versus && !opts.drapeau && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
@@ -1710,7 +1796,7 @@ function endAttractFlags(g: Game) {
   const c = attractCtf!;
   const standing = [1, 2].filter((k) => g.aliveCount(k) > 0);
   const w = g.ctfWinner || (standing.length === 1 ? standing[0] : 0);
-  if (w) c.teams[w - 1]++;
+  if (w) { c.teams[w - 1]++; g.cheer(w); } // the winners celebrate (iteration 30)
   renderCtfBoard();
   if (document.body.classList.contains('demo') && screen === 'game') {
     const carrier = g.ctfWinner ? g.tankById(g.flags?.find((f) => f.team !== w)?.carrier ?? -1) : undefined;
@@ -1737,7 +1823,7 @@ function endAttractVersus(g: Game) {
   const vs = attractVs!;
   const alive = g.tanks.filter((t) => t.alive && t.kind === 'player');
   const w = alive.length === 1 ? alive[0].team - 1 : -1;
-  if (w >= 0) vs.scores[w]++;
+  if (w >= 0) { vs.scores[w]++; g.cheer(alive[0].team); }
   renderVsBoard();
   if (document.body.classList.contains('demo') && screen === 'game') {
     banner(`Versus · manche ${vs.round + 1}`, w >= 0 ? `${vs.names[w]} gagne la manche !` : 'Égalité !', w >= 0 ? `${vs.scores[w]} point${vs.scores[w] > 1 ? 's' : ''}` : '', 'intro');
@@ -1793,7 +1879,10 @@ function attractFrame(dt: number) {
       else { attractOpts = {}; startAttract({}); }
     }
   } else {
-    if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) attractEnd = g.tick + TICK_RATE * 2.5;
+    if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) {
+      attractEnd = g.tick + TICK_RATE * 2.5;
+      if (g.aliveCount(2) === 0) g.cheer(1); // the heroes cheer the mission won (iteration 30)
+    }
     if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
   }
   attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission, flags: g.flags?.map((f) => f.state), teams: attractCtf?.teams };
@@ -1824,6 +1913,7 @@ function frame(now: number) {
     attractFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt);
     updateNameTags([]);
   }
+  placeBubbles();
   renderer.render(dt);
   requestAnimationFrame(frame);
 }
@@ -1882,7 +1972,16 @@ document.querySelectorAll<HTMLButtonElement>('#mode-select button').forEach((b) 
 );
 $('#btn-start').addEventListener('click', () => { sfx.click(); send({ t: 'start' }); });
 $('#btn-leave').addEventListener('click', () => leaveRoom());
-$('#btn-results-ok').addEventListener('click', () => { show(online ? 'game' : roomCode ? 'lobby' : 'home'); });
+// the end of a game (iteration 30, players asked for it): no more waiting on the frozen table, straight back to the lobby
+$('#btn-results-ok').addEventListener('click', () => {
+  if (online && phase === 'gameover') { send({ t: 'stop' }); show('lobby'); return; }
+  show(online ? 'game' : roomCode ? 'lobby' : 'home');
+});
+$('#btn-results-again').addEventListener('click', () => {
+  sfx.click();
+  send({ t: 'again' });
+  $<HTMLButtonElement>('#btn-results-again').disabled = true;
+});
 
 function toggleMenu(force?: boolean) {
   if (screen !== 'game') return;
@@ -2083,7 +2182,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -2132,6 +2231,21 @@ if (params.has('demo')) {
      * « Suis-moi ! » (iteration 20): the first hero of the demo calls the others, who drop everything and come along
      * (they become AI teammates for the occasion). Returns how many answered.
      */
+    /**
+     * « Les bulles » (iteration 30): a tank of the demo says line n (or each AI tank in turn says a line, n omitted).
+     * Returns how many bubbles went up.
+     */
+    emote(n?: number) {
+      const g = attract;
+      if (!g) return 0;
+      const talkers = g.tanks.filter((t) => t.kind === 'player' && t.alive);
+      let k = 0;
+      talkers.forEach((t, i) => {
+        if (n !== undefined && i > 0) return;
+        if (g.emote(t, n ?? [0, 3, 5, 1][i % 4], 0)) k++;
+      });
+      return k;
+    },
     rally() {
       const g = attract;
       if (!g) return 0;

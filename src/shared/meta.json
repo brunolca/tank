@@ -1,7 +1,7 @@
 {
-  "iteration": 29,
+  "iteration": 30,
   "date": "2026-11-11",
-  "title": "Coup de froid",
+  "title": "Les bulles",
   "journal": [
     {
       "iteration": 1,
@@ -353,6 +353,18 @@
         "Nouvelle caisse bonus : le Gros calibre. Pendant 10 secondes, tes obus énormes traversent les blocs de liège en les faisant sauter et brisent les obus d’en face sans s’arrêter.",
         "Les deux nouvelles caisses tombent partout : en campagne, au défi du jour, en versus et aux drapeaux.",
         "Sur l’accueil, un nouveau volet « Les caisses bonus » rappelle ce que contient chaque caisse, dans sa couleur."
+      ]
+    },
+    {
+      "iteration": 30,
+      "date": "2026-11-11",
+      "title": "Les bulles",
+      "notes": [
+        "Nouveau : les bulles. Touches 1 à 6, croix de la manette ou bouton « 💬 Bulles » : une bulle de bande dessinée s’affiche au-dessus de ton tank, à ta couleur, pour tous les joueurs de la table.",
+        "Six répliques au choix : « Bravo ! », « Merci ! », « Oups ! », « Par ici ! », « Attention ! » et « Hé hé ! », chacune avec son petit couinement de jouet.",
+        "Les tanks pilotés par l’ordinateur parlent aussi : un coéquipier t’applaudit après un beau tir ou te remercie de l’avoir tiré d’affaire, un rival se moque quand il te touche, s’excuse d’un tir ami et prévient quand il pose une mine.",
+        "Fin de manche ou mission gagnée : les vainqueurs pilotés par l’ordinateur fêtent ça. Le porteur d’un drapeau appelle son équipe : « Par ici ! ».",
+        "Fini l’attente après une partie : « Retour au salon » y ramène toute la table tout de suite, et l’hôte peut relancer le même mode d’un clic avec « Rejouer »."
       ]
     }
   ]

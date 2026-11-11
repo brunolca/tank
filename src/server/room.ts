@@ -60,6 +60,7 @@ export class Room extends DurableObject<Env> {
   private rivals: Rival[] = []; // versus rivals (iteration 17) and coop teammates (iteration 20); cleared when the host picks another mode
   private mode: Mode = 'coop';
   private phase: Phase = 'lobby';
+  private overShown = false; // the results of the game just over went out to everyone: the wait may be skipped (iteration 30)
   private game?: Game;
   private level?: ParsedLevel;
   private mission = 1;
@@ -267,7 +268,22 @@ export class Room extends DurableObject<Env> {
         break;
       case 'stop':
         if (p.pid === this.hostId() && this.phase !== 'lobby') this.endToLobby();
+        // the game is over and everyone has the results (iteration 30, players asked for it): anyone may skip the wait
+        else if (this.phase === 'gameover' && this.overShown && p.inGame) this.endToLobby();
         break;
+      case 'again':
+        // « Rejouer » (iteration 30): the host starts the same mode again straight from the results
+        if (p.pid === this.hostId() && (this.phase === 'lobby' || this.phase === 'gameover' && this.overShown)) {
+          if (this.phase !== 'lobby') this.endToLobby();
+          this.startGame();
+        }
+        break;
+      case 'emote': {
+        // « Les bulles » (iteration 30): a quick-chat line above the sender's tank, picked from a fixed list
+        const me = this.game?.tanks.find((t) => t.pid === p.pid);
+        if (me && this.game && this.phase !== 'lobby') this.game.emote(me, Math.floor(Number(msg.n)));
+        break;
+      }
       case 'in':
         if (Array.isArray(msg.i)) {
           for (const i of msg.i.slice(0, 8)) {
@@ -659,6 +675,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private broadcastPhase() {
+    this.overShown = this.phase === 'gameover'; // the daily board and the boss board only broadcast once their rank is known
     this.broadcast(this.phaseMsg());
   }
 
@@ -843,6 +860,7 @@ export class Room extends DurableObject<Env> {
         if (game.bullets.length === 0 || this.settle >= SETTLE_MAX) {
           if (this.mode === 'rush') this.splits.push(this.runTicks - this.splits.reduce((n, v) => n + v, 0)); // time spent on this boss, retries included
           this.setPhase('cleared', this.clearedTraining());
+          game.cheer(0); // the AI teammates celebrate (iteration 30)
           this.broadcastPhase();
         } else if (this.lastEnemyCount !== 0) this.broadcastPhase();
       } else if (playersAlive === 0) {
@@ -868,6 +886,7 @@ export class Room extends DurableObject<Env> {
       if (alive.length <= 1 && (game.bullets.length === 0 || this.settle >= SETTLE_MAX)) {
         const w = this.entrant(alive[0]?.pid);
         if (w) w.score++;
+        if (alive[0]) game.cheer(alive[0].team); // a rival that wins the round gloats (iteration 30)
         this.setPhase('roundEnd', 3.5);
         this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: w ? `${w.name} gagne la manche !` : 'Égalité !' });
       }
@@ -892,6 +911,7 @@ export class Room extends DurableObject<Env> {
     if (win) {
       this.teams[win - 1]++;
       for (const t of game.tanks) if (t.team === win && t.pid) { const e = this.entrant(t.pid); if (e) e.score++; }
+      game.cheer(win);
     }
     this.setPhase('roundEnd', 4);
     this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text });

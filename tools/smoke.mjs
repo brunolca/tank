@@ -53,6 +53,15 @@ try {
     if (!['playing', 'failed', 'cleared'].includes(s.phase)) fail(`${name} : phase inattendue ${s.phase}`);
   }
 
+  // « Les bulles » (iteration 30): A says « Bravo ! » with the key 1, both players see the bubble
+  const bubblesB = (await state(b)).bubbles ?? 0;
+  if (!(await state(a)).emoteBtn) fail('le bouton « Bulles » n’apparaît pas en partie');
+  const bubbled = async (p, n) => p.waitForFunction((n) => (window.__debug.state.bubbles ?? 0) > n, n, { timeout: 4000 }).then(() => true, () => false);
+  await a.keyboard.press('Digit1');
+  if (!(await bubbled(a, 0))) { await sleep(1300); await a.keyboard.press('Digit2'); } // a mission that restarts just then drops its events: once more
+  if (!(await bubbled(a, 0))) fail('la touche 1 n’affiche pas de bulle au-dessus de son tank');
+  if (!(await bubbled(b, bubblesB))) fail('l’autre joueur ne voit pas la bulle');
+
   // the skill tree of the campaign (iteration 19): both players have their progress, K opens and closes the card
   for (const [name, p] of [['A', a], ['B', b]]) {
     const s = await state(p);

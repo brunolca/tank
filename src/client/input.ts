@@ -9,6 +9,7 @@ export interface InputSample {
   fire: boolean;
   mine: boolean;
   rally: boolean; // « Suis-moi ! » to the AI teammates (iteration 20): T, or Y on a gamepad
+  emote: number; // « Les bulles » (iteration 30): the d-pad of a gamepad (up, right, down, left: lines 0 to 3 of EMOTES), -1 none
 }
 
 export class Controls {
@@ -20,6 +21,7 @@ export class Controls {
   private padMineHeld = false;
   private padRallyHeld = false;
   private rallyLatch = false;
+  private padDpad = -1;
   private lastPadAim: number | null = null;
   usingPad = false;
   suspended = false; // a modal (feedback) is open
@@ -121,7 +123,7 @@ export class Controls {
   sample(): InputSample {
     if (this.suspended) {
       this.fireLatch = this.mineLatch = this.rallyLatch = false;
-      return { mx: 0, my: 0, aimX: null, aimY: null, aimAng: null, fire: false, mine: false, rally: false };
+      return { mx: 0, my: 0, aimX: null, aimY: null, aimAng: null, fire: false, mine: false, rally: false, emote: -1 };
     }
     let mx = 0, my = 0;
     const k = this.keys;
@@ -130,7 +132,7 @@ export class Controls {
     if (k.has('KeyA') || k.has('ArrowLeft')) mx -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) mx += 1;
     let aimAng: number | null = null;
-    let fire = this.fireLatch, mine = this.mineLatch, rally = this.rallyLatch;
+    let fire = this.fireLatch, mine = this.mineLatch, rally = this.rallyLatch, emote = -1;
     this.fireLatch = this.mineLatch = this.rallyLatch = false;
 
     const pads = navigator.getGamepads?.() ?? [];
@@ -150,6 +152,10 @@ export class Controls {
       const rallyBtn = !!p.buttons[3]?.pressed;
       if (rallyBtn && !this.padRallyHeld) rally = true;
       this.padRallyHeld = rallyBtn;
+      // the d-pad: up « Bravo ! », right « Merci ! », down « Oups ! », left « Par ici ! »
+      const dpad = [12, 15, 13, 14].findIndex((b) => p.buttons[b]?.pressed);
+      if (dpad >= 0 && dpad !== this.padDpad) emote = dpad;
+      this.padDpad = dpad;
       if (this.usingPad) aimAng = this.lastPadAim;
       break;
     }
@@ -166,6 +172,6 @@ export class Controls {
       const p = this.toArena(pt.x, pt.y);
       if (p) { aimX = p.x; aimY = p.y; }
     }
-    return { mx, my, aimX, aimY, aimAng, fire, mine, rally };
+    return { mx, my, aimX, aimY, aimAng, fire, mine, rally, emote };
   }
 }

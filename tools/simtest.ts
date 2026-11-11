@@ -4,7 +4,7 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -1832,4 +1832,41 @@ console.log('total', Date.now() - t0, 'ms');
   // the AI on one life only, against the whole duo: it must at least hurt them (players have three lives, and the damage sticks)
   if (dealt < total * 0.2) fail(`les rivaux n’entament que ${dealt}/${total} PV du bouquet final`);
   if (process.exitCode !== 1) console.log(`ronde des boss OK (cette semaine : ${rushOrder(weekNumber(dayNumber())).join(' › ')} › ${rushDuo(weekNumber(dayNumber())).join(' + ')} ; ${cleared}/${3 * RUSH_DUOS.length} finales gagnées par deux rivaux redoutables, ${Math.round((100 * dealt) / Math.max(1, total))} % des PV, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
+}
+
+// « Les bulles » (iteration 30): quick chat, from the players (through the room) and from the AI tanks
+{
+  const fail = (m: string) => { console.error('BULLES:', m); process.exitCode = 1; };
+  const lvl = versusArena(0);
+  const g = new Game(lvl.tiles, lvl.belts);
+  const me = g.addTank('player', 1, lvl.spawns[0][0], lvl.spawns[0][1], 0x3d7bff, 'p1', 'Moi');
+  const rival = g.addTank('player', 2, lvl.spawns[1][0], lvl.spawns[1][1], 0xe2453c, 'ia:1', 'Boulon');
+  makeRival(g, rival, 2);
+  g.frozen = false;
+  const said = () => g.events.filter((e) => e[0] === 'emote');
+  if (!g.emote(me, 0)) fail('un joueur ne peut pas parler');
+  if (g.emote(me, 1)) fail('deux bulles d’affilée');
+  if (g.emote(rival, EMOTES.length) || g.emote(rival, -1) || g.emote(rival, 1.5)) fail('une ligne inconnue passe');
+  for (let i = 0; i < 40; i++) g.step(new Map());
+  if (!g.emote(me, 3)) fail('plus de bulle après le délai');
+  if (said().length !== 2) fail(`${said().length} bulles au lieu de 2`);
+  // the AI cheers its kills (sometimes), says « Oups » when it hits a teammate, and keeps quiet for a while after
+  g.events = [];
+  let quips = 0;
+  for (let k = 0; k < 40; k++) {
+    const v = g.addTank('player', 3, 3, 3, 0x2fb04a);
+    g.tick += Math.ceil(EMOTE_BOT_GAP / DT) + k;
+    g.killTank(v, rival);
+    quips += g.events.filter((e) => e[0] === 'emote' && e[3] === rival.id).length;
+    g.events = [];
+  }
+  if (quips < 8 || quips > 32) fail(`le rival commente ${quips} fois sur 40`);
+  const mate = g.addTank('player', 2, 5, 5, 0x2fb04a);
+  g.tick += Math.ceil(EMOTE_BOT_GAP / DT);
+  g.killTank(mate, rival);
+  if (!g.events.some((e) => e[0] === 'emote' && e[3] === rival.id && e[4] === 2)) fail('pas de « Oups ! » après un tir ami');
+  const v2 = g.addTank('player', 3, 3, 3, 0x2fb04a);
+  g.killTank(v2, rival);
+  if (g.events.filter((e) => e[0] === 'emote').length !== 1) fail('le rival parle sans reprendre son souffle');
+  if (process.exitCode !== 1) console.log(`bulles OK (${EMOTES.length} répliques, le rival en place ${quips} sur 40 victoires)`);
 }

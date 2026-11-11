@@ -910,3 +910,61 @@ body.vs-demo .hud-left, body.vs-demo .hud-right { visibility: hidden; }
 @keyframes hurry { to { color: #ffd0cb; } }
 #mode-select { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 #mode-select button { padding-left: 4px; padding-right: 4px; }
+
+/* ------------------------------------------------------------------ « Les bulles » (iteration 30): quick chat above the tanks */
+#emote-pad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: min(420px, 60vw);
+  animation: buff-in 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+#emote-pad[hidden] { display: none; }
+#emote-pad button {
+  font: 800 14px Rubik, sans-serif;
+  color: #1b1d24;
+  background: #fffaf0;
+  border: 2px solid #1b1d24;
+  border-radius: 14px;
+  padding: 6px 10px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+#emote-pad button:hover { background: #fff; transform: translateY(-1px); }
+#emote-pad button:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
+#emote-pad kbd { font: 800 10px Rubik, sans-serif; color: #8a7a5a; margin-right: 5px; }
+body.touch #emote-pad kbd { display: none; }
+.bubble { position: absolute; left: 0; top: 0; will-change: transform; }
+.bubble span {
+  position: absolute;
+  left: 0;
+  bottom: 12px;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  white-space: nowrap;
+  font-weight: 900;
+  font-size: 18px;
+  color: #1b1d24;
+  background: #fffaf0;
+  border: 3px solid var(--c);
+  border-radius: 16px;
+  padding: 5px 12px 6px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.35);
+  animation: bubble-in 0.38s cubic-bezier(0.3, 1.7, 0.5, 1) both;
+}
+.bubble span::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 8px);
+  bottom: -11px;
+  border: 8px solid transparent;
+  border-top: 9px solid var(--c);
+  border-bottom: 0;
+}
+.bubble.out span { animation: bubble-out 0.3s ease-in forwards; }
+.bubble .e0 { color: #b8560b; }
+.bubble .e2 { color: #6a4fb8; }
+.bubble .e4 { color: #c4271d; }
+@keyframes bubble-in { from { transform: translateX(-50%) scale(0.2) rotate(-8deg); opacity: 0; } }
+@keyframes bubble-out { to { transform: translateX(-50%) translateY(-14px) scale(0.85); opacity: 0; } }
+.results-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }

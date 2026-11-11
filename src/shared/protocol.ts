@@ -86,6 +86,7 @@ export type GameEvent =
   | ['freeze', number, number, number, number] // x y tankId frozen: someone grabbed the « Gel » crate, n foes freeze (iteration 29; older clients ignore it)
   | ['thaw', number, number, number] // x y tankId: its ice cube melts (iteration 29)
   | ['unload', number, number, number, number] // x y tankId shells: the Aimant throws back the shells it caught (iteration 27; older clients ignore it)
+  | ['emote', number, number, number, number] // x y tankId line: « Les bulles » (iteration 30), a quick-chat bubble (index in EMOTES) above that tank; older clients ignore it
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
@@ -188,7 +189,9 @@ export type ClientMsg =
   | { t: 'order' } // coop campaign (iteration 20): « Suis-moi ! », the AI teammates come to the sender's tank
   | { t: 'skill'; b: number } // coop campaign (iteration 19): buy the next rank of branch b (0 to 2), or -1 « ready » at the end of a mission
   | { t: 'vote'; who: string } // mole mode, during a council: the pid accused ('' = nobody)
+  | { t: 'emote'; n: number } // « Les bulles » (iteration 30): show line n of EMOTES above my tank
   | { t: 'start' }
-  | { t: 'stop' }
+  | { t: 'stop' } // host: back to the lobby; once the game is over and its results are out, anyone (iteration 30)
+  | { t: 'again' } // host, once the game is over (iteration 30): « Rejouer », the same mode again
   | { t: 'in'; i: Input[] }
   | { t: 'ping'; c: number };

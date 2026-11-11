@@ -335,3 +335,16 @@ export const BOLT_R = 1.05;
 export const BOLT_EVERY: [number, number] = [2.6, 4.6];
 /** Seconds the whole table stays lit after a strike: at night the AI sees everyone meanwhile. */
 export const BOLT_FLASH = 0.9;
+
+/**
+ * Les bulles (iteration 30): the quick-chat phrases a tank can show above its turret, by index.
+ * A fixed list (no free text): the players pick one with the keys 1 to 6, the d-pad or the « Bulles » button,
+ * and the AI teammates and rivals use them too. The index travels in an 'emote' event; older tabs ignore it.
+ */
+export const EMOTES = ['Bravo !', 'Merci !', 'Oups !', 'Par ici !', 'Attention !', 'Hé hé !'] as const;
+export const EMOTE_BRAVO = 0, EMOTE_MERCI = 1, EMOTE_OUPS = 2, EMOTE_ICI = 3, EMOTE_ATTENTION = 4, EMOTE_HEHE = 5;
+/** Seconds a bubble stays up, and the shortest gap between two bubbles of one tank (players and AI alike). */
+export const EMOTE_TIME = 2.4;
+export const EMOTE_GAP = 1.2;
+/** The AI speaks less often than that: at most one line every few seconds each. */
+export const EMOTE_BOT_GAP = 4;

@@ -30,6 +30,8 @@
       <div id="hud-lives"></div>
       <button id="hud-galons" class="galons-btn" hidden></button>
       <button id="hud-rally" class="galons-btn rally-btn" hidden title="Suis-moi ! Tes coéquipiers te rejoignent (touche T, Y à la manette)">📣 Suis-moi</button>
+      <button id="hud-emote" class="galons-btn rally-btn" hidden title="Les bulles : dis-le en un clic (touches 1 à 6, croix directionnelle à la manette)">💬 Bulles</button>
+      <div id="emote-pad" hidden></div>
       <div id="hud-buffs"></div>
       <div id="hud-role" hidden></div>
     </div>
@@ -90,6 +92,7 @@
           <li>Mobile : joystick à gauche, touche à droite pour viser et tirer</li>
           <li><kbd>K</kbd> ou bouton ★ : l’arbre des galons (campagne), <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> pour acheter</li>
           <li><kbd>T</kbd>, <kbd>Y</kbd> à la manette ou bouton 📣 : « Suis-moi ! » à tes coéquipiers pilotés par l’ordinateur (campagne)</li>
+          <li><kbd>1</kbd> à <kbd>6</kbd>, croix de la manette ou bouton 💬 : une bulle au-dessus de ton tank (« Bravo ! », « Merci ! », « Oups ! », « Par ici ! », « Attention ! », « Hé hé ! »)</li>
           <li>Les obus rebondissent une fois. Attention à tes propres ricochets !</li>
         </ul>
       </details>
@@ -175,7 +178,10 @@
       <div class="kicker">Résultats</div>
       <h2 id="results-title"></h2>
       <div id="results-body"></div>
-      <button id="btn-results-ok" class="btn primary">Continuer</button>
+      <div class="results-actions">
+        <button id="btn-results-again" class="btn" hidden>Rejouer</button>
+        <button id="btn-results-ok" class="btn primary">Continuer</button>
+      </div>
     </div>
   </section>
 

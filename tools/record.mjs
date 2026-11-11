@@ -7,13 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { cratesHelp: 5, seconds: 5, caption: 'Nouveau : deux caisses bonus', sub: 'Le Gel et le Gros calibre' },
-  { mission: 26, arms: ['canon', 'ricochet'], seconds: 10, freezes: [2.5], caption: 'Le Gel', sub: 'Tous tes adversaires figés dans un cube de glace' },
-  { mission: 24, arms: ['canon', 'ricochet'], seconds: 10, buffs: ['heavy'], caption: 'Le Gros calibre', sub: 'De gros obus qui traversent le liège et brisent ceux d’en face' },
-  { mission: 13, arms: ['canon', 'fusee'], seconds: 8, freezes: [2], caption: 'La glace trahit les fantômes', sub: 'Même les tanks invisibles se voient dans leur glaçon' },
-  { versus: [0], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 9, freezes: [3], caption: 'En versus aussi', sub: 'Gèle tes rivaux… et tire !' },
-  { mission: 40, arms: ['canon', 'ricochet'], seconds: 9, freezes: [3], hits: [5], caption: 'Même les boss frissonnent', sub: 'Mais ils se dégagent deux fois plus vite' },
-  { mission: 5, arms: ['canon', 'sapeur'], seconds: 8, crates: ['freeze', 'heavy'], caption: 'Six caisses bonus sur la table', sub: 'En campagne, au défi du jour, en versus et aux drapeaux' },
+  { mission: 5, arms: ['canon', 'ricochet'], seconds: 9, emotes: [1, 4.2, 7], caption: 'Nouveau : les bulles', sub: 'Touches 1 à 6 : six répliques au-dessus de ton tank' },
+  { mission: 12, arms: ['canon', 'sapeur'], seconds: 9, lines: [[1.5, 3], [4, 4], [6.5, 1]], caption: '« Par ici ! », « Attention ! », « Merci ! »', sub: 'À ta couleur, pour toute la table' },
+  { versus: [2], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 11, emotes: [2, 7], caption: 'Les rivaux ont du répondant', sub: 'Ils se moquent, s’excusent et fêtent leurs victoires' },
+  { drapeau: [1], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 11, emotes: [3], caption: 'Aux drapeaux aussi', sub: 'Le porteur appelle son équipe : « Par ici ! »' },
+  { mission: 22, arms: ['canon', 'ricochet'], seconds: 9, lines: [[1, 0], [3.5, 5], [6, 2]], caption: 'Tes coéquipiers t’applaudissent', sub: 'Un beau tir ? « Bravo ! » Un ricochet raté ? « Oups ! »' },
+  { mission: 26, arms: ['canon', 'ricochet'], seconds: 8, freezes: [2.5], emotes: [4.5], caption: 'Et toujours le Gel', sub: 'Plus d’attente en fin de partie : « Retour au salon » ou « Rejouer »' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -87,6 +86,8 @@ try {
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
       for (const s of shot.sows ?? []) setTimeout(() => d.sow?.(), s * 1000); // the Semeur sows (iteration 25)
       for (const s of shot.freezes ?? []) setTimeout(() => d.freeze?.(), s * 1000); // « Gel » (iteration 29)
+      for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
+      for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);

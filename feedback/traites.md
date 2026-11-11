@@ -26,3 +26,4 @@
 | 22 | 15 | Corrigé dans la mesure du possible : sur iPhone, aucune page ne peut cacher la barre d’adresse ; un bouton « plein écran » (vrai plein écran là où il existe) et un conseil en paysage expliquent l’ajout à l’écran d’accueil, qui ouvre maintenant le jeu en plein écran (manifeste, icônes). |
 | 23 | 19 | Fait : les galons (expérience gagnée en campagne, arbre de compétences à trois branches entre les missions). |
 | 24 | 20 | Corrigé : sur iPhone, le plateau restait étiré après une rotation de l’écran ; le rendu recale maintenant sa taille à chaque image. |
+| 25 | 30 | Corrigé : en fin de partie, « Retour au salon » ramène tout de suite au salon (plus d’attente sur la table figée) et l’hôte peut « Rejouer » le même mode d’un clic. |
