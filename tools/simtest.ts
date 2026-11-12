@@ -2,7 +2,7 @@ import { RUSH_BOSSES, RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_DUOS, RUSH_STAGE
 import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
-import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, versusArena } from '../src/shared/levels';
+import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
 import { EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
@@ -1785,6 +1785,100 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des Aimants');
   if (process.exitCode !== 1) console.log(`aimant OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${catches} obus attrapés, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the Givré (iteration 31): it frosts the floor it drives over, everyone else slides there; frost melts, blasts melt it
+{
+  const fail = (m: string) => { console.error('GIVRÉ:', m); process.exitCode = 1; };
+  {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 3.5, 3.5, 0x3d7bff, 'p1', 'P');
+    const f = g.addTank('frost', 99, 6.5, 8.5, 0);
+    f.ai = undefined;
+    g.frozen = false;
+    if (!g.ice || g.belts.length !== W * H) fail('une table avec un Givré n’est pas une table de glace');
+    // it drives to the right for a second: a trail of frost behind it, and it does not slide itself
+    for (let i = 0; i < 30; i++) { g.driveTank(f, 1, 0, DT); g.step(new Map()); g.events = []; }
+    const trail = [...g.frost.keys()];
+    if (trail.length < 3) fail(`pas de traînée de givre (${trail.length})`);
+    if (trail.some((i) => g.belts[i] !== ICE)) fail('le givre n’est pas de la glace');
+    if (g.floorBelts() !== undefined) fail('le message level emporte le givre');
+    const net = g.netFrost()!;
+    if (!net || net.length !== trail.length * 2) fail('instantané du givre');
+    const fx = f.x;
+    for (let i = 0; i < 10; i++) { g.step(new Map()); g.events = []; }
+    if (Math.abs(f.x - fx) > 0.01) fail('le Givré glisse sur son propre givre');
+    // a player crossing the frost keeps sliding once the stick is let go
+    p.x = 6.4; p.y = 8.5; p.vx = 0; p.vy = 0;
+    for (let i = 0; i < 12; i++) g.step(new Map([['p1', { s: i + 1, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+    const px = p.x;
+    for (let i = 0; i < 6; i++) g.step(new Map([['p1', { s: 20 + i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+    if (p.x - px < 0.15) fail(`le joueur ne glisse pas sur le givre (${(p.x - px).toFixed(2)})`);
+    g.events = [];
+    // a mine blast melts the frost around it
+    const c = trail[Math.floor(trail.length / 2)];
+    g.mines.push({ id: 999, x: (c % W) + 0.5, y: Math.floor(c / W) + 0.5, owner: p.id, t: 0, fuse: -1 } as never);
+    g.explodeMine(g.mines[g.mines.length - 1]);
+    if (g.frost.has(c) || g.belts[c] !== 0) fail('le souffle ne fait pas fondre le givre');
+    // and it melts on its own: quickly once the Givré is destroyed
+    f.buffs.invuln = 0;
+    g.killTank(f, p);
+    for (let i = 0; i < 30 * 2; i++) { g.step(new Map()); g.events = []; }
+    if (g.frost.size || g.belts.some(Boolean)) fail('le givre ne fond pas après la destruction du Givré');
+  }
+  {
+    // its frost never covers a belt, the map's own ice, a wall; and melts after FROST_LIFE while it lives
+    const lvl = parseLevel({ name: 't', map: blankMap(), belts: ['~~~~~~~~~~~~~~~~~~~~~~', '>>>>>>>>>>>>>>>>>>>>>>'] });
+    const g = new Game(lvl.tiles, lvl.belts);
+    const f = g.addTank('frost', 99, 5.5, 0.5, 0);
+    f.ai = undefined;
+    g.frozen = false;
+    for (let i = 0; i < 60; i++) { g.driveTank(f, 0, 1, DT); g.step(new Map()); g.events = []; }
+    for (let x = 0; x < W; x++) { if (g.belts[x] !== ICE) fail('la glace de la carte a disparu'); if (g.belts[W + x] !== 1) fail('un tapis a gelé'); }
+    if (g.floorBelts()?.filter((b) => b === ICE).length !== W) fail('floorBelts perd la glace de la carte');
+    f.x = 18.5; f.y = 14.5;
+    for (let i = 0; i < 30 * 10; i++) { g.step(new Map()); g.events = []; }
+    const far = [...g.frost.keys()].filter((i) => Math.floor(i / W) < 12);
+    if (far.length) fail('le givre ne fond pas tout seul');
+  }
+  // the missions: handmade 39 and 41, then some generated ones; never in the daily challenge nor the mole
+  const fm: number[] = [];
+  for (let mission = 1; mission <= 130; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'frost')) fm.push(mission);
+  if (!fm.includes(39) || !fm.includes(41)) fail('missions 39 et 41 sans Givré');
+  if (fm.some((x) => x < 39)) fail('Givré avant la 39ᵉ mission');
+  if (fm.length < 8) fail(`trop peu de missions avec des Givrés (${fm.length})`);
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'frost')) fail('Givré dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'frost')) fail('Givré dans la taupe');
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'f' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Givré refusé (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Givre', map }));
+  if (back?.map[8][15] !== 'f') fail('atelier : le Givré se perd dans le code');
+  if (killXp('frost') !== 2) fail('galons du Givré');
+  // duos of AI players clear the frost missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, most = 0;
+  for (const mission of [39, 41, fm.find((x) => x > 42)!]) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) { // a few more tries before calling it a failure (the AI is random)
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        most = Math.max(most, s2.frost.size);
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des Givrés');
+  if (most < 8) fail(`les Givrés ne givrent presque rien (${most} cases au plus)`);
+  if (process.exitCode !== 1) console.log(`givré OK (missions : ${fm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, jusqu’à ${most} cases givrées, ${per.toFixed(3)} ms/tick)`);
 }
 
 // « La ronde des boss » (iteration 28): the four bosses in a weekly order, then a duo; valid, deterministic, cheap, beatable

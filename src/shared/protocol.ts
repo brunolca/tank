@@ -175,7 +175,7 @@ export type ServerMsg =
       left?: number; // « Drapeaux »: seconds left in the round (the clock runs on each side while it is played)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[] } // F: the flags (iteration 24)
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[] } // F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

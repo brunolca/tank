@@ -47,7 +47,8 @@ export type TankKind =
   | 'thunder'
   | 'rampart'
   | 'sower'
-  | 'magnet';
+  | 'magnet'
+  | 'frost';
 
 export interface TankSpec {
   speed: number;
@@ -94,6 +95,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   sower: { speed: 1.1, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.25, turretSpeed: 2.3, mines: 0, skill: 2, reaction: 0.45, aimError: 0.06, hp: 8, size: SOWER_R, label: 'Semeur' },
   // iteration 27: its magnet pulls in every shell around it and catches them, then throws them all back at once (see MAGNET_*)
   magnet: { speed: 1.25, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.6, turretSpeed: 2.2, mines: 0, skill: 1, reaction: 0.55, aimError: 0.08, label: 'Aimant' },
+  // iteration 31: it skates without sliding and leaves a trail of frost behind it, where everyone else slides (see FROST_*)
+  frost: { speed: 2.1, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.6, turretSpeed: 2.4, mines: 0, skill: 1, reaction: 0.5, aimError: 0.08, label: 'Givré' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -128,6 +131,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   rampart: 0x2f6f73,
   sower: 0x86b33a,
   magnet: 0x474c58,
+  frost: 0x9fd4ee,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -191,6 +195,14 @@ export const SEED_RIPEN: [number, number] = [5.2, 4.2];
 export const SEED_BLINK = 1.3;
 /** Seconds a seed is in the air after it is thrown: shells fly under it. */
 export const SEED_FLIGHT = 0.5;
+
+// ------------------------------------------------------------------ the Givré (iteration 31): the frost tank
+/** Seconds a cell of frost left by the Givré lasts before it melts. */
+export const FROST_LIFE = 9;
+/** Once the last Givré is destroyed, its frost melts within this many seconds. */
+export const FROST_THAW = 1.6;
+/** How far around its centre (tiles) the Givré frosts the floor as it drives. */
+export const FROST_REACH = 0.42;
 
 // ------------------------------------------------------------------ the Aimant (iteration 27): the magnet tank
 /** Seconds its field stays on (it pulls in and catches every shell around it), then off (it can be hit). */

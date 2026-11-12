@@ -54,6 +54,8 @@ export const BRUSHES: Brush[] = [
   { ch: 'S', label: 'Semeur', group: 'tank' },
   // iteration 27: the Aimant (share-code letter g)
   { ch: 'A', label: 'Aimant', group: 'tank' },
+  // iteration 31: the Givré (share-code letter h)
+  { ch: 'f', label: 'Givré', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

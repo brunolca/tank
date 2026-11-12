@@ -1,5 +1,5 @@
 import {
-  BELT_DIRS, BELT_SPEED, ICE, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BELT_DIRS, BELT_SPEED, ICE, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
@@ -163,7 +163,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -254,6 +254,11 @@ export class Game {
   belts: number[] = [];
   /** Some floor cells are ice (iteration 21): tanks keep their momentum on them. */
   ice = false;
+  /**
+   * « Le Givré » (iteration 31): cells of frost it left behind (cell index → seconds before they melt). They are ice
+   * cells of `belts` while they last (only on bare floor with no belt or ice of its own), so every rule of the ice holds.
+   */
+  frost = new Map<number, number>();
   /** Wind (iteration 23): where it mainly blows (radians), undefined on a calm table. It bends the shells in flight. */
   wind?: number;
   /** The pull of the wind this tick (tiles/s²), see windAt. */
@@ -294,6 +299,11 @@ export class Game {
     if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : kind === 'sower' ? 3.2 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind === 'magnet') t.mag = { on: false, t: 1.2 + Math.random() * 1.6, held: 0 };
+    if (kind === 'frost') {
+      // its frost turns any table into an ice table: momentum for everyone (and their speed in the snapshots)
+      this.ice = true;
+      if (!this.belts.length) this.belts = new Array(W * H).fill(0);
+    }
     if (kind !== 'player') this.enableAI(t);
     this.tanks.push(t);
     return t;
@@ -393,12 +403,67 @@ export class Game {
       }
     }
     this.separateTanks();
+    if (this.frost.size || this.tanks.some((t) => t.kind === 'frost')) this.stepFrost(DT);
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
     this.stepMines(DT);
     if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
     if (this.bonusOn) this.stepBonuses(DT);
     if (this.flags) this.stepFlags(DT);
+  }
+
+  // -------------------------------------------------------------- « Le Givré » (iteration 31)
+
+  /** The Givré frosts the bare floor under it as it drives; frost melts after FROST_LIFE (fast once no Givré is left). */
+  stepFrost(dt: number) {
+    let skaters = 0;
+    for (const t of this.tanks) {
+      if (!t.alive || t.kind !== 'frost') continue;
+      skaters++;
+      if (t.chill !== undefined) continue; // frozen in the « Gel » cube: it frosts nothing
+      const R = FROST_REACH;
+      for (let cy = Math.floor(t.y - R); cy <= Math.floor(t.y + R); cy++)
+        for (let cx = Math.floor(t.x - R); cx <= Math.floor(t.x + R); cx++) {
+          if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue;
+          const i = cy * W + cx;
+          if (this.tiles[i] !== Tile.Empty) continue;
+          if (this.belts[i] && !this.frost.has(i)) continue; // a belt or ice of the map: left alone
+          // only cells the hull really covers (the nearest point of the cell is within reach)
+          const nx = Math.max(cx, Math.min(cx + 1, t.x)), ny = Math.max(cy, Math.min(cy + 1, t.y));
+          if (Math.hypot(nx - t.x, ny - t.y) > R) continue;
+          this.frost.set(i, FROST_LIFE);
+          this.belts[i] = ICE;
+        }
+    }
+    for (const [i, life] of this.frost) {
+      // a cork block built on the frost (the Maçon) wipes it; without a Givré, it all melts quickly
+      const left = (skaters ? life : Math.min(life, FROST_THAW)) - dt;
+      if (left <= 0 || this.tiles[i] !== Tile.Empty) { this.frost.delete(i); if (this.belts[i] === ICE) this.belts[i] = 0; }
+      else this.frost.set(i, left);
+    }
+  }
+
+  /** A blast melts the frost around it (iteration 31). */
+  meltFrost(x: number, y: number, R: number) {
+    for (const i of this.frost.keys()) {
+      if (Math.hypot((i % W) + 0.5 - x, Math.floor(i / W) + 0.5 - y) < R + 0.35) { this.frost.delete(i); if (this.belts[i] === ICE) this.belts[i] = 0; }
+    }
+  }
+
+  /** The floor layer of the map as it was drawn (without the Givré's frost), for the level message. */
+  floorBelts(): number[] | undefined {
+    if (!this.belts.length) return undefined;
+    const b = this.belts.slice();
+    for (const i of this.frost.keys()) b[i] = 0;
+    return b.some(Boolean) ? b : undefined;
+  }
+
+  /** Frost of the Givré for the snapshots: flat pairs [cell, tenths of a second before it melts], undefined if none. */
+  netFrost(): number[] | undefined {
+    if (!this.frost.size) return undefined;
+    const out: number[] = [];
+    for (const [i, life] of this.frost) out.push(i, Math.ceil(life * 10));
+    return out;
   }
 
   // -------------------------------------------------------------- « Drapeaux » (iteration 24)
@@ -1054,7 +1119,7 @@ export class Game {
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
     const px = t.x, py = t.y;
-    if (this.ice) {
+    if (this.ice && t.kind !== 'frost') { // the Givré skates on its own frost without sliding (iteration 31)
       if (t.slid) return; // one step per tick on the ice: momentum is integrated once
       t.slid = true;
       [t.x, t.y, t.body, t.vx, t.vy] = slideDrive(this.tiles, this.belts, t.x, t.y, t.body, t.vx, t.vy, mx, my, this.speedOf(t), dt, t.r);
@@ -1317,6 +1382,7 @@ export class Game {
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
     }
+    if (this.frost.size) this.meltFrost(m.x, m.y, R); // the blast melts the Givré's frost (iteration 31)
     for (const o of this.mines) {
       if (!o.dead && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < R + 0.3) {
         if (o.fuse < 0 || o.fuse > 0.12) o.fuse = 0.12;
@@ -1944,6 +2010,7 @@ export class Game {
         let score = -Math.abs(df - ai.prefDist) + Math.random() * 2.5 + Math.min(dist[c], 6) * 0.15;
         for (const m of this.mines) score += Math.min(4, Math.hypot(m.x - cx, m.y - cy)) * 0.8;
         for (const o of this.tanks) if (o.alive && o !== t && o.team === t.team && Math.hypot(o.x - cx, o.y - cy) < 1.5) score -= 2;
+        if (t.kind === 'frost' && !this.frost.has(c)) score += 1.5; // the Givré loves fresh floor to frost (iteration 31)
         if (score > bestScore) { bestScore = score; best = c; }
       }
     }

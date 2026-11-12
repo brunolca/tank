@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 5, arms: ['canon', 'ricochet'], seconds: 9, emotes: [1, 4.2, 7], caption: 'Nouveau : les bulles', sub: 'Touches 1 à 6 : six répliques au-dessus de ton tank' },
-  { mission: 12, arms: ['canon', 'sapeur'], seconds: 9, lines: [[1.5, 3], [4, 4], [6.5, 1]], caption: '« Par ici ! », « Attention ! », « Merci ! »', sub: 'À ta couleur, pour toute la table' },
-  { versus: [2], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 11, emotes: [2, 7], caption: 'Les rivaux ont du répondant', sub: 'Ils se moquent, s’excusent et fêtent leurs victoires' },
-  { drapeau: [1], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 11, emotes: [3], caption: 'Aux drapeaux aussi', sub: 'Le porteur appelle son équipe : « Par ici ! »' },
-  { mission: 22, arms: ['canon', 'ricochet'], seconds: 9, lines: [[1, 0], [3.5, 5], [6, 2]], caption: 'Tes coéquipiers t’applaudissent', sub: 'Un beau tir ? « Bravo ! » Un ricochet raté ? « Oups ! »' },
-  { mission: 26, arms: ['canon', 'ricochet'], seconds: 8, freezes: [2.5], emotes: [4.5], caption: 'Et toujours le Gel', sub: 'Plus d’attente en fin de partie : « Retour au salon » ou « Rejouer »' },
+  { mission: 39, arms: ['canon', 'ricochet'], seconds: 16, frostMines: [11], caption: 'Nouveau : le Givré', sub: 'Il patine sans glisser et givre le sol derrière lui' },
+  { mission: 41, arms: ['ricochet', 'canon'], seconds: 14, frostMines: [6.5, 11], caption: 'Verglas : sur le givre, ton tank dérape', sub: 'Une mine fait fondre le givre… et il fond tout seul une fois le Givré détruit' },
+  { mission: 105, arms: ['canon', 'fusee'], seconds: 10, caption: 'Des Givrés dès la 43ᵉ mission', sub: 'Freine tôt, braque en avance, profite des glissades' },
+  { bestiary: 5, seconds: 5, caption: 'Au bestiaire', sub: 'Dix-neuf tanks, chacun sa couleur, chacun sa ruse' },
+  { mission: 5, arms: ['canon', 'ricochet'], seconds: 8, emotes: [1.5, 5], caption: 'Et toujours les bulles', sub: 'Touches 1 à 6 : six répliques au-dessus de ton tank' },
+  { mission: 37, arms: ['canon', 'ricochet'], seconds: 8, magnetShots: [1.5], caption: 'Et l’Aimant', sub: 'Il avale tes obus… et te les renvoie' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -83,6 +83,7 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.frostMines ?? []) setTimeout(() => d.frostMine?.(), s * 1000); // a blast melts the Givré's frost (iteration 31)
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
       for (const s of shot.sows ?? []) setTimeout(() => d.sow?.(), s * 1000); // the Semeur sows (iteration 25)
       for (const s of shot.freezes ?? []) setTimeout(() => d.freeze?.(), s * 1000); // « Gel » (iteration 29)

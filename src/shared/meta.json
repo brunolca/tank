@@ -1,7 +1,7 @@
 {
-  "iteration": 30,
-  "date": "2026-11-11",
-  "title": "Les bulles",
+  "iteration": 31,
+  "date": "2026-11-12",
+  "title": "Le Givré",
   "journal": [
     {
       "iteration": 1,
@@ -365,6 +365,18 @@
         "Les tanks pilotés par l’ordinateur parlent aussi : un coéquipier t’applaudit après un beau tir ou te remercie de l’avoir tiré d’affaire, un rival se moque quand il te touche, s’excuse d’un tir ami et prévient quand il pose une mine.",
         "Fin de manche ou mission gagnée : les vainqueurs pilotés par l’ordinateur fêtent ça. Le porteur d’un drapeau appelle son équipe : « Par ici ! ».",
         "Fini l’attente après une partie : « Retour au salon » y ramène toute la table tout de suite, et l’hôte peut relancer le même mode d’un clic avec « Rejouer »."
+      ]
+    },
+    {
+      "iteration": 31,
+      "date": "2026-11-12",
+      "title": "Le Givré",
+      "notes": [
+        "Un nouvel ennemi bleu glacier, coiffé d’un flocon de cristal qui tourne : le Givré. Il patine sur ses lames sans jamais glisser et laisse derrière lui une traînée de givre.",
+        "Sur le givre, tout le monde dérape comme sur la glace : ton tank garde son élan, les ennemis aussi. Freine tôt et braque en avance !",
+        "Le givre fond tout seul au bout de quelques secondes, d’un coup une fois le Givré détruit, et le souffle d’une mine le fait fondre aussitôt.",
+        "Deux nouvelles missions, « Le Givré » (39) et « Verglas » (41), puis des Givrés dans les missions générées dès la 43ᵉ. On peut aussi le poser dans l’atelier.",
+        "Le bestiaire de l’accueil compte maintenant dix-neuf tanks."
       ]
     }
   ]

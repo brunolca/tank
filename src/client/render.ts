@@ -198,6 +198,7 @@ interface TankView {
   shieldMat?: THREE.MeshStandardMaterial; // the Rempart (iteration 22): its brass shield, which flares when a shell bounces off
   shieldGlow?: number;
   magnet?: MagnetView; // the Aimant (iteration 27)
+  flake?: THREE.Group; // the Givré (iteration 31): the snowflake of ice crystals spinning on its turret
   under?: boolean;
   ice?: THREE.Group; // « Gel » (iteration 29): the ice cube it is frozen in (in the scene, not the tank: it gives away invisible tanks)
   iceT?: number; // seconds since it froze
@@ -507,6 +508,16 @@ const magnetGeo = {
 };
 const magnetPoleMat = new THREE.MeshStandardMaterial({ color: 0xdfe5ea, roughness: 0.2, metalness: 0.9, emissive: 0x1a2028, emissiveIntensity: 0.4 });
 const magnetShellMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.3, metalness: 0.6, emissive: 0x7fc8ff, emissiveIntensity: 0.5 });
+// the Givré (iteration 31): a snowflake of ice crystals on its turret, skate blades along its treads
+const frostGeo = {
+  arm: new THREE.BoxGeometry(0.58, 0.035, 0.05),
+  twig: new THREE.BoxGeometry(0.12, 0.03, 0.035),
+  gem: new THREE.OctahedronGeometry(0.085),
+  blade: new THREE.BoxGeometry(0.86, 0.03, 0.035),
+  icicle: new THREE.ConeGeometry(0.035, 0.16, 6),
+};
+const frostCrystalMat = new THREE.MeshStandardMaterial({ color: 0xeaf8ff, roughness: 0.08, metalness: 0.2, emissive: 0x7fd0ff, emissiveIntensity: 0.55, transparent: true, opacity: 0.92 });
+const skateMat = new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.15, metalness: 0.95, emissive: 0x16222c, emissiveIntensity: 0.4 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
 const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
 const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 1, flatShading: true });
@@ -941,6 +952,44 @@ function buildTank(info: TankInfo): TankView {
     view.magnet = { field, ripple, orbit, held, horseshoe, on: 0, flash: 0 };
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o !== field && o !== ripple) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'frost') {
+    const flake = new THREE.Group();
+    flake.position.set(-0.03, 0.27, 0);
+    for (let k = 0; k < 3; k++) {
+      const arm = new THREE.Group();
+      arm.rotation.y = (k * Math.PI) / 3;
+      arm.add(new THREE.Mesh(frostGeo.arm, frostCrystalMat));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        // little twigs near each tip, as on a real snowflake
+        const tw = new THREE.Mesh(frostGeo.twig, frostCrystalMat);
+        tw.position.set(sx * 0.19, 0, sz * 0.035);
+        tw.rotation.y = sx * sz * 0.8;
+        arm.add(tw);
+      }
+      flake.add(arm);
+    }
+    const gem = new THREE.Mesh(frostGeo.gem, frostCrystalMat);
+    gem.position.y = 0.05;
+    flake.add(gem);
+    turret.add(flake);
+    for (const z of [-0.38, 0.38]) {
+      const blade = new THREE.Mesh(frostGeo.blade, skateMat);
+      blade.position.set(0, 0.03, z);
+      hull.add(blade);
+    }
+    for (const x of [-0.3, -0.1, 0.1, 0.3]) {
+      // icicles hanging along the front and back of the hull
+      for (const z of [-0.29, 0.29]) {
+        const ic = new THREE.Mesh(frostGeo.icicle, frostCrystalMat);
+        ic.rotation.z = Math.PI;
+        ic.position.set(x, 0.3, z * 1.12);
+        ic.scale.y = 0.7 + ((x * 7 + z * 3) % 0.3);
+        hull.add(ic);
+      }
+    }
+    view.flake = flake;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
   if (armorGroup) {
     view.armor = armorGroup;
     const collar = turret.getObjectByName('collar');
@@ -985,6 +1034,10 @@ export class Renderer {
   private iceGeo = new THREE.BoxGeometry(1, 0.03, 1);
   private iceMesh?: THREE.InstancedMesh;
   private iceCells = new Set<number>();
+  /** « Le Givré » (iteration 31): its frost, slabs of ice laid and melted as the snapshots say. */
+  private frostMat = new THREE.MeshStandardMaterial({ map: iceTexture(), color: 0xe6f6ff, roughness: 0.18, metalness: 0.15, emissive: 0x5fa8d8, emissiveIntensity: 0.18, transparent: true, opacity: 0.88 });
+  private frostMesh?: THREE.InstancedMesh;
+  private frostCells = new Map<number, { life: number; born: number }>();
   private snow?: THREE.Points;
   private snowPos = new Float32Array(SNOW_FLAKES * 3);
   private snowSeed = new Float32Array(SNOW_FLAKES);
@@ -1460,6 +1513,7 @@ export class Renderer {
     this.paintFloor(tiles);
     this.addBelts(belts);
     this.addIce(tiles, belts);
+    this.setFrost(undefined);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const t = tiles[y * W + x];
@@ -1739,7 +1793,55 @@ export class Renderer {
 
   /** Is this point of the table on ice? (tread marks turn to frost, sliding throws ice shavings) */
   onIce(x: number, y: number) {
-    return this.iceCells.size > 0 && x >= 0 && y >= 0 && x < W && y < H && this.iceCells.has(Math.floor(y) * W + Math.floor(x));
+    if (x < 0 || y < 0 || x >= W || y >= H) return false;
+    const i = Math.floor(y) * W + Math.floor(x);
+    return (this.iceCells.size > 0 && this.iceCells.has(i)) || this.frostCells.has(i);
+  }
+
+  /** Some frost is on the table (the demo keeps sending it until it is all gone). */
+  get frostShown() { return this.frostCells.size > 0; }
+
+  /**
+   * « Le Givré » (iteration 31): the frost cells and the seconds before each melts. New slabs grow in with a puff of
+   * frost, slabs shrink away in their last second, gone ones vanish.
+   */
+  setFrost(cells: Iterable<[number, number]> | undefined) {
+    const seen = new Set<number>();
+    for (const [i, life] of cells ?? []) {
+      if (i < 0 || i >= W * H) continue;
+      seen.add(i);
+      const f = this.frostCells.get(i);
+      if (f) f.life = life;
+      else {
+        this.frostCells.set(i, { life, born: this.time });
+        if (Math.random() < 0.5) this.glow.emit({ x: (i % W) + 0.5 + (Math.random() - 0.5) * 0.6, y: 0.08, z: Math.floor(i / W) + 0.5 + (Math.random() - 0.5) * 0.6, vy: 0.5 + Math.random() * 0.4, life: 0.5, s0: 0.06, s1: 0.01, c0: 0xffffff, c1: 0xa8e0ff, drag: 2 });
+      }
+    }
+    let puffs = 0;
+    for (const i of [...this.frostCells.keys()]) {
+      if (seen.has(i)) continue;
+      this.frostCells.delete(i);
+      // a slab melts away (or a blast melts it): a little cloud of glittering mist
+      if (puffs++ < 24) for (let k = 0; k < 2; k++) this.smoke.emit({ x: (i % W) + 0.2 + Math.random() * 0.6, y: 0.05, z: Math.floor(i / W) + 0.2 + Math.random() * 0.6, vx: (Math.random() - 0.5) * 0.4, vy: 0.3 + Math.random() * 0.3, vz: (Math.random() - 0.5) * 0.4, life: 0.6, s0: 0.08, s1: 0.2, c0: 0xf4fbff, c1: 0xcfe9ff, drag: 2 });
+    }
+    if (!this.frostCells.size) { if (this.frostMesh) this.frostMesh.count = 0; return; }
+    if (!this.frostMesh) {
+      this.frostMesh = new THREE.InstancedMesh(this.iceGeo, this.frostMat, W * H);
+      this.frostMesh.receiveShadow = true;
+      this.frostMesh.frustumCulled = false;
+      this.scene.add(this.frostMesh);
+    }
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+    let k = 0;
+    for (const [i, f] of this.frostCells) {
+      const grow = Math.min(1, (this.time - f.born) / 0.25);
+      const s = Math.max(0.05, Math.min(grow, f.life / 1.2)) * 0.96;
+      q.setFromAxisAngle(up, ((i * 5) % 4) * Math.PI / 2);
+      m.compose(pos.set((i % W) + 0.5, 0.016, Math.floor(i / W) + 0.5), q, sc.set(s, 1, s));
+      this.frostMesh.setMatrixAt(k++, m);
+    }
+    this.frostMesh.count = k;
+    this.frostMesh.instanceMatrix.needsUpdate = true;
   }
 
   private animateSnow(dt: number) {
@@ -2102,6 +2204,11 @@ export class Renderer {
       this.tankGlow(v, t, dt);
       if (v.cloud) this.tankThunder(v, t, dt);
       if (v.magnet) this.tankMagnet(v.magnet, t, dt);
+      if (v.flake && t.alive) {
+        // the Givré's snowflake spins, and a few frost sparkles drift off it (iteration 31)
+        v.flake.rotation.y += dt * (t.fx && t.fx & FLAG_FROZEN ? 0 : 1.4);
+        if (visible && Math.random() < 6 * dt) this.glow.emit({ x: t.x + (Math.random() - 0.5) * 0.6, y: 0.7, z: t.y + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 0.3, vy: 0.35, vz: (Math.random() - 0.5) * 0.3, life: 0.7, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: 0x9fdcff, drag: 1 });
+      }
       if (v.hopper) {
         const sh = (v.hopper.userData.shake = Math.max(0, (v.hopper.userData.shake ?? 0) - dt * 2.5));
         const charging = !!((t.fx ?? 0) & FLAG_CHARGING);

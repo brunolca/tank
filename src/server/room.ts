@@ -518,6 +518,8 @@ export class Room extends DurableObject<Env> {
     else if (att.v < 25) tanks = tanks.map((t) => (t.kind === 'sower' ? { ...t, kind: 'boss' } : t.kind === 'magnet' ? { ...t, kind: 'ash' } : t));
     // and tabs older than iteration 27 draw the Aimant as a plain grey tank (its field and its catches are not shown)
     else if (att.v < 27) tanks = tanks.map((t) => (t.kind === 'magnet' ? { ...t, kind: 'ash' } : t));
+    // tabs older than iteration 31 draw the Givré as a plain grey tank (its frost is not shown, they just see tanks slide)
+    if (!att?.v || att.v < 31) tanks = tanks.map((t) => (t.kind === 'frost' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,
@@ -531,7 +533,7 @@ export class Room extends DurableObject<Env> {
       storm: this.level.storm ? 1 : undefined,
       wind: this.level.wind,
       fog: this.level.fog,
-      belts: this.game.belts.length ? this.game.belts : undefined,
+      belts: this.game.floorBelts(), // the map's own floor (the Givré's frost comes with the snapshots, iteration 31)
       daily: this.dailyState(),
       rush: this.rushState(),
       bases: this.bases?.flat(),
@@ -737,10 +739,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I });
     }
 
     this.phaseTimer -= DT;

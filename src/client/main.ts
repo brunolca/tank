@@ -211,7 +211,10 @@ let latestK = 0;
 let pending: Input[] = [];
 let seq = 0;
 let pred = { x: 0, y: 0, body: 0, vx: 0, vy: 0 }; // vx, vy: the speed we slide at on the ice (iteration 21)
-let iceMap = false; // some floor cells of the current level are ice
+let iceMap = false; // some floor cells of the current level are ice (or a Givré may frost them, iteration 31)
+let mapIce = false; // the map itself has ice (the « Glace » label and hint)
+/** « Le Givré » (iteration 31): frost cells currently laid over the floor layer (they are ICE in `belts` while they last). */
+let frostCells: number[] = [];
 let offset = { x: 0, y: 0 };
 let tunnelHinted = false; // the « hidden in the tunnel » hint shows once per mission
 let aimAng = 0;
@@ -305,7 +308,11 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   if (msg.mode !== 'taupe') myRole = undefined;
   tiles = msg.tiles.slice();
   belts = Array.isArray(msg.belts) && msg.belts.length === W * H ? msg.belts.map((b) => b | 0) : [];
-  iceMap = belts.includes(ICE);
+  mapIce = belts.includes(ICE);
+  frostCells = [];
+  const frosty = msg.tanks.some((t) => t.kind === 'frost'); // its frost turns the table into an ice table, as on the server
+  if (frosty && !belts.length) belts = new Array(W * H).fill(0);
+  iceMap = mapIce || frosty;
   infos = new Map(msg.tanks.map((t) => [t.id, t]));
   myTankId = msg.tanks.find((t) => t.pid === pid)?.id ?? -1;
   const myInfo = msg.tanks.find((t) => t.id === myTankId);
@@ -325,6 +332,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   currentMission = msg.mission;
   currentLevelName = msg.name;
   renderer.setLevel(tiles, msg.tanks, belts);
+  renderer.setFrost(undefined);
   // « Drapeaux » (iteration 24): the two bases, and a ring of the team's colour under each tank
   const bs = msg.mode === 'drapeau' && Array.isArray(msg.bases) && msg.bases.length >= 4 ? msg.bases.map(Number) : undefined;
   ctfBases = bs && bs.every(Number.isFinite) ? [[bs[0], bs[1]], [bs[2], bs[3]]] : undefined;
@@ -361,8 +369,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${iceMap ? ' · Glace' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
-  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${iceMap ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
+  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${mapIce ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
@@ -399,12 +407,13 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'frost')) setTimeout(() => toast('Le Givré patine sans jamais glisser et laisse du givre partout où il passe : là, ton tank dérape ! Une mine fait fondre le givre, et il fond tout seul une fois le Givré détruit.', 5000), 2200);
   else if (enemies.some((e) => e.kind === 'magnet')) setTimeout(() => toast('L’Aimant : quand son champ bleu brille, il attire et avale tes obus… puis te les renvoie tous d’un coup. Tire quand le champ s’éteint, ou pose une mine !', 4800), 2200);
   else if (enemies.some((e) => e.kind === 'rampart')) setTimeout(() => toast('Le Rempart renvoie tous les obus qui frappent son bouclier. Prends-le de côté, par-derrière… ou à la mine !', 4400), 2200);
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
-  else if (iceMap) setTimeout(() => toast('Glace : ton tank glisse et garde son élan. Freine tôt, braque en avance… et profite des glissades pour esquiver !', 4400), 2200);
+  else if (mapIce) setTimeout(() => toast('Glace : ton tank glisse et garde son élan. Freine tôt, braque en avance… et profite des glissades pour esquiver !', 4400), 2200);
   else if (belts.some(Boolean)) setTimeout(() => toast('Tapis roulants : ils emportent les tanks, les mines et les caisses. Remonter le courant, ça ralentit !', 4200), 2200);
   else if (tiles.some(isTunnel)) setTimeout(() => toast('Tunnels : roule dedans pour disparaître aux yeux de l’ennemi. Les obus rebondissent dessus, mais on ne peut pas tirer de l’intérieur.', 4200), 2200);
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
@@ -499,6 +508,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
   snaps.push(s);
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
+  applyFrost(msg.I);
   for (const e of msg.E) {
     evq.push({ k: msg.k, e });
     if (e[0] === 'block') tiles[e[2] * W + e[1]] = Tile.Empty; // prediction sees the freshest map
@@ -516,6 +526,25 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
     if (Math.hypot(ex, ey) < 1.5) { offset.x = ex; offset.y = ey; } else { offset.x = offset.y = 0; }
     pred = { x, y, body, vx, vy };
   }
+}
+
+/** « Le Givré » (iteration 31): lay the frost of the latest snapshot over the floor layer (prediction and drawing). */
+function applyFrost(I: unknown) {
+  const pairs = Array.isArray(I) ? I : [];
+  if (!pairs.length && !frostCells.length) return;
+  if (belts.length !== W * H) belts = new Array(W * H).fill(0);
+  for (const c of frostCells) if (belts[c] === ICE) belts[c] = 0;
+  frostCells = [];
+  const shown: [number, number][] = [];
+  for (let k = 0; k + 1 < pairs.length; k += 2) {
+    const c = pairs[k] | 0, life = +pairs[k + 1] / 10;
+    if (c < 0 || c >= W * H || belts[c] || !Number.isFinite(life)) continue; // never over a belt or the map's own ice
+    belts[c] = ICE;
+    frostCells.push(c);
+    shown.push([c, life]);
+  }
+  if (frostCells.length) iceMap = true;
+  renderer.setFrost(shown);
 }
 
 function predictStep(x: number, y: number, body: number, vx: number, vy: number, mx: number, my: number, s?: Snap): [number, number, number, number, number] {
@@ -1851,6 +1880,7 @@ function attractFrame(dt: number) {
     return { id: t.id, x: lerp(p.x, t.x, w), y: lerp(p.y, t.y, w), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t), hp: t.maxHp > 1 ? t.hp : undefined };
   });
   renderer.syncTanks(tanks, -1, dt);
+  renderer.setFrost(g.frost.size || renderer.frostShown ? [...g.frost] : undefined); // the Givré's frost (iteration 31)
   lastTanks = tanks;
   updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
   renderer.syncBullets(g.bullets.map((b) => {
@@ -2059,6 +2089,7 @@ const BESTIARY: [TankKind, string][] = [
   ['thief', 'file voler les caisses bonus avant toi'],
   ['rampart', 'son bouclier renvoie les obus : prends-le de côté'],
   ['magnet', 'son champ avale les obus et te les renvoie : tire quand il s’éteint'],
+  ['frost', 'patine et givre le sol derrière lui : là, tout le monde dérape'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -2472,6 +2503,26 @@ if (params.has('demo')) {
         }
       }
       return n;
+    },
+    /**
+     * The Givré (iteration 31): a mine with a short fuse on the thickest patch of frost away from the heroes, to show
+     * a blast melting it on camera. Returns the number of frost cells it sits on (0: no mine).
+     */
+    frostMine() {
+      const g = attract;
+      if (!g || !g.frost.size) return 0;
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      let best = -1, score = 0;
+      for (const i of g.frost.keys()) {
+        const x = (i % W) + 0.5, y = Math.floor(i / W) + 0.5;
+        if (heroes.some((h) => Math.hypot(h.x - x, h.y - y) < 2.6)) continue;
+        let n = 0;
+        for (const j of g.frost.keys()) if (Math.hypot((j % W) + 0.5 - x, Math.floor(j / W) + 0.5 - y) < 1.6) n++;
+        if (n > score) { score = n; best = i; }
+      }
+      if (best < 0 || !heroes.length) return 0;
+      g.mines.push({ id: 900000 + g.tick, owner: heroes[0].id, team: heroes[0].team, x: (best % W) + 0.5, y: Math.floor(best / W) + 0.5, t: 0, fuse: 0.9, dead: false });
+      return score;
     },
     /** A hero fires straight into each Rempart's shield (to catch the shell bouncing back on camera). */
     shieldShot() {
