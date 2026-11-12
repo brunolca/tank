@@ -7,12 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 39, arms: ['canon', 'ricochet'], seconds: 16, frostMines: [11], caption: 'Nouveau : le Givré', sub: 'Il patine sans glisser et givre le sol derrière lui' },
-  { mission: 41, arms: ['ricochet', 'canon'], seconds: 14, frostMines: [6.5, 11], caption: 'Verglas : sur le givre, ton tank dérape', sub: 'Une mine fait fondre le givre… et il fond tout seul une fois le Givré détruit' },
-  { mission: 105, arms: ['canon', 'fusee'], seconds: 10, caption: 'Des Givrés dès la 43ᵉ mission', sub: 'Freine tôt, braque en avance, profite des glissades' },
-  { bestiary: 5, seconds: 5, caption: 'Au bestiaire', sub: 'Dix-neuf tanks, chacun sa couleur, chacun sa ruse' },
-  { mission: 5, arms: ['canon', 'ricochet'], seconds: 8, emotes: [1.5, 5], caption: 'Et toujours les bulles', sub: 'Touches 1 à 6 : six répliques au-dessus de ton tank' },
-  { mission: 37, arms: ['canon', 'ricochet'], seconds: 8, magnetShots: [1.5], caption: 'Et l’Aimant', sub: 'Il avale tes obus… et te les renvoie' },
+  { mission: 1, arms: ['ricochet', 'canon'], seconds: 17, trickShots: [1.6], caption: 'Nouveau : le ralenti', sub: 'Le coup décisif repasse au ralenti, caméra au plus près' },
+  { mission: 8, arms: ['ricochet', 'ricochet'], seconds: 17, trickShots: [1.6], caption: '« Double ricochet ! »', sub: 'Sous l’image, le jeu raconte qui a fait quoi, et comment' },
+  { versus: [0], arms: ['ricochet', 'canon', 'fusee', 'sapeur'], seconds: 18, trickShots: [3], caption: 'En versus aussi', sub: 'Chaque fin de manche se revoit au ralenti' },
+  { mission: 2, arms: ['canon', 'ricochet'], seconds: 14, trickShots: [1.6], caption: 'En coop, au défi du jour, aux drapeaux…', sub: 'Tu n’aimes pas ? Menu, « Ralenti des fins de manche : non »' },
+  { mission: 39, arms: ['canon', 'ricochet'], seconds: 8, caption: 'Et toujours le Givré', sub: 'Il givre le sol où il passe : ça glisse !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -89,6 +88,8 @@ try {
       for (const s of shot.freezes ?? []) setTimeout(() => d.freeze?.(), s * 1000); // « Gel » (iteration 29)
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
+      for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000); // « Le ralenti » (iteration 32): a ricochet, then its replay
+      for (const s of shot.replays ?? []) setTimeout(() => d.replay?.(), s * 1000);
       for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);

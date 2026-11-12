@@ -60,6 +60,7 @@ export type GameEvent =
   | ['bounce', number, number]
   | ['pop', number, number]
   | ['boom', number, number, number] // x y tankId
+  | ['ko', number, number, number, number] // victimTankId killerTankId (0: none) cause (KO_*) wallBounces: who did it, right after its 'boom' (« Le ralenti », iteration 32; older clients ignore it)
   | ['mineSet', number, number]
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number]

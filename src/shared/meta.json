@@ -1,7 +1,7 @@
 {
-  "iteration": 31,
+  "iteration": 32,
   "date": "2026-11-12",
-  "title": "Le Givré",
+  "title": "Le ralenti",
   "journal": [
     {
       "iteration": 1,
@@ -377,6 +377,18 @@
         "Le givre fond tout seul au bout de quelques secondes, d’un coup une fois le Givré détruit, et le souffle d’une mine le fait fondre aussitôt.",
         "Deux nouvelles missions, « Le Givré » (39) et « Verglas » (41), puis des Givrés dans les missions générées dès la 43ᵉ. On peut aussi le poser dans l’atelier.",
         "Le bestiaire de l’accueil compte maintenant dix-neuf tanks."
+      ]
+    },
+    {
+      "iteration": 32,
+      "date": "2026-11-12",
+      "title": "Le ralenti",
+      "notes": [
+        "À la fin de chaque mission et de chaque manche, le coup décisif repasse au ralenti : bandes noires, tampon rouge « Ralenti », et la caméra se penche sur l’action.",
+        "Sous l’image, le jeu raconte ce qui s’est passé : « Tir direct ! », « Ricochet ! », « Double ricochet ! », « Sur la mine ! », « Frappé par la foudre ! »… avec le nom du tireur et de sa cible.",
+        "Ça marche partout : en coop, au défi du jour, en versus contre tes amis ou les rivaux, aux drapeaux (la capture repasse aussi) et dans le fond animé de l’accueil.",
+        "Un petit bruit de bande qu’on rembobine annonce le ralenti. Tu préfères t’en passer ? Menu, puis « Ralenti des fins de manche : non ».",
+        "La pause entre deux missions dure une seconde de plus, le temps de savourer."
       ]
     }
   ]

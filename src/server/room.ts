@@ -51,6 +51,8 @@ type StoredRival = Pick<Rival, 'pid' | 'name' | 'color' | 'level' | 'weapon'>;
 const MAX_PLAYERS = 4;
 const VERSUS_TARGET = 5;
 /** Modes played in rounds between players and rivals: free-for-all versus, and « Drapeaux » in two teams (iteration 24). */
+/** Seconds between the end of a mission (or round) and what comes next: room for « Le ralenti » (iteration 32, was 3.5). */
+const END_PAUSE = 4.5;
 const pvp = (m: Mode) => m === 'versus' || m === 'drapeau';
 const EMPTY_INPUT: Input = { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 };
 
@@ -594,11 +596,11 @@ export class Room extends DurableObject<Env> {
 
   /** A mission cleared: everyone in it gets a little experience, then those with galons to spend get time to choose. */
   private clearedTraining(): number {
-    if (this.mode !== 'coop') return 3.5;
+    if (this.mode !== 'coop') return END_PAUSE;
     for (const p of this.players.values()) if (p.inGame) this.addXp(p, XP_CLEAR);
     this.training.clear();
     for (const p of this.players.values()) if (p.inGame && p.ws && p.prog && canBuyAny(p.prog)) this.training.add(p.pid);
-    return this.training.size ? TRAINING_SECONDS : 3.5;
+    return this.training.size ? TRAINING_SECONDS : END_PAUSE;
   }
 
   private progress(): Record<string, Progress> | undefined {
@@ -871,7 +873,7 @@ export class Room extends DurableObject<Env> {
           if (idx !== undefined && t.alive && t.maxHp > 1) this.enemyHp.set(idx, t.hp);
         }
         this.lives--;
-        this.setPhase('failed', 3.5);
+        this.setPhase('failed', END_PAUSE);
         this.broadcastPhase();
       } else if (this.lastEnemyCount !== -1 && this.lastEnemyCount !== enemiesAlive) {
         this.broadcastPhase();
@@ -889,7 +891,7 @@ export class Room extends DurableObject<Env> {
         const w = this.entrant(alive[0]?.pid);
         if (w) w.score++;
         if (alive[0]) game.cheer(alive[0].team); // a rival that wins the round gloats (iteration 30)
-        this.setPhase('roundEnd', 3.5);
+        this.setPhase('roundEnd', END_PAUSE);
         this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: w ? `${w.name} gagne la manche !` : 'Égalité !' });
       }
     }
@@ -915,7 +917,7 @@ export class Room extends DurableObject<Env> {
       for (const t of game.tanks) if (t.team === win && t.pid) { const e = this.entrant(t.pid); if (e) e.score++; }
       game.cheer(win);
     }
-    this.setPhase('roundEnd', 4);
+    this.setPhase('roundEnd', END_PAUSE);
     this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text });
   }
 

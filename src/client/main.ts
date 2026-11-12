@@ -19,6 +19,7 @@ import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
 import { Workshop, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RFlag, type RMine, type RTank } from './render';
+import { Film, REPLAYED, koCaption, type Reel } from './replay';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -302,6 +303,8 @@ function onMessage(msg: ServerMsg) {
 
 function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   stopAttract();
+  stopReel();
+  film.clear();
   clearBubbles();
   online = true;
   currentMode = msg.mode;
@@ -451,6 +454,8 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   }
   if (council) { council = undefined; $('#council').hidden = true; }
   if (prev === msg.phase && msg.phase === 'playing') return;
+  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || msg.phase === 'roundEnd')) queueReel();
+  else if (msg.phase !== 'cleared' && msg.phase !== 'failed' && msg.phase !== 'roundEnd') stopReel();
   switch (msg.phase) {
     case 'intro':
       sfx.jingle('start');
@@ -712,14 +717,18 @@ function onlineFrame(dt: number) {
   const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3], seed: m[4] ? (m[4] - 1) / 10 : undefined }));
   renderer.syncMines(mines);
   lastMines = mines;
-  renderer.syncBonuses(a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4] })));
-  if (ctfBases) renderer.syncFlags(a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })));
+  const bonuses: RBonus[] = a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4] }));
+  renderer.syncBonuses(bonuses);
+  const flags: RFlag[] | undefined = ctfBases ? a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
+  if (flags) renderer.syncFlags(flags);
+  film.frame(dt, tanks, bullets, mines, bonuses, flags);
   updateNameTags(tanks);
   const myFlags = latest.T.get(myTankId)?.[5] ?? 0;
   renderBuffs(myFlags & 1 ? myFlags : 0);
 }
 
 function handleEvent(e: GameEvent, audible: boolean) {
+  if (!reel) film.event(e); // « Le ralenti » (iteration 32): everything that happens goes on film
   if (online) { eventLog.push([Math.round(renderTick), ...e]); if (eventLog.length > 60) eventLog.shift(); }
   switch (e[0]) {
     case 'shot':
@@ -750,6 +759,9 @@ function handleEvent(e: GameEvent, audible: boolean) {
         if (audible) sfx.boom(false);
       }
       if (e[3] === myTankId && online) { toast('Détruit !', 1500); controls.rumble(1, 320); }
+      break;
+    case 'ko': // who did it (iteration 32): the film keeps it for the replay's caption
+      if (e[1] === reelWanted && !online) { reelWanted = -1; queueReel(true); }
       break;
     case 'mineSet':
       if (audible) sfx.mineSet();
@@ -1677,6 +1689,9 @@ function attractMission() {
 
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
+  stopReel();
+  reelWanted = -1;
+  film.clear();
   clearBubbles();
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
@@ -1883,13 +1898,19 @@ function attractFrame(dt: number) {
   renderer.setFrost(g.frost.size || renderer.frostShown ? [...g.frost] : undefined); // the Givré's frost (iteration 31)
   lastTanks = tanks;
   updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
-  renderer.syncBullets(g.bullets.map((b) => {
+  const bullets: RBullet[] = g.bullets.map((b) => {
     const o = g.tankById(b.owner);
     return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, heavy: b.heavy, color: o?.kind === 'player' ? o.color : undefined };
-  }), dt);
-  renderer.syncMines(g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined })));
-  renderer.syncBonuses(g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 })));
-  if (g.flags) renderer.syncFlags(g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })));
+  });
+  renderer.syncBullets(bullets, dt);
+  const mines: RMine[] = g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined }));
+  renderer.syncMines(mines);
+  const bonuses: RBonus[] = g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 }));
+  renderer.syncBonuses(bonuses);
+  const flags: RFlag[] | undefined = g.flags ? g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
+  if (flags) renderer.syncFlags(flags);
+  film.frame(dt, tanks, bullets, mines, bonuses, flags);
+  const ended = !!attractEnd;
   if (attractOpts.drapeau && attractCtf) {
     const standing = [1, 2].filter((k) => g.aliveCount(k) > 0).length;
     if (!attractEnd && (g.ctfWinner || standing <= 1 || g.tick > TICK_RATE * 75)) { attractEnd = g.tick + TICK_RATE * 2.5; g.frozen = !!g.ctfWinner; endAttractFlags(g); }
@@ -1915,7 +1936,103 @@ function attractFrame(dt: number) {
     }
     if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
   }
-  attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission, flags: g.flags?.map((f) => f.state), teams: attractCtf?.teams };
+  if (!ended && attractEnd && attract === g) queueReel();
+  attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission, flags: g.flags?.map((f) => f.state), teams: attractCtf?.teams, replays };
+}
+
+// ------------------------------------------------------------------ « Le ralenti » (iteration 32)
+
+const film = new Film();
+let reel: Reel | undefined;
+let reelDue = 0; // performance.now() when the queued replay starts (0: none)
+let replays = 0; // replays played (the smoke test and the videos check it)
+let reelWanted = -1; // the demo's trick shot: replay as soon as this tank falls
+let replayOn = (() => { try { return localStorage.getItem('tanks.ralenti') !== '0'; } catch { return true; } })();
+
+/** The mission (or round) is over: the replay starts a moment later, once the last snapshots have been drawn. */
+function queueReel(force = false) {
+  if ((!replayOn && !force) || reel || screen !== 'game') return; // not behind the home screen or the lobby
+  reelDue = performance.now() + (online ? 350 : 450);
+  reelTries = 0;
+}
+let reelTries = 0;
+
+function reelName(id: number) {
+  const info = infos.get(id);
+  if (online && info) return info.kind === 'player' ? info.name : specOf(info.kind).label;
+  const t = attract?.tankById(id);
+  if (t) return t.kind === 'player' ? t.name : specOf(t.kind).label;
+  const kind = renderer.tankKind(id);
+  return kind ? specOf(kind).label : undefined;
+}
+
+function startReel(force = false) {
+  reelDue = 0;
+  if (reel || (!force && !replayOn) || (treeOpen && treeAuto) || screen === 'results') return false;
+  const r = film.reel(force ? 4.5 : 3.5);
+  if (!r) {
+    // the last blast may not be drawn yet (the table runs a few ticks behind the server): look again a little later
+    if (!force && reelTries++ < 8) reelDue = performance.now() + 200;
+    return false;
+  }
+  reel = r;
+  replays++;
+  const [big, small] = koCaption(r, reelName, (id) => isBossKind(renderer.tankKind(id) ?? ''));
+  const el = $('#replay');
+  el.querySelector('b')!.textContent = big;
+  el.querySelector('span')!.textContent = small;
+  el.hidden = false;
+  el.classList.remove('on');
+  void el.offsetWidth; // restart the bars' animation
+  el.classList.add('on');
+  document.body.classList.add('replaying');
+  sfx.rewind();
+  return true;
+}
+
+function stopReel() {
+  reelDue = 0;
+  if (!reel) return;
+  reel = undefined;
+  renderer.replayCam = undefined;
+  $('#replay').hidden = true;
+  $('#replay').classList.remove('on');
+  document.body.classList.remove('replaying');
+  renderTick = latestK - INTERP; // online: back to the live table at once
+  const b = $('#banner');
+  if (!b.hidden) { b.style.animation = 'none'; void b.offsetWidth; b.style.animation = ''; } // the banner pops in now
+}
+
+/** One frame of the replay; returns the (slowed down) time step for the effects. */
+function reelFrame(dt: number): number {
+  const r = reel!;
+  const f = r.step(dt);
+  const wasOnline = online;
+  online = false; // what was said (toasts, rumble, counters) is not said twice
+  try {
+    for (const e of f.events) if (REPLAYED.has(e[0])) handleEvent(e, wasOnline);
+  } finally { online = wasOnline; }
+  renderer.syncTanks(f.tanks, wasOnline ? myTankId : -1, f.dt);
+  renderer.syncBullets(f.bullets, f.dt);
+  renderer.syncMines(f.mines);
+  renderer.syncBonuses(f.bonuses);
+  if (f.flags) renderer.syncFlags(f.flags);
+  updateNameTags(f.tanks);
+  renderer.replayCam = { x: r.x, y: r.y, k: r.zoom() };
+  if (r.done) stopReel();
+  return f.dt;
+}
+
+{
+  const btn = $<HTMLButtonElement>('#menu-replay');
+  const label = () => (btn.textContent = `Ralenti des fins de manche : ${replayOn ? 'oui' : 'non'}`);
+  label();
+  btn.addEventListener('click', () => {
+    replayOn = !replayOn;
+    try { localStorage.setItem('tanks.ralenti', replayOn ? '1' : '0'); } catch {}
+    if (!replayOn) stopReel();
+    label();
+  });
 }
 
 // ------------------------------------------------------------------ main loop
@@ -1928,23 +2045,26 @@ function frame(now: number) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   if (now > lastT) fps += (1000 / (now - lastT) - fps) * 0.05;
   lastT = now;
+  if (reelDue && now >= reelDue) startReel();
+  let rdt = dt;
+  if (reel) rdt = reelFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt); // the videos: real time, as for the demo
   if (online) {
     acc += dt;
     let n = 0;
     while (acc >= DT && n++ < 4) { acc -= DT; clientTick(); }
     if (acc > DT) acc = 0;
-    onlineFrame(dt);
+    if (!reel) onlineFrame(dt);
     updateClock();
     updateCouncilTimer();
     updateTreeTimer();
-  } else if (attract) {
+  } else if (attract && !reel) {
     updateTreeTimer();
     // the videos are filmed on machines without a GPU: let the demo catch up on slow frames so it plays in real time
     attractFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt);
     updateNameTags([]);
   }
   placeBubbles();
-  renderer.render(dt);
+  renderer.render(rdt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -2213,7 +2333,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -2675,6 +2795,35 @@ if (params.has('demo')) {
     buff(kind: BonusKind) {
       if (!attract || !BONUS_KINDS.includes(kind)) return;
       for (const t of attract.tanks) if (t.alive && t.kind === 'player') attract.giveBonus(t, kind);
+    },
+    /** « Le ralenti » (iteration 32): play the last destruction again now (true when there was one in the last seconds). */
+    replay() { stopReel(); return startReel(true); },
+    /** A hero fires a ricochet (two bounces if it can) at a foe it cannot hit straight; its fall plays again in slow motion. */
+    trickShot() {
+      const g = attract;
+      if (!g) return 0;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player') continue;
+        let best: { ang: number; n: number; foe: number } | undefined;
+        const most = Math.min(2, h.spec.bounces);
+        for (let i = 0; i < 720; i++) {
+          const ang = (i / 720) * Math.PI * 2;
+          for (let n = most; n >= 1; n--) {
+            if (best && n <= best.n) break;
+            const hit = g.traceShot(h, ang, n).hit;
+            if (!hit || hit.team === h.team || g.traceShot(h, ang, n - 1).hit === hit) continue;
+            best = { ang, n, foe: hit.id };
+          }
+        }
+        if (!best) continue;
+        const keep = h.turret;
+        h.turret = best.ang;
+        h.fireCd = 0;
+        const fired = g.tryFire(h);
+        h.turret = keep;
+        if (fired) { reelWanted = best.foe; return best.n; }
+      }
+      return 0;
     },
     caption(text: string, sub = '') {
       const c = $('#demo-caption');

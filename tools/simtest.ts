@@ -1964,3 +1964,28 @@ console.log('total', Date.now() - t0, 'ms');
   if (g.events.filter((e) => e[0] === 'emote').length !== 1) fail('le rival parle sans reprendre son souffle');
   if (process.exitCode !== 1) console.log(`bulles OK (${EMOTES.length} répliques, le rival en place ${quips} sur 40 victoires)`);
 }
+
+// « Le ralenti » (iteration 32): each destruction says who did it, how, and after how many bounces off the walls
+{
+  const fail = (m: string) => { console.error('RALENTI:', m); process.exitCode = 1; };
+  const g = new Game(new Array(W * H).fill(Tile.Empty));
+  const shooter = g.addTank('player', 1, 15, 12, 0x3d7bff, 'p1', 'Moi');
+  const victim = g.addTank('brown', 99, 5, 4, 0); // it does not move out of the way
+  g.frozen = false;
+  g.bullets.push({ id: 9999, owner: shooter.id, x: 5, y: 2, vx: 0, vy: -BULLET_SPEED, bounces: 1, rocket: false, dead: false });
+  let ko: unknown[] | undefined;
+  for (let i = 0; i < 60 && !ko; i++) {
+    g.step(new Map());
+    ko = g.events.find((e) => e[0] === 'ko');
+    const boomAt = g.events.findIndex((e) => e[0] === 'boom');
+    if (ko && g.events.indexOf(ko as never) !== boomAt + 1) fail('« ko » ne suit pas son « boom »');
+    g.events = [];
+  }
+  if (!ko) fail('pas d’événement « ko » après un ricochet mortel');
+  else if (ko[1] !== victim.id || ko[2] !== shooter.id || ko[3] !== 0 || ko[4] !== 1) fail(`« ko » inattendu : ${JSON.stringify(ko)}`);
+  const other = g.addTank('ash', 99, 9, 9, 0);
+  g.killTank(other, undefined, 2);
+  const k2 = g.events.find((e) => e[0] === 'ko');
+  if (!k2 || k2[2] !== 0 || k2[3] !== 2) fail(`foudre mal racontée : ${JSON.stringify(k2)}`);
+  if (process.exitCode !== 1) console.log(`ralenti OK (ricochet ×${ko?.[4]} raconté)`);
+}

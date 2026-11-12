@@ -968,3 +968,32 @@ body.touch #emote-pad kbd { display: none; }
 @keyframes bubble-in { from { transform: translateX(-50%) scale(0.2) rotate(-8deg); opacity: 0; } }
 @keyframes bubble-out { to { transform: translateX(-50%) translateY(-14px) scale(0.85); opacity: 0; } }
 .results-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+
+/* « Le ralenti » (iteration 32): black bars, a red stamp, what did it */
+#replay { position: fixed; inset: 0; z-index: 7; pointer-events: none; }
+#replay .r-bar { position: absolute; left: 0; right: 0; height: 11vh; background: #07070a; transform: scaleY(0); transition: transform 0.35s ease; }
+#replay .r-top { top: 0; transform-origin: top; }
+#replay .r-bottom { bottom: 0; transform-origin: bottom; }
+#replay.on .r-bar { transform: scaleY(1); }
+#replay .r-stamp {
+  position: absolute; top: calc(11vh + 14px); left: 18px;
+  color: #ff4b3e; border: 3px solid #ff4b3e; border-radius: 8px; padding: 3px 12px 3px 26px;
+  font-weight: 900; font-size: 20px; letter-spacing: 0.12em; text-transform: uppercase;
+  transform: rotate(-6deg); background: rgba(20, 8, 8, 0.35);
+  opacity: 0; transition: opacity 0.3s 0.2s;
+}
+#replay .r-stamp::before { content: ''; position: absolute; left: 9px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: #ff4b3e; animation: rec 0.9s steps(2) infinite; }
+@keyframes rec { 50% { opacity: 0; } }
+#replay .r-cap {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 11vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; padding: 0 16px; text-align: center;
+  opacity: 0; transform: translateY(8px); transition: opacity 0.35s 0.25s, transform 0.35s 0.25s;
+}
+#replay .r-cap b { color: #ffd23a; font-size: clamp(18px, 3.4vh, 30px); font-weight: 900; }
+#replay .r-cap span { color: #d8d2c6; font-size: clamp(12px, 2vh, 16px); font-weight: 600; }
+#replay.on .r-stamp, #replay.on .r-cap { opacity: 1; transform: none; }
+#replay.on .r-stamp { transform: rotate(-6deg); }
+body.replaying #banner { visibility: hidden; }
+body.replaying #hud, body.replaying #mine-btn, body.replaying #emote-pad { opacity: 0.25; }
+body.replaying #demo-caption { opacity: 0; }
+body.replaying #toast { bottom: calc(11vh + 16px); }

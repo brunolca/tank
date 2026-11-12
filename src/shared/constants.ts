@@ -360,3 +360,9 @@ export const EMOTE_TIME = 2.4;
 export const EMOTE_GAP = 1.2;
 /** The AI speaks less often than that: at most one line every few seconds each. */
 export const EMOTE_BOT_GAP = 4;
+
+// « Le ralenti » (iteration 32): what destroyed a tank, in the 'ko' event (the replay of the decisive moment tells it).
+export const KO_SHELL = 0;
+export const KO_MINE = 1;
+export const KO_BOLT = 2;
+export const KO_DRILL = 3;

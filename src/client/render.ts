@@ -1434,6 +1434,10 @@ export class Renderer {
     this.basePos.copy(this.camera.position);
   }
   private basePos = new THREE.Vector3();
+  /** « Le ralenti » (iteration 32): where the replay camera leans (arena x, y) and how far (0: not at all, 1: close up). */
+  replayCam?: { x: number; y: number; k: number };
+  private camLook = new THREE.Vector3();
+  private camLeaned = false;
 
   // ---------------------------------------------------------------- level
 
@@ -3088,6 +3092,18 @@ export class Renderer {
     }
     this.shake *= Math.exp(-dt * 8);
     this.camera.position.copy(this.basePos);
+    const rc = this.replayCam;
+    if (rc && rc.k > 0.001) {
+      // « Le ralenti » (iteration 32): the camera leans toward the decisive moment and comes closer
+      const k = Math.min(1, rc.k);
+      this.camLook.set(this.camTarget.x + (rc.x - this.camTarget.x) * k * 0.8, 0, this.camTarget.z + (rc.y - this.camTarget.z) * k * 0.8);
+      this.camera.position.subVectors(this.basePos, this.camTarget).multiplyScalar(1 - 0.5 * k).add(this.camLook);
+      this.camera.lookAt(this.camLook);
+      this.camLeaned = true;
+    } else if (this.camLeaned) {
+      this.camLeaned = false;
+      this.camera.lookAt(this.camTarget);
+    }
     if (this.shake > 0.005) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake;
       this.camera.position.z += (Math.random() - 0.5) * this.shake;

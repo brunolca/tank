@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_MINE, KO_SHELL, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -108,6 +108,7 @@ export interface Bullet {
   volley?: number; // shells fired together (fan shot) never collide with one another
   cork?: boolean; // « Brise-liège » (iteration 19): the shell blows up the cork it hits instead of bouncing off it
   heavy?: boolean; // « Gros calibre » (iteration 29): it goes through cork (blowing it up) and smashes the lighter shells it meets
+  hits?: number; // « Le ralenti » (iteration 32): walls it bounced off so far (the replay tells « Ricochet ×2 ! »)
 }
 
 /** A lightning strike announced on the floor (storm missions): it falls when t reaches BOLT_WARN. */
@@ -640,7 +641,7 @@ export class Game {
     this.flash = BOLT_FLASH;
     for (const t of this.tanks) {
       // a tank hiding in a tunnel is under a roof (iteration 13); the Grondeur's lightning rod takes the hit for it (iteration 18)
-      if (t.alive && !this.inTunnel(t) && t.kind !== 'thunder' && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined);
+      if (t.alive && !this.inTunnel(t) && t.kind !== 'thunder' && Math.hypot(t.x - bo.x, t.y - bo.y) < BOLT_R + t.r * 0.4) this.killTank(t, undefined, KO_BOLT);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - bo.x, b.y - bo.y) < BOLT_R) b.dead = true;
@@ -918,7 +919,7 @@ export class Game {
   erupt(t: Tank) {
     this.events.push(['erupt', r2(t.x), r2(t.y), t.id]);
     for (const o of this.tanks) {
-      if (o !== t && o.alive && Math.hypot(o.x - t.x, o.y - t.y) < DRILL_BLAST + o.r * 0.4) this.killTank(o, t);
+      if (o !== t && o.alive && Math.hypot(o.x - t.x, o.y - t.y) < DRILL_BLAST + o.r * 0.4) this.killTank(o, t, KO_DRILL);
     }
     for (const b of this.bullets) if (!b.dead && Math.hypot(b.x - t.x, b.y - t.y) < DRILL_BLAST) b.dead = true;
     for (const m of this.mines) {
@@ -1242,6 +1243,7 @@ export class Game {
       } else b.y = ny;
       if (bounced) {
         b.bounces--;
+        b.hits = (b.hits ?? 0) + 1;
         if (b.bounces < 0) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
         this.events.push(['bounce', r2(b.x), r2(b.y)]);
       }
@@ -1262,7 +1264,7 @@ export class Game {
           if (t.kind === 'rampart' && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22)
           if (t.mag?.on && b.owner !== t.id) { this.catchShell(t, b); break; } // the Aimant catches it (iteration 27)
           b.dead = true;
-          this.killTank(t, this.tankById(b.owner));
+          this.killTank(t, this.tankById(b.owner), KO_SHELL, b.hits ?? 0);
           break;
         }
       }
@@ -1377,7 +1379,7 @@ export class Game {
     for (const t of this.tanks) {
       if (t === owner && t.ranks && t.ranks[1] >= 3) continue; // « Sang-froid »: one's own mines spare one
       if (t === owner && m.seed !== undefined && m.by === undefined) continue; // a ripe seed spares the Semeur: only a shot one hurts it
-      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, killer);
+      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, killer, KO_MINE);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
@@ -1402,7 +1404,8 @@ export class Game {
     }
   }
 
-  killTank(t: Tank, killer: Tank | undefined) {
+  /** cause and n (« Le ralenti », iteration 32): what did it (KO_*) and, for a shell, the walls it bounced off first. */
+  killTank(t: Tank, killer: Tank | undefined, cause = KO_SHELL, n = 0) {
     if (!t.alive || t.buffs.invuln > 0 || under(t)) return;
     if (t.hp > 1) {
       // tough tanks (the boss) soak up hits, with a short grace so one blast counts once
@@ -1423,6 +1426,7 @@ export class Game {
     t.alive = false;
     t.chill = undefined;
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
+    this.events.push(['ko', t.id, killer?.id ?? 0, cause, n]);
     if (t.loot && this.bonusOn) this.dropLoot(t, t.loot);
     this.onKill?.(t, killer);
     this.quips(t, killer);

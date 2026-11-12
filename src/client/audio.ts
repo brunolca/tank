@@ -165,6 +165,15 @@ export const sfx = {
     noise(t, 0.2, 1400, 0.7, 0.5, 'lowpass', 150);
     tone(t, 0.22, 110, 38, 0.6, 'triangle');
   },
+  /** « Le ralenti » (iteration 32): a tape rewinding, then the click of « play ». */
+  rewind() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 5; i++) tone(t + i * 0.05, 0.07, 1500 - i * 160, 1900 - i * 160, 0.035, 'square');
+    noise(t, 0.3, 3000, 0.9, 0.12, 'bandpass', 900);
+    noise(t + 0.32, 0.03, 4000, 2, 0.25, 'highpass');
+    tone(t + 0.32, 0.06, 240, 180, 0.12, 'triangle');
+  },
   bonus() {
     if (!ctx) return;
     const t = ctx.currentTime;
