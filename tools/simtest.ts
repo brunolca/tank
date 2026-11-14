@@ -1989,3 +1989,75 @@ console.log('total', Date.now() - t0, 'ms');
   if (!k2 || k2[2] !== 0 || k2[3] !== 2) fail(`foudre mal racontée : ${JSON.stringify(k2)}`);
   if (process.exitCode !== 1) console.log(`ralenti OK (ricochet ×${ko?.[4]} raconté)`);
 }
+
+// « Les ponts » (iteration 33): tanks drive over a bridge, shells fly over it, a mine brings it down and whoever is on it falls
+{
+  const fail = (m: string) => { console.error('PONTS:', m); process.exitCode = 1; };
+  for (const mission of [32, 42]) {
+    const lvl = getMission(mission);
+    if (!lvl.tiles.includes(Tile.Bridge)) fail(`la mission ${mission} n’a pas de pont`);
+  }
+  if (!Array.from({ length: 40 }, (_, k) => getMission(45 + k).tiles.includes(Tile.Bridge)).some(Boolean)) fail('aucun pont dans les missions générées');
+  if (!Array.from({ length: 14 }, (_, r) => versusArena(r).tiles.includes(Tile.Bridge)).some(Boolean)) fail('aucune arène de versus à ponts');
+  if (checkAtelier(EXTRA_LEVELS[42].map)) fail(`l’atelier refuse les ponts : ${checkAtelier(EXTRA_LEVELS[42].map)}`);
+  const code = encodeAtelier({ name: 'Pont', map: EXTRA_LEVELS[32].map });
+  if (decodeAtelier(code)?.map.join('') !== EXTRA_LEVELS[32].map.join('')) fail('le lien de l’atelier perd les ponts');
+  // a pit across the table at x = 10, with a bridge at y = 8
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  for (let y = 0; y < H; y++) tiles[y * W + 10] = Tile.Hole;
+  tiles[8 * W + 10] = Tile.Bridge;
+  const g = new Game(tiles);
+  const p = g.addTank('player', 0, 8.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  const go = new Map([['p1', { s: 1, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+  for (let i = 0; i < 60 && p.x < 12; i++) g.step(go);
+  if (p.x < 12) fail(`le tank ne traverse pas le pont (x = ${p.x.toFixed(2)})`);
+  // the AI finds its way over it
+  const e = g.addTank('pink', 99, 8.5, 3.5, 0);
+  void e;
+  // a shell flies over the pit
+  g.bullets.push({ id: 9998, owner: p.id, x: 12, y: 5.5, vx: -BULLET_SPEED, vy: 0, bounces: 0, rocket: false, dead: false });
+  for (let i = 0; i < 12; i++) g.step(new Map());
+  const sb = g.bullets.find((b) => b.id === 9998);
+  if (sb && sb.x > 10) fail('l’obus ne passe pas au-dessus du trou');
+  g.bullets = [];
+  // a mine 2.2 tiles away: out of the blast, but the bridge gives way under the victim
+  const victim = g.addTank('brown', 99, 10.5, 8.5, 0);
+  g.mines.push({ id: 777, owner: p.id, team: 0, x: 10.5, y: 10.4, t: 0, fuse: 0.05, dead: false });
+  g.events = [];
+  for (let i = 0; i < 6; i++) g.step(new Map());
+  if (g.tiles[8 * W + 10] !== Tile.Hole) fail('la mine n’a pas fait tomber le pont');
+  if (!g.events.some((ev) => ev[0] === 'bridge' && ev[1] === 10 && ev[2] === 8)) fail('pas d’événement « bridge »');
+  if (victim.alive) fail('le tank sur le pont n’est pas tombé');
+  const ko = g.events.find((ev) => ev[0] === 'ko' && ev[1] === victim.id);
+  if (!ko || ko[2] !== p.id || ko[3] !== 4) fail(`chute mal racontée : ${JSON.stringify(ko)}`);
+  // and now nobody drives over
+  p.x = 8.5; p.y = 8.5;
+  for (let i = 0; i < 40; i++) g.step(go);
+  if (p.x > 10) fail('le tank roule sur un pont effondré');
+  // duos of AI players play the bridge missions: some bridges come down along the way, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, fallen = 0, falls = 0;
+  const bm = [32, 42, ...Array.from({ length: 60 }, (_, k) => 45 + k).filter((m) => getMission(m).tiles.includes(Tile.Bridge)).slice(0, 2)];
+  for (const mission of bm) {
+    for (let run = 0; run < 2; run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        fallen += s2.events.filter((ev) => ev[0] === 'bridge').length;
+        falls += s2.events.filter((ev) => ev[0] === 'ko' && ev[3] === 4).length;
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions à ponts');
+  if (process.exitCode !== 1) console.log(`ponts OK (missions : ${bm.join(', ')}, ${cleared}/${bm.length * 2} parties gagnées par l’IA, ${fallen} pont(s) tombé(s), ${falls} chute(s), ${per.toFixed(3)} ms/tick)`);
+}

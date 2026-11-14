@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
-import { tunnelAxis } from '../shared/physics';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { isRivalId } from '../shared/rivals';
@@ -1122,6 +1122,18 @@ export class Renderer {
   private rainSpeed: Float32Array;
   private zaps: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
   private rising: { mesh: THREE.Mesh; t: number }[] = [];
+  // « Les ponts » (iteration 33): the deck of each bridge cell, and the planks of fallen ones tumbling into the pit
+  private bridges = new Map<number, THREE.Group>();
+  private falling: { obj: THREE.Object3D; vy: number; spin: THREE.Vector3; t: number }[] = [];
+  private plankGeo = new RoundedBoxGeometry(0.9, 0.05, 0.155, 2, 0.015);
+  private railGeo = new THREE.BoxGeometry(0.06, 0.05, 1);
+  private postGeo = new THREE.CylinderGeometry(0.035, 0.04, 0.26, 8);
+  private ropeGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 5);
+  private plankMats = [
+    new THREE.MeshStandardMaterial({ map: woodTexture('#c79a62', '#6e4520'), roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ map: woodTexture('#b3854f', '#5e3b20'), roughness: 0.8 }),
+  ];
+  private ropeMat = new THREE.MeshStandardMaterial({ color: 0xe6d3a3, roughness: 0.9 });
   private quakes: { mesh: THREE.Mesh; core: THREE.Mesh; x: number; y: number; t: number; max: number }[] = [];
   private bolts: { meshes: THREE.Mesh[]; t: number; max: number }[] = [];
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -1490,6 +1502,10 @@ export class Renderer {
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
     this.rising = [];
+    for (const b of this.bridges.values()) this.levelGroup.remove(b);
+    this.bridges.clear();
+    for (const f of this.falling) this.levelGroup.remove(f.obj);
+    this.falling = [];
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); }
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
@@ -1531,6 +1547,7 @@ export class Renderer {
           this.blocks.set(y * W + x, m);
         } else if (isPortal(t)) this.addPortal(x, y, PORTAL_COLORS[t - Tile.PortalA]);
         else if (isTunnel(t)) this.addTunnel(tiles, x, y);
+        else if (t === Tile.Bridge) this.addBridge(tiles, x, y);
       }
     }
     for (const info of infos) {
@@ -1861,6 +1878,97 @@ export class Renderer {
     (this.snow.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
   }
 
+  /**
+   * A bridge cell (iteration 33): five planks laid across the way over the pit, two stringers under them, and a
+   * rope handrail on the open sides, held by posts where the bridge meets the board.
+   */
+  private addBridge(tiles: number[], x: number, y: number) {
+    const cell = y * W + x;
+    const axis = bridgeAxis(tiles, cell);
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    if (axis === 0) root.rotation.y = Math.PI / 2; // built running up-down (along z), turned for left-right bridges
+    const deck = new THREE.Group();
+    deck.name = 'deck';
+    for (let k = 0; k < 5; k++) {
+      const p = new THREE.Mesh(this.plankGeo, this.plankMats[(x + y + k) % 2]);
+      p.position.set((Math.random() - 0.5) * 0.04, 0.045, -0.4 + k * 0.2);
+      p.rotation.y = (Math.random() - 0.5) * 0.06;
+      p.castShadow = p.receiveShadow = true;
+      deck.add(p);
+    }
+    for (const sx of [-0.3, 0.3]) {
+      const r = new THREE.Mesh(this.railGeo, this.plankMats[1]);
+      r.position.set(sx, 0.012, 0);
+      r.receiveShadow = true;
+      deck.add(r);
+    }
+    root.add(deck);
+    // the way runs along local z: the cells before and after are where the bridge meets the board (or more bridge)
+    const along = (d: number) => {
+      const nx = axis === 1 ? x : x + d, ny = axis === 1 ? y + d : y;
+      return nx >= 0 && ny >= 0 && nx < W && ny < H ? tiles[ny * W + nx] : Tile.Wall;
+    };
+    for (const sx of [-0.46, 0.46]) {
+      const rope = new THREE.Mesh(this.ropeGeo, this.ropeMat);
+      rope.rotation.x = Math.PI / 2;
+      rope.position.set(sx, 0.2, 0);
+      root.add(rope);
+      for (const d of [-1, 1]) {
+        if (along(d) === Tile.Bridge) continue;
+        const post = new THREE.Mesh(this.postGeo, this.plankMats[1]);
+        post.position.set(sx, 0.13, d * 0.47);
+        post.castShadow = true;
+        root.add(post);
+      }
+    }
+    this.levelGroup.add(root);
+    this.bridges.set(cell, root);
+  }
+
+  /** A bridge cell gives way (iteration 33): its planks tumble into the pit in a shower of splinters. False if it was already gone. */
+  collapseBridge(cx: number, cy: number): boolean {
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.debris.emit({
+        x: cx + 0.5 + (Math.random() - 0.5) * 0.8, y: 0.15 + Math.random() * 0.2, z: cy + 0.5 + (Math.random() - 0.5) * 0.8,
+        vx: Math.cos(a) * (0.6 + Math.random() * 1.6), vy: 1.5 + Math.random() * 2.5, vz: Math.sin(a) * (0.6 + Math.random() * 1.6),
+        life: 1 + Math.random() * 0.6, s0: 0.05 + Math.random() * 0.06, s1: 0.02, c0: 0xc79a62, c1: 0x5e3b20, grav: 10, drag: 0.5,
+      });
+    }
+    const key = cy * W + cx;
+    const root = this.bridges.get(key);
+    if (!root) return false;
+    this.bridges.delete(key);
+    // each piece falls on its own: taken out of the bridge, kept where it was in the world
+    root.updateMatrixWorld(true);
+    const parts: THREE.Object3D[] = [];
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) parts.push(o); });
+    for (const o of parts) {
+      this.levelGroup.attach(o);
+      this.falling.push({ obj: o, vy: 0.6 + Math.random() * 1.4, spin: new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 7), t: Math.random() * -0.12 });
+    }
+    this.levelGroup.remove(root);
+    return true;
+  }
+
+  private animateFalling(dt: number) {
+    for (let i = this.falling.length - 1; i >= 0; i--) {
+      const f = this.falling[i];
+      f.t += dt;
+      if (f.t < 0) continue; // a short ripple along the bridge: not every plank lets go at once
+      f.vy -= 11 * dt;
+      f.obj.position.y += f.vy * dt;
+      f.obj.rotation.x += f.spin.x * dt;
+      f.obj.rotation.y += f.spin.y * dt;
+      f.obj.rotation.z += f.spin.z * dt;
+      // down in the dark of the pit, it shrinks away (the board is a painted floor: no real depth to fall into)
+      const k = Math.max(0, 1 - f.t / 0.9);
+      f.obj.scale.setScalar(Math.max(0.01, k));
+      if (k <= 0) { this.levelGroup.remove(f.obj); this.falling.splice(i, 1); }
+    }
+  }
+
   /** A piece of toy-train tunnel (iteration 13): a painted arch, dark inside, with a cream rim at each mouth. */
   private addTunnel(tiles: number[], x: number, y: number) {
     const cell = y * W + x;
@@ -2020,7 +2128,7 @@ export class Renderer {
    * outer corners, a sawn rim and the far wall of the pit lit, so they read as depth instead of black dots.
    */
   private paintHoles(g: CanvasRenderingContext2D, tiles: number[]) {
-    const hole = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && tiles[y * W + x] === Tile.Hole;
+    const hole = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && isPit(tiles[y * W + x]); // a bridge spans a pit (iteration 33)
     const I = 4, R = 12; // inset on open sides, radius of the outer corners
     const path = new Path2D();
     let any = false;
@@ -3057,6 +3165,7 @@ export class Renderer {
     this.animateStorm(dt);
     this.animateQuakes(dt);
     this.animateRising(dt);
+    this.animateFalling(dt);
     if (this.night > 0.5 && Math.random() < 5 * dt) {
       // fireflies drifting over the table
       this.glow.emit({

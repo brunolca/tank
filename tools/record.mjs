@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 1, arms: ['ricochet', 'canon'], seconds: 17, trickShots: [1.6], caption: 'Nouveau : le ralenti', sub: 'Le coup décisif repasse au ralenti, caméra au plus près' },
-  { mission: 8, arms: ['ricochet', 'ricochet'], seconds: 17, trickShots: [1.6], caption: '« Double ricochet ! »', sub: 'Sous l’image, le jeu raconte qui a fait quoi, et comment' },
-  { versus: [0], arms: ['ricochet', 'canon', 'fusee', 'sapeur'], seconds: 18, trickShots: [3], caption: 'En versus aussi', sub: 'Chaque fin de manche se revoit au ralenti' },
-  { mission: 2, arms: ['canon', 'ricochet'], seconds: 14, trickShots: [1.6], caption: 'En coop, au défi du jour, aux drapeaux…', sub: 'Tu n’aimes pas ? Menu, « Ralenti des fins de manche : non »' },
-  { mission: 39, arms: ['canon', 'ricochet'], seconds: 8, caption: 'Et toujours le Givré', sub: 'Il givre le sol où il passe : ça glisse !' },
+  { mission: 32, arms: ['canon', 'sapeur'], seconds: 18, bridgeTraps: [1.5], caption: 'Nouveau : les ponts', sub: 'Des ponts de bois enjambent les ravins : les tanks roulent dessus, les obus passent par-dessus' },
+  { mission: 42, arms: ['sapeur', 'canon'], seconds: 16, bridgeMines: [3.5, 9], bridgeTraps: [10], caption: 'Une mine, et crac !', sub: 'Le souffle d’une mine fait tomber le pont… et tout ce qui roule dessus' },
+  { versus: [13], arms: ['ricochet', 'canon', 'fusee', 'sapeur'], seconds: 14, bridgeTraps: [2], caption: 'En versus aussi', sub: 'Coupe la route à tes rivaux : « Le pont a cédé ! »' },
+  { atelier: 8, seconds: 8, caption: 'Dans l’atelier', sub: 'Le pont rejoint la palette : dessine tes ravins' },
+  { mission: 1, arms: ['ricochet', 'canon'], seconds: 12, trickShots: [1.6], caption: 'Le ralenti se passe d’un appui', sub: 'Bouton « Passer › », Espace ou B à la manette' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -88,7 +88,9 @@ try {
       for (const s of shot.freezes ?? []) setTimeout(() => d.freeze?.(), s * 1000); // « Gel » (iteration 29)
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
-      for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000); // « Le ralenti » (iteration 32): a ricochet, then its replay
+      for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
+      for (const s of shot.bridgeTraps ?? []) setTimeout(() => d.bridgeTrap?.(8), s * 1000); // « Les ponts » (iteration 33): the next enemy on a bridge falls
+      for (const s of shot.bridgeMines ?? []) setTimeout(() => d.bridgeMine?.(), s * 1000); // a mine beside the bridge nearest to an enemy // « Le ralenti » (iteration 32): a ricochet, then its replay
       for (const s of shot.replays ?? []) setTimeout(() => d.replay?.(), s * 1000);
       for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it
       d.caption(shot.caption, shot.sub);

@@ -518,6 +518,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
     evq.push({ k: msg.k, e });
     if (e[0] === 'block') tiles[e[2] * W + e[1]] = Tile.Empty; // prediction sees the freshest map
     else if (e[0] === 'build') tiles[e[2] * W + e[1]] = Tile.Cork; // the Maçon's new block stops my tank right away
+    else if (e[0] === 'bridge') tiles[e[2] * W + e[1]] = Tile.Hole; // a bridge gave way (iteration 33): no driving over it any more
   }
   // reconcile own tank
   const me = s.T.get(myTankId);
@@ -789,6 +790,10 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'block':
       renderer.removeBlock(e[1], e[2]);
       if (audible) sfx.block();
+      break;
+    case 'bridge': // « Les ponts » (iteration 33): the planks fall into the pit
+      if (renderer.collapseBridge(e[1], e[2])) floater(e[1] + 0.5, e[2] + 0.5, 'Crac !', 0xc98f55);
+      if (audible) sfx.bridge();
       break;
     case 'build':
       renderer.addBlock(e[1], e[2], e[3]);
@@ -1875,6 +1880,30 @@ function endAttractVersus(g: Game) {
   }
 }
 
+/**
+ * The demo's bridge trap (« Les ponts », iteration 33): until that tick, the first enemy seen in the middle of a
+ * bridge gets a mine with a short fuse beside it in the pit, just out of its blast: the planks give way under it.
+ */
+let bridgeTrapUntil = 0;
+function bridgeTrap(g: Game) {
+  const hero = g.tanks.find((t) => t.alive && t.kind === 'player');
+  if (!hero) return;
+  for (const f of g.tanks) {
+    if (!f.alive || f.team === hero.team || isBossKind(f.kind)) continue;
+    const cx = Math.floor(f.x), cy = Math.floor(f.y), i = cy * W + cx;
+    if (g.tiles[i] !== Tile.Bridge || Math.hypot(f.x - cx - 0.5, f.y - cy - 0.5) > 0.3) continue;
+    const across = g.tiles[i - 1] === Tile.Hole || g.tiles[i + 1] === Tile.Hole;
+    for (const k of [-1, 1]) {
+      const mx = cx + 0.5 + (across ? k * 1.85 : 0), my = cy + 0.5 + (across ? 0 : k * 1.85);
+      if (mx < 0.5 || my < 0.5 || mx > W - 0.5 || my > H - 0.5) continue;
+      g.mines.push({ id: 920000 + g.tick, owner: hero.id, team: hero.team, x: mx, y: my, t: 0, fuse: 0.08, dead: false });
+      reelWanted = f.id;
+      bridgeTrapUntil = 0;
+      return;
+    }
+  }
+}
+
 let attractAcc = 0;
 let attractState: Record<string, unknown> = {};
 function attractFrame(dt: number) {
@@ -1886,6 +1915,7 @@ function attractFrame(dt: number) {
     g.step(new Map());
     for (const e of g.events) handleEvent(e, false);
     g.events = [];
+    if (bridgeTrapUntil && g.tick <= bridgeTrapUntil) bridgeTrap(g);
   }
   const u = attractAcc / DT;
   renderer.windTick = renderer.fogTick = g.tick + u;
@@ -2023,6 +2053,26 @@ function reelFrame(dt: number): number {
   return f.dt;
 }
 
+// « Passer › » (iteration 33): the replay can be skipped with a tap, Space, Enter, Escape or B on a gamepad
+function skipReel() {
+  if (!reel || screen !== 'game') return false;
+  stopReel();
+  return true;
+}
+$('#replay .r-skip').addEventListener('click', (e) => { (e.currentTarget as HTMLElement).blur(); skipReel(); });
+addEventListener('keydown', (e) => {
+  if (e.repeat || !reel || (e.code !== 'Space' && e.code !== 'Enter' && e.code !== 'NumpadEnter' && e.code !== 'Escape')) return;
+  if (skipReel()) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, { capture: true });
+let padSkipHeld = true; // a button already down when the replay starts does not skip it
+function padSkip() {
+  const pads = navigator.getGamepads?.() ?? [];
+  let down = false;
+  for (const p of pads) if (p && (p.buttons[1]?.pressed || p.buttons[9]?.pressed)) down = true;
+  if (down && !padSkipHeld) skipReel();
+  padSkipHeld = down;
+}
+
 {
   const btn = $<HTMLButtonElement>('#menu-replay');
   const label = () => (btn.textContent = `Ralenti des fins de manche : ${replayOn ? 'oui' : 'non'}`);
@@ -2047,6 +2097,8 @@ function frame(now: number) {
   lastT = now;
   if (reelDue && now >= reelDue) startReel();
   let rdt = dt;
+  if (reel) padSkip();
+  else padSkipHeld = true;
   if (reel) rdt = reelFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt); // the videos: real time, as for the demo
   if (online) {
     acc += dt;
@@ -2643,6 +2695,38 @@ if (params.has('demo')) {
       if (best < 0 || !heroes.length) return 0;
       g.mines.push({ id: 900000 + g.tick, owner: heroes[0].id, team: heroes[0].team, x: (best % W) + 0.5, y: Math.floor(best / W) + 0.5, t: 0, fuse: 0.9, dead: false });
       return score;
+    },
+    /**
+     * « Les ponts » (iteration 33): a mine with a short fuse at the end of the bridge nearest to an enemy (on it, if one
+     * is crossing), away from the heroes: the bridge comes down on camera. Returns the distance to that enemy (0: no mine).
+     */
+    /** Watch the bridges for the next few seconds: the first enemy to cross one falls (see bridgeTrap). */
+    bridgeTrap(seconds = 8) { if (attract) bridgeTrapUntil = attract.tick + Math.round(seconds / DT); return !!attract; },
+    bridgeMine() {
+      const g = attract;
+      if (!g) return 0;
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      const foes = g.tanks.filter((t) => t.alive && t.team !== heroes[0]?.team && !isBossKind(t.kind));
+      if (!heroes.length || !foes.length) return 0;
+      let best: { x: number; y: number; d: number; foe: number } | undefined;
+      for (let i = 0; i < W * H; i++) {
+        if (g.tiles[i] !== Tile.Bridge) continue;
+        const bx = (i % W) + 0.5, by = Math.floor(i / W) + 0.5;
+        // the mine sits in the pit next to the bridge (beside it, along the ravine): the blast reaches the planks, not too far round
+        const side = g.tiles[i - 1] === Tile.Hole || g.tiles[i + 1] === Tile.Hole ? [1, 0] : [0, 1];
+        for (const k of [-1, 1]) {
+          const mx = bx + side[0] * k * 1.2, my = by + side[1] * k * 1.2;
+          if (heroes.some((h) => Math.hypot(h.x - mx, h.y - my) < 2.8)) continue;
+          for (const f of foes) {
+            const d = Math.hypot(f.x - bx, f.y - by);
+            if (!best || d < best.d) best = { x: mx, y: my, d, foe: f.id };
+          }
+        }
+      }
+      if (!best) return 0;
+      g.mines.push({ id: 910000 + g.tick, owner: heroes[0].id, team: heroes[0].team, x: best.x, y: best.y, t: 0, fuse: 0.7, dead: false });
+      if (best.d < 0.6) reelWanted = best.foe; // it is on the bridge: its fall plays again in slow motion
+      return Math.max(0.01, best.d);
     },
     /** A hero fires straight into each Rempart's shield (to catch the shell bouncing back on camera). */
     shieldShot() {

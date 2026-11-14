@@ -119,6 +119,15 @@ export const sfx = {
     tone(t + 0.05, 0.09, 740, 620, 0.16, 'square');
     tone(t + 0.17, 0.12, 620, 470, 0.16, 'square');
   },
+  /** « Les ponts » (iteration 33): the planks crack, a long creak, then the clatter of wood far down the pit. */
+  bridge() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.09, 3200, 1.2, 0.35, 'bandpass', 2200);
+    tone(t + 0.03, 0.45, 210, 120, 0.16, 'sawtooth');
+    for (let i = 0; i < 4; i++) tone(t + 0.42 + i * 0.09 + Math.random() * 0.03, 0.06, 520 - i * 60, 300 - i * 30, 0.1 - i * 0.015, 'triangle');
+    noise(t + 0.4, 0.4, 700, 0.6, 0.18, 'lowpass', 150);
+  },
   block() {
     if (!ctx) return;
     noise(ctx.currentTime, 0.4, 900, 0.6, 0.6, 'lowpass', 200);

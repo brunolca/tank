@@ -26,6 +26,7 @@ export const enum Tile {
   PortalA = 5, // portals come in pairs: a tank or a shell entering one pops out of its twin
   PortalB = 6,
   Tunnel = 7, // iteration 13: a covered passage, tanks drive through and hide inside, shells bounce off its roof
+  Bridge = 8, // iteration 33: a wooden bridge over a pit, tanks drive over it, shells fly over; a mine blast brings it down (it becomes a hole)
 }
 
 export type TankKind =
@@ -274,7 +275,11 @@ export const FLAG_ALERT = 256;
 export const PLAYER_COLORS = [0x3d7bff, 0xff4d5e, 0x2fd07a, 0xffa63d, 0x26c6f0, 0xc66bff];
 
 export function isSolidTank(t: number) {
-  return t !== Tile.Empty && t !== Tile.Tunnel && !isPortal(t);
+  return t !== Tile.Empty && t !== Tile.Tunnel && t !== Tile.Bridge && !isPortal(t);
+}
+/** A pit cell, or a bridge over one (iteration 33): the renderer digs both, the bridge just gets its deck on top. */
+export function isPit(t: number) {
+  return t === Tile.Hole || t === Tile.Bridge;
 }
 export function isPortal(t: number) {
   return t === Tile.PortalA || t === Tile.PortalB;
@@ -366,3 +371,10 @@ export const KO_SHELL = 0;
 export const KO_MINE = 1;
 export const KO_BOLT = 2;
 export const KO_DRILL = 3;
+export const KO_FALL = 4; // « Les ponts » (iteration 33): the bridge gave way under it
+
+// ------------------------------------------------------------------ bridges (iteration 33)
+/** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */
+export const BRIDGE_CHAR = ':';
+/** A mine blast brings down the bridges whose centre is within its radius plus this much. */
+export const BRIDGE_REACH = 0.45;

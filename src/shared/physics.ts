@@ -1,4 +1,4 @@
-import { BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, Tile } from './constants';
+import { BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, isPit, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -220,6 +220,22 @@ export function tunnelAxis(tiles: ArrayLike<number>, cell: number): number {
   if (vert && !horiz) return 1;
   if (horiz && vert) return isTunnel(tileAt(tiles, x - 1, y)) || isTunnel(tileAt(tiles, x + 1, y)) ? 0 : 1;
   return -1;
+}
+
+/**
+ * Direction of a bridge cell (iteration 33): 0 when it runs left-right (pit above and below), 1 when it runs
+ * up-down (pit on both sides). Neighbouring bridge cells count as pit for its sides. Drawing only.
+ */
+export function bridgeAxis(tiles: ArrayLike<number>, cell: number): number {
+  const x = cell % W, y = Math.floor(cell / W);
+  const pit = (cx: number, cy: number) => cx >= 0 && cy >= 0 && cx < W && cy < H && isPit(tiles[cy * W + cx]);
+  const bridge = (cx: number, cy: number) => tileAt(tiles, cx, cy) === Tile.Bridge;
+  const vert = pit(x - 1, y) && pit(x + 1, y);
+  const horiz = pit(x, y - 1) && pit(x, y + 1);
+  if (vert && !horiz) return 1;
+  if (horiz && !vert) return 0;
+  if (vert && horiz) return bridge(x, y - 1) || bridge(x, y + 1) ? 1 : 0;
+  return pit(x - 1, y) || pit(x + 1, y) ? 1 : 0;
 }
 
 /** Belt code (0 none, 1 right, 2 left, 3 up, 4 down) under a point, iteration 16. */

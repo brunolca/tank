@@ -3,7 +3,7 @@
 import { H, PLAYER_COLORS, PORTAL_COLORS, W, enemyColor, isBossKind } from '../shared/constants';
 import { BRUSHES, blankMap, checkAtelier, cleanName, type Brush } from '../shared/atelier';
 import { ENEMY_CHARS, EXTRA_LEVELS, LEVELS, parseLevel } from '../shared/levels';
-import { tunnelAxis } from '../shared/physics';
+import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
@@ -33,7 +33,7 @@ export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const c = map[y]?.[x] ?? '.';
-      if (c !== '.') drawCell(g, x * s, y * s, s, c, c === '=' ? tunnelAxis(tiles, y * W + x) : 0);
+      if (c !== '.') drawCell(g, x * s, y * s, s, c, c === '=' ? tunnelAxis(tiles, y * W + x) : c === ':' ? bridgeAxis(tiles, y * W + x) : 0);
     }
   }
   if (hot && hot.x >= 0 && hot.y >= 0 && hot.x < W && hot.y < H) {
@@ -61,6 +61,15 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
   } else if (c === '_') {
     g.fillStyle = '#3a2a1e'; rr(px + 1.5, py + 1.5, s - 3, s - 3, s * 0.25); g.fill();
     g.fillStyle = '#1b130d'; rr(px + s * 0.2, py + s * 0.25, s * 0.6, s * 0.55, s * 0.2); g.fill();
+  } else if (c === ':') {
+    // a bridge (iteration 33): the pit under it, planks across the way (axis 1: the way runs up and down)
+    g.fillStyle = '#3a2a1e'; g.fillRect(px, py, s, s);
+    g.fillStyle = '#c79a62'; g.strokeStyle = 'rgba(70,40,15,0.6)'; g.lineWidth = 1;
+    for (let k = 0; k < 4; k++) {
+      const u = 0.06 + k * 0.235;
+      if (axis === 1) { g.fillRect(px + s * 0.08, py + s * u, s * 0.84, s * 0.17); g.strokeRect(px + s * 0.08 + 0.5, py + s * u + 0.5, s * 0.84 - 1, s * 0.17 - 1); }
+      else { g.fillRect(px + s * u, py + s * 0.08, s * 0.17, s * 0.84); g.strokeRect(px + s * u + 0.5, py + s * 0.08 + 0.5, s * 0.17 - 1, s * 0.84 - 1); }
+    }
   } else if (c === '=') {
     g.fillStyle = axis < 0 ? 'rgba(200,40,40,0.45)' : '#b8432f';
     rr(px + 1, py + 1, s - 2, s - 2, s * 0.2); g.fill();
@@ -203,7 +212,7 @@ export class Workshop {
           <button class="btn" data-a="share">Copier le lien</button>
           <button class="btn primary" data-a="play">Jouer en ligne</button>
         </div>
-        <p class="muted at-help">Clic ou doigt : peindre · clic droit : gommer · un tank par clic. Les obus rebondissent sur les murs, le liège saute avec les mines, les trous arrêtent les tanks mais pas les obus.</p>
+        <p class="muted at-help">Clic ou doigt : peindre · clic droit : gommer · un tank par clic. Les obus rebondissent sur les murs, le liège saute avec les mines, les trous arrêtent les tanks mais pas les obus, et une mine fait s’écrouler les ponts.</p>
       </div>`;
     this.cv = root.querySelector('.at-canvas')!;
     for (const b of BRUSHES) {

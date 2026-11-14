@@ -3,7 +3,7 @@
 // again in slow motion, the camera leaning toward it. Nothing goes through the network: it is only a film of what
 // this screen already showed, so it works the same online, alone against rivals and in the demo.
 import type { GameEvent } from '../shared/protocol';
-import { KO_BOLT, KO_DRILL, KO_MINE } from '../shared/constants';
+import { KO_BOLT, KO_DRILL, KO_FALL, KO_MINE } from '../shared/constants';
 import type { RBonus, RBullet, RFlag, RMine, RTank } from './render';
 
 export interface FilmFrame { dt: number; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; events: GameEvent[] }
@@ -15,7 +15,7 @@ const BEFORE = 1.5;
 const AFTER = 0.75;
 
 /** Events played again in the replay: only what is drawn (no map change, no crate drop, no bubble, no toast). */
-export const REPLAYED = new Set(['shot', 'bounce', 'pop', 'boom', 'mboom', 'shield', 'hurt', 'deflect', 'catch', 'unload', 'volley', 'warp', 'bolt', 'erupt', 'mineSet', 'bonus', 'freeze', 'flag']);
+export const REPLAYED = new Set(['shot', 'bounce', 'pop', 'boom', 'mboom', 'shield', 'hurt', 'deflect', 'catch', 'unload', 'volley', 'warp', 'bolt', 'erupt', 'bridge', 'mineSet', 'bonus', 'freeze', 'flag']);
 
 export class Film {
   private frames: FilmFrame[] = [];
@@ -138,6 +138,7 @@ export function koCaption(r: Reel, name: (id: number) => string | undefined, bos
   if (cause === KO_MINE) how = self ? 'Sa propre mine !' : 'Sur la mine !';
   else if (cause === KO_BOLT) how = 'Frappé par la foudre !';
   else if (cause === KO_DRILL) how = 'Surgi de sous la table !';
+  else if (cause === KO_FALL) how = self ? 'Il a scié son propre pont !' : 'Le pont a cédé !';
   else if (self) how = n > 0 ? 'Son propre ricochet !' : 'Oups !';
   else if (n >= 3) how = `Ricochet ×${n} : chapeau !`;
   else if (n === 2) how = 'Double ricochet !';

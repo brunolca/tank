@@ -64,6 +64,7 @@ export type GameEvent =
   | ['mineSet', number, number]
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number]
+  | ['bridge', number, number] // cx cy: « Les ponts » (iteration 33), that bridge cell gives way and becomes a hole (older tabs are told to reload)
   | ['bonus', number, number, number, number] // x y kind tankId (picked up)
   | ['shield', number, number, number] // x y tankId (a shield absorbed a hit)
   | ['crate', number, number, number] // x y kind (a crate drops in)

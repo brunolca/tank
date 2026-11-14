@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_MINE, KO_SHELL, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_MINE, KO_SHELL, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -658,6 +658,7 @@ export class Game {
         }
       }
     }
+    this.collapseBridges(bo.x, bo.y, BOLT_R); // the lightning brings bridges down too (iteration 33)
   }
 
   // -------------------------------------------------------------- bonus crates
@@ -1081,7 +1082,7 @@ export class Game {
     for (const c of this.bonuses) if (!c.dead && near(c.x, c.y, 0.95)) return false;
     for (const bo of this.bolts) if (near(bo.x, bo.y, 0.6)) return false;
     // every open neighbour must still reach every other one once the cell is closed
-    const open = (i: number) => this.tiles[i] === Tile.Empty || isPortal(this.tiles[i]) || isTunnel(this.tiles[i]);
+    const open = (i: number) => this.tiles[i] === Tile.Empty || this.tiles[i] === Tile.Bridge || isPortal(this.tiles[i]) || isTunnel(this.tiles[i]);
     const nb: number[] = [];
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const x = cx + dx, y = cy + dy;
@@ -1402,6 +1403,31 @@ export class Game {
         }
       }
     }
+    this.collapseBridges(m.x, m.y, R, killer);
+  }
+
+  /**
+   * « Les ponts » (iteration 33): a blast at (x, y) brings down every bridge cell whose centre is within R plus
+   * BRIDGE_REACH. The cell becomes a hole; whatever stood on it and survived the blast falls in (the tank is
+   * destroyed, credited to whoever set the blast off), mines and crates on it are gone.
+   */
+  collapseBridges(x: number, y: number, R: number, killer?: Tank) {
+    const reach = R + BRIDGE_REACH;
+    const fallen: number[] = [];
+    for (let cy = Math.floor(y - reach); cy <= Math.floor(y + reach); cy++) {
+      for (let cx = Math.floor(x - reach); cx <= Math.floor(x + reach); cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Bridge) continue;
+        if (Math.hypot(cx + 0.5 - x, cy + 0.5 - y) >= reach) continue;
+        this.tiles[cy * W + cx] = Tile.Hole;
+        this.events.push(['bridge', cx, cy]);
+        fallen.push(cy * W + cx);
+      }
+    }
+    if (!fallen.length) return;
+    const on = (px: number, py: number) => fallen.includes(Math.floor(py) * W + Math.floor(px));
+    for (const t of this.tanks) if (t.alive && !under(t) && t.r <= PORTAL_MAX_R && on(t.x, t.y)) this.killTank(t, killer, KO_FALL);
+    for (const o of this.mines) if (!o.dead && on(o.x, o.y)) o.dead = true;
+    for (const c of this.bonuses) if (!c.dead && on(c.x, c.y)) c.dead = true;
   }
 
   /** cause and n (« Le ralenti », iteration 32): what did it (KO_*) and, for a shell, the walls it bounced off first. */
@@ -1874,7 +1900,8 @@ export class Game {
       if (m.seed !== undefined && m.owner === t.id) continue; // the Semeur strolls among its own seeds
       const dx = t.x - m.x, dy = t.y - m.y;
       const d = Math.hypot(dx, dy);
-      if (d >= (m.blast ?? MINE_BLAST) + 0.7) continue;
+      // on a bridge, the blast reaches further: the planks give way under it (iteration 33)
+      if (d >= (m.blast ?? MINE_BLAST) + (tileAt(this.tiles, Math.floor(t.x), Math.floor(t.y)) === Tile.Bridge ? 1.1 : 0.7)) continue;
       threat = true;
       if (d < 0.08) {
         // sitting right on it (a mine just laid): there is no « away », take the planned way out (iteration 13: they
@@ -1950,10 +1977,10 @@ export class Game {
     }
     for (const m of this.mines) {
       if (m.seed !== undefined && m.owner === t.id) continue;
-      const R = (m.blast ?? MINE_BLAST) + 0.4, k = Math.ceil(R);
+      const R = (m.blast ?? MINE_BLAST) + 0.4, k = Math.ceil(R + BRIDGE_REACH);
       for (let cy = Math.floor(m.y - k); cy <= Math.floor(m.y + k); cy++)
         for (let cx = Math.floor(m.x - k); cx <= Math.floor(m.x + k); cx++)
-          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < R) blocked[cy * W + cx] = 1;
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < (this.tiles[cy * W + cx] === Tile.Bridge ? R + BRIDGE_REACH : R)) blocked[cy * W + cx] = 1;
     }
     for (const bo of this.bolts) {
       for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++)

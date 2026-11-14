@@ -1,7 +1,7 @@
 {
-  "iteration": 32,
-  "date": "2026-11-12",
-  "title": "Le ralenti",
+  "iteration": 33,
+  "date": "2026-11-14",
+  "title": "Les ponts",
   "journal": [
     {
       "iteration": 1,
@@ -389,6 +389,18 @@
         "Ça marche partout : en coop, au défi du jour, en versus contre tes amis ou les rivaux, aux drapeaux (la capture repasse aussi) et dans le fond animé de l’accueil.",
         "Un petit bruit de bande qu’on rembobine annonce le ralenti. Tu préfères t’en passer ? Menu, puis « Ralenti des fins de manche : non ».",
         "La pause entre deux missions dure une seconde de plus, le temps de savourer."
+      ]
+    },
+    {
+      "iteration": 33,
+      "date": "2026-11-14",
+      "title": "Les ponts",
+      "notes": [
+        "Nouveau : des ponts de bois enjambent les fosses. Les tanks roulent dessus, les obus passent par-dessus.",
+        "Le souffle d’une mine fait s’écrouler le pont, et tout ce qui roule dessus tombe dans le trou : « Le pont a cédé ! ». La foudre de l’orage les fait tomber aussi.",
+        "Coupe la route aux ennemis, ou attends qu’ils traversent… mais gare à ton propre pont : ils savent poser des mines eux aussi.",
+        "Deux nouvelles missions, « Le ravin » (32) et « Les passerelles » (42), des ponts dans les missions générées dès la 45ᵉ, une arène de versus à ponts, et le pont dans la palette de l’atelier.",
+        "Le ralenti se passe d’un appui : bouton « Passer › », Espace, Entrée, Échap ou B à la manette."
       ]
     }
   ]

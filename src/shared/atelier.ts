@@ -56,6 +56,8 @@ export const BRUSHES: Brush[] = [
   { ch: 'A', label: 'Aimant', group: 'tank' },
   // iteration 31: the Givré (share-code letter h)
   { ch: 'f', label: 'Givré', group: 'tank' },
+  // iteration 33: bridges (share-code letter i)
+  { ch: ':', label: 'Pont', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -66,13 +68,13 @@ export const ATELIER_SAMPLE: AtelierMap = {
     '...###...HH....###....',
     '...#.............#....',
     '..1.....o....o.....a..',
-    '........o____o........',
+    '........o_:__o........',
     '###=##..o....o..##=###',
     '......................',
     '..*.......c........*..',
     '......................',
     '###=##..o....o..##=###',
-    '........o____o........',
+    '........o__:_o........',
     '..2.....o....o.....s..',
     '...#.............#....',
     '...###...HH....###....',

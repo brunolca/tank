@@ -1,4 +1,4 @@
-import { BELT_CHARS, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
+import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -6,6 +6,7 @@ import { BELT_CHARS, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
 //           solid tiles (walls or holes) on either its left and right or its top and bottom, which gives its direction
 //         > < ^ V conveyor belts (iteration 16): tanks, mines and crates ride them (the cell stays floor underneath)
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
+//         : bridge (iteration 33): a wooden bridge over a pit, tanks drive over it, shells fly over, a mine blast brings it down
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)
 export const ENEMY_CHARS: Record<string, TankKind> = {
@@ -886,6 +887,52 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 33: a ravine splits the table, three bridges cross it; a mine on a bridge brings it down (and whoever is on it)
+  32: {
+    name: 'Le ravin',
+    map: [
+      '..........__..........',
+      '..........__.......a..',
+      '...##.....__.....##...',
+      '..........::..........',
+      '...##.....__.....##...',
+      '..........__..........',
+      '..1....o..__.....p....',
+      '.......o..__..........',
+      '..........::.......y..',
+      '.......o..__..........',
+      '..2....o..__.....b....',
+      '..........__..........',
+      '...##.....__.....##...',
+      '..........::..........',
+      '...##.....__.....##...',
+      '..........__.......a..',
+      '..........__..........',
+    ],
+  },
+  // iteration 33: an island fort in a moat, four bridges lead in; cut them, or storm the green turrets
+  42: {
+    name: 'Les passerelles',
+    map: [
+      '......................',
+      '...................w..',
+      '......................',
+      '.....______::______...',
+      '.....______::______...',
+      '.....__..........__...',
+      '.....__..g....g..__...',
+      '..1..__....##....__...',
+      '.....::....##.v..::...',
+      '..2..__....##....__...',
+      '.....__..g.......__...',
+      '.....__..........__...',
+      '.....______::______...',
+      '.....______::______...',
+      '......................',
+      '...................w..',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -962,6 +1009,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '*') tiles[i] = Tile.PortalA;
       else if (c === '+') tiles[i] = Tile.PortalB;
       else if (c === '=') tiles[i] = Tile.Tunnel;
+      else if (c === BRIDGE_CHAR) tiles[i] = Tile.Bridge;
       else if ((BELT_CHARS as readonly string[]).includes(c)) (belts ??= new Array(W * H).fill(0))[i] = (BELT_CHARS as readonly string[]).indexOf(c) + 1;
       else if (c === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[i] = ICE;
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
@@ -1054,6 +1102,24 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     // fill unreachable pockets
     for (let i = 0; i < W * H; i++) if (!seen[i] && tiles[i] === Tile.Empty) tiles[i] = Tile.Wall;
     addPortals(tiles, seen, mission, cells, opt);
+    // from the 45th, about half the missions throw a bridge over one of their pits (iteration 33): one more stream, and
+    // only between two reachable cells, so nothing new opens up; the mirror keeps it fair (the daily challenge stays as it was)
+    if (opt.seed === undefined && mission > 44) {
+      const rb = rng(mission * 3907 + 83);
+      if (rb() < 0.55) {
+        const spans: number[] = [];
+        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+          const i = y * W + x;
+          if (tiles[i] !== Tile.Hole) continue;
+          if ((seen[i - W] && seen[i + W] && tiles[i - 1] === Tile.Hole && tiles[i + 1] === Tile.Hole) || (seen[i - 1] && seen[i + 1] && tiles[i - W] === Tile.Hole && tiles[i + W] === Tile.Hole)) spans.push(i);
+        }
+        if (spans.length) {
+          const i = spans[Math.floor(rb() * spans.length)];
+          tiles[i] = Tile.Bridge;
+          tiles[W * H - 1 - i] = Tile.Bridge;
+        }
+      }
+    }
     const tier = Math.min(3, Math.floor((mission - 1) / 8));
     const count = Math.min(8, 3 + Math.floor((mission - 16) / 3));
     const enemies: ParsedLevel['enemies'] = [];
@@ -1382,8 +1448,8 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 export function versusArena(round: number): ParsedLevel {
-  // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16) and the rink of mission 27 (iteration 21)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27]);
+  // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21) and the ravine of mission 32 (iteration 33)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32]);
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];
