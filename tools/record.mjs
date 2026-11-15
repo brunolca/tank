@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 43, arms: ['canon', 'ricochet'], seconds: 16, lobs: [2.5, 8, 12.5], caption: 'Nouveau : le Mortier', sub: 'Il tire en cloche, par-dessus les murs' },
-  { mission: 44, arms: ['ricochet', 'sapeur'], seconds: 16, lobs: [3, 9], caption: 'Le pilonnage : sors du cercle rouge !', sub: 'Le cercle se resserre là où le boulet va tomber' },
-  { mission: 53, arms: ['canon', 'fusee'], seconds: 12, lobs: [2, 7], caption: 'Des Mortiers dès la 45ᵉ mission', sub: 'Un boulet casse le liège, fait sauter les mines… et les ponts' },
-  { bestiary: 5, seconds: 5, caption: 'Au bestiaire', sub: 'Vingt tanks, chacun sa couleur, chacun sa ruse' },
-  { mission: 42, arms: ['sapeur', 'canon'], seconds: 10, bridgeMines: [3], bridgeTraps: [4], caption: 'Et toujours les ponts', sub: 'Une mine, et crac !' },
+  { mission: 50, arms: ['canon', 'ricochet'], seconds: 17, volleys: [3.2, 9.5, 14.5], caption: 'Nouveau boss : le Bombardier', sub: 'Il pilonne des rangées entières de boulets' },
+  { mission: 50, arms: ['ricochet', 'sapeur'], seconds: 13, bossHp: 4, volleys: [2.5, 8.5], caption: 'En colère : deux rangées d’un coup', sub: 'Ne longe pas la rangée : avance ou recule !' },
+  { mission: 100, arms: ['canon', 'fusee'], seconds: 12, volleys: [2.5, 8], caption: 'Le Bombardier de nuit', sub: 'Seuls les cercles rouges éclairent la table' },
+  { bestiary: 5, seconds: 5, caption: 'Au bestiaire : vingt et un tanks', sub: 'Ceux que tu n’as pas encore croisés restent grisés' },
+  { mission: 43, arms: ['sapeur', 'canon'], seconds: 10, lobs: [2.5, 7], caption: 'Et toujours le Mortier', sub: 'Un boulet tombé du ciel !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -70,6 +70,7 @@ try {
       if (shot.role) setTimeout(() => d.role(true, 4000), 400); // after the title banner has gone
       if (shot.council) d.council(shot.council[0] * 1000, shot.council[1], shot.council[2], shot.council[3]);
       if (shot.volley) setTimeout(() => d.volley?.(), 2500);
+      for (const s of shot.volleys ?? []) setTimeout(() => d.volley?.(), s * 1000); // the Bombardier's barrages (iteration 35)
       for (const s of shot.hits ?? []) setTimeout(() => d.hitBoss?.(), s * 1000);
       for (const s of shot.portals ?? []) setTimeout(() => d.portal?.(), s * 1000);
       for (const s of shot.bolts ?? []) setTimeout(() => d.bolt?.(), s * 1000);

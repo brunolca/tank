@@ -147,6 +147,10 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 180, 
 .bestiary li::before { content: ''; flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); transform: translateY(1px); }
 .bestiary li.boss::before { width: 14px; height: 14px; box-shadow: 0 0 0 2px #f2c14e; }
 .bestiary b { color: #fff4e0; color: color-mix(in srgb, var(--c) 50%, #fff4e0); }
+/* not met yet (iteration 35): greyed out until it shows up on a table */
+.bestiary li.unmet { opacity: 0.5; filter: grayscale(1); }
+.bestiary li.unmet i { font-style: italic; opacity: 0.85; }
+#bestiary-count { margin-left: 6px; opacity: 0.7; font-weight: normal; }
 kbd {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--line);
@@ -342,6 +346,9 @@ body.demo #boss-bar { top: 18px; }
 #boss-bar.sower .boss-top b { color: #a6e07a; }
 #boss-bar.sower .boss-top b::before { content: '🌱 '; }
 #boss-bar.sower #boss-fill { background: linear-gradient(180deg, #b8ec8a, #4f8f2a); box-shadow: 0 0 12px rgba(140, 220, 90, 0.55); }
+#boss-bar.bombard .boss-top b { color: #d2b0ff; }
+#boss-bar.bombard .boss-top b::before { content: '💣 '; }
+#boss-bar.bombard #boss-fill { background: linear-gradient(180deg, #d9bcff, #6b3fa0); box-shadow: 0 0 12px rgba(180, 130, 255, 0.55); }
 #banner.boss .b-kicker { color: #ff5d4c; }
 #banner.boss .b-title { color: #f2c14e; }
 #banner.night .b-kicker { color: #9db4ff; }

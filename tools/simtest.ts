@@ -505,11 +505,11 @@ console.log('total', Date.now() - t0, 'ms');
 // the Foreur (iteration 11): the boss of even tens; it digs, burrows toward a foe, shakes the ground, then bursts out
 {
   const fail = (m: string) => { console.error('FOREUR:', m); process.exitCode = 1; };
-  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'boss'], [60, 'drill'], [70, 'thunder'], [80, 'sower'], [90, 'boss'], [130, 'boss']] as const) {
+  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'bombard'], [60, 'boss'], [70, 'drill'], [80, 'thunder'], [90, 'sower'], [100, 'bombard'], [110, 'boss'], [160, 'boss']] as const) {
     if (!getMission(mission).enemies.some((e) => e.kind === kind)) fail(`la mission ${mission} devrait opposer ${kind}`);
   }
-  if (getMission(20).night || getMission(60).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
-  if (!getMission(50).night || getMission(90).night || getMission(10).night) fail('un Colosse sur deux se bat de nuit, à partir du 50ᵉ');
+  if (getMission(20).night || getMission(70).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
+  if (!getMission(60).night || getMission(110).night || getMission(10).night || !getMission(160).night) fail('un Colosse sur deux se bat de nuit, à partir du 60ᵉ');
   // the daily « Le Colosse attend » keeps its Colosse
   for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 14; day++) {
     if (dailyTwist(day) === 'colosse' && !dailyLevel(day, DAILY_STAGES).enemies.some((e) => e.kind === 'boss')) fail('le défi « Le Colosse attend » a perdu son Colosse');
@@ -958,7 +958,7 @@ console.log('total', Date.now() - t0, 'ms');
 // the Grondeur (iteration 18): the third boss calls the lightning on each foe; its own strikes never touch it
 {
   const fail = (m: string) => { console.error('GRONDEUR : ' + m); process.exitCode = 1; };
-  for (const m of [30, 70, 110]) {
+  for (const m of [30, 80, 130]) {
     const lvl = getMission(m);
     if (!lvl.storm || lvl.enemies.filter((e) => e.kind === 'thunder').length !== 1) fail(`la mission ${m} devrait opposer le Grondeur, sous l’orage`);
     for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un ennemi part dans un mur`);
@@ -1523,12 +1523,12 @@ console.log('total', Date.now() - t0, 'ms');
 // the Semeur (iteration 25): the fourth boss sows giant seeds; ripe ones spare it, a shot one hurts it and is the shooter's
 {
   const fail = (m: string) => { console.error('SEMEUR : ' + m); process.exitCode = 1; };
-  for (const m of [40, 80, 120, 160]) {
+  for (const m of [40, 90, 140, 190]) {
     const lvl = getMission(m);
     if (lvl.enemies.filter((e) => e.kind === 'sower').length !== 1 || lvl.night || lvl.storm) fail(`la mission ${m} devrait opposer le Semeur, de jour`);
     for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un ennemi part dans un mur`);
   }
-  if (getMission(40).wind !== undefined || getMission(80).wind === undefined) fail('un Semeur sur deux se bat dans le vent, à partir du 80ᵉ');
+  if (getMission(40).wind !== undefined || getMission(90).wind === undefined || getMission(140).wind !== undefined) fail('un Semeur sur deux se bat dans le vent, à partir du 90ᵉ');
   // it sows: seeds fly out, one in front of the player, none on a wall, none under itself
   const g = new Game(new Array(W * H).fill(Tile.Empty));
   const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
@@ -2173,4 +2173,79 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions à ponts');
   if (process.exitCode !== 1) console.log(`ponts OK (missions : ${bm.join(', ')}, ${cleared}/${bm.length * 2} parties gagnées par l’IA, ${fallen} pont(s) tombé(s), ${falls} chute(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// the Bombardier (iteration 35): the fifth boss walks rows of cannonballs across the table, never on itself or its friends
+{
+  const fail = (m: string) => { console.error('BOMBARDIER :', m); process.exitCode = 1; };
+  for (const m of [50, 100, 150, 200]) {
+    const lvl = getMission(m);
+    if (lvl.enemies.filter((e) => e.kind === 'bombard').length !== 1) fail(`la mission ${m} devrait opposer le Bombardier`);
+    if (lvl.storm || lvl.wind !== undefined) fail(`mission ${m} : ni orage ni vent pour le Bombardier`);
+    for (const e of lvl.enemies) if (lvl.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un ennemi part dans un mur`);
+    if (!lvl.tiles.some((t) => t === Tile.Tunnel)) fail(`mission ${m} : pas de tunnel où s’abriter`);
+  }
+  if (getMission(50).night || !getMission(100).night || getMission(150).night) fail('un Bombardier sur deux se bat de nuit, à partir du 100ᵉ');
+  if (!isBossKind('bombard') || killXp('bombard') !== 8 || SPECS.bombard.hp !== 8) fail('le Bombardier devrait être un boss à 8 PV');
+  if (RUSH_BOSSES.includes('bombard' as never)) fail('la ronde des boss a changé en cours de semaine');
+  {
+    // it charges (FLAG_CHARGING), then a row of cannonballs lands across the line to the player, one after the other
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const b = g.addTank('bombard', 99, 16.5, 8.5, 0);
+    const ally = g.addTank('ash', 99, 5.5, 10.9, 0);
+    b.ai = undefined; ally.ai = undefined;
+    g.frozen = false;
+    let flagged = false;
+    for (let i = 0; i < 30 * 8 && !g.lobs.length; i++) {
+      g.step(new Map());
+      if (g.buffFlags(b) & FLAG_CHARGING) flagged = true;
+      g.events = [];
+    }
+    if (!flagged) fail('pas d’annonce (FLAG_CHARGING) avant la salve');
+    if (g.lobs.length < 3) fail(`rangée trop courte (${g.lobs.length} boulets)`);
+    const xs = g.lobs.map((l) => l.x1);
+    if (Math.max(...xs) - Math.min(...xs) > 0.6) fail('la rangée n’est pas en travers de la ligne de tir');
+    if (g.lobs.some((l) => Math.hypot(l.x1 - ally.x, l.y1 - ally.y) < MORTAR_BLAST + ally.r + 0.4)) fail('un boulet tombe sur son allié');
+    const durs = g.lobs.map((l) => l.dur);
+    if (new Set(durs).size < 3) fail('les boulets tombent tous en même temps');
+    if (!g.lobs.some((l) => Math.hypot(l.x1 - p.x, l.y1 - p.y) < 1)) fail('aucun boulet sur le joueur');
+    // stepping out along the line of fire (toward the boss) saves the player
+    p.x = 8.5;
+    for (let i = 0; i < 30 * 3; i++) { g.step(new Map()); g.events = []; }
+    if (!p.alive) fail('sortir de la rangée ne protège pas');
+    if (!ally.alive || !b.alive || b.hp !== 8) fail('la salve a touché son camp');
+    // enraged: a longer row, and a second one behind it
+    g.setHp(b, 4, 8);
+    const before = g.lobs.length;
+    const n = g.barrage(b);
+    if (n < 9 || g.lobs.length - before !== n) fail(`en colère, deux rangées attendues (${n} boulets)`);
+  }
+  // in the workshop too
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'B' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Bombardier refusé (${checkAtelier(map)})`);
+  if (decodeAtelier(encodeAtelier({ name: 'Boum', map }))?.map[8][15] !== 'B') fail('atelier : le Bombardier se perd dans le code');
+  // AI duos beat it now and then, and the fight stays cheap
+  let cleared = 0, spent = 0, steps = 0, landed = 0;
+  for (let run = 0; run < 4 || (cleared === 0 && run < 8); run++) {
+    const lvl = getMission(run % 2 ? 100 : 50);
+    const s2 = new Game(lvl.tiles, lvl.belts);
+    if (lvl.night) s2.night = true;
+    for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      landed += s2.events.filter((e) => e[0] === 'land').length;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (landed < 10) fail(`le Bombardier ne tire presque pas (${landed} boulets)`);
+  if (process.exitCode !== 1) console.log(`Bombardier OK (${cleared} partie(s) gagnée(s) par l’IA, ${landed} boulets tombés, ${per.toFixed(3)} ms/tick)`);
 }

@@ -1,7 +1,7 @@
 {
-  "iteration": 34,
+  "iteration": 35,
   "date": "2026-11-15",
-  "title": "Le Mortier",
+  "title": "Le Bombardier",
   "journal": [
     {
       "iteration": 1,
@@ -413,6 +413,18 @@
         "Ses boulets cassent le liège, font sauter les mines et peuvent faire tomber les ponts… même sur ses propres alliés s’ils traînent là.",
         "Deux nouvelles missions, « Tir en cloche » (43) et « Le pilonnage » (44), puis des Mortiers dans les missions générées à partir de la 45ᵉ.",
         "Le Mortier rejoint l’atelier et le bestiaire, et le ralenti raconte « Un boulet tombé du ciel ! »."
+      ]
+    },
+    {
+      "iteration": 35,
+      "date": "2026-11-15",
+      "title": "Le Bombardier",
+      "notes": [
+        "Un cinquième boss entre dans la ronde des missions : le Bombardier, un mortier géant couleur prune cerclé d’or, qui t’attend à la 50ᵉ mission, puis toutes les 50 (les autres boss se décalent d’un cran à partir de la 60ᵉ).",
+        "Il pilonne des rangées entières : une ligne de cercles rouges se dessine en travers de ta route, et les boulets tombent l’un après l’autre, d’un bout à l’autre. Ne longe pas la rangée : avance vers lui ou recule !",
+        "À mi-vie, il se met en colère : la rangée s’allonge et une deuxième tombe juste derrière. Le toit d’un tunnel reste le seul abri sûr, et de près il n’a qu’un petit canon.",
+        "Une mission sur deux, à partir de la 100ᵉ, le Bombardier tire de nuit : seuls ses cercles rouges éclairent la table. On peut aussi le poser dans l’atelier.",
+        "Le bestiaire de l’accueil compte maintenant vingt et un tanks et se souvient de ceux que tu as croisés : les autres restent grisés jusqu’à votre première rencontre."
       ]
     }
   ]

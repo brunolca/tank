@@ -9,6 +9,7 @@ export const BOSS_R = 0.62;
 export const DRILL_R = 0.56;
 export const THUNDER_R = 0.58;
 export const SOWER_R = 0.6;
+export const BOMBARD_R = 0.64;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
 export const MINE_BLAST = 1.55;
@@ -50,7 +51,8 @@ export type TankKind =
   | 'sower'
   | 'magnet'
   | 'frost'
-  | 'mortar';
+  | 'mortar'
+  | 'bombard';
 
 export interface TankSpec {
   speed: number;
@@ -101,6 +103,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   frost: { speed: 2.1, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.6, turretSpeed: 2.4, mines: 0, skill: 1, reaction: 0.5, aimError: 0.08, label: 'Givré' },
   // iteration 34: no straight gun at all, it lobs wooden cannonballs over the walls onto its foes (see MORTAR_*, Lob in sim.ts)
   mortar: { speed: 0.95, maxBullets: 0, bounces: 0, rocket: false, fireCd: 9, turretSpeed: 2.6, mines: 0, skill: 0, reaction: 0.6, aimError: 0.1, label: 'Mortier' },
+  // iteration 35: the fifth boss, a giant mortar that walks rows of cannonballs across the table (see BOMBARD_*); up close, a little straight gun
+  bombard: { speed: 0.9, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.5, aimError: 0.07, hp: 8, size: BOMBARD_R, label: 'Bombardier' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -137,6 +141,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   magnet: 0x474c58,
   frost: 0x9fd4ee,
   mortar: 0xc9a66b,
+  bombard: 0x5e3f7f,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -171,8 +176,8 @@ export const DRILL_BLAST = 1.45;
 export const DRILL_RING_SHOTS = 8;
 /** Flags bit: the Foreur is under the table (nothing can touch it, it touches nothing). */
 export const FLAG_BURROW = 512;
-/** The four bosses that take turns every ten missions. */
-export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower';
+/** The five bosses that take turns every ten missions (the Bombardier since iteration 35). */
+export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower' || k === 'bombard';
 
 // ------------------------------------------------------------------ the Grondeur (iteration 18): the boss that calls the lightning
 /** Seconds between two calls (calm, then enraged). */
@@ -226,6 +231,21 @@ export const MORTAR_BLAST = 0.85;
 /** How far off the mark it may land (tiles), and how far ahead of a moving foe it aims (along its hull). */
 export const MORTAR_SPREAD = 0.55;
 export const MORTAR_LEAD = 1.1;
+
+// ------------------------------------------------------------------ the Bombardier (iteration 35): the boss that shells whole rows
+/** Seconds between two barrages (calm, then enraged); the first one comes a few seconds into the fight. */
+export const BOMBARD_EVERY: [number, number] = [6.4, 4.6];
+/** Seconds it holds still, its big barrel trembling toward the target, before the barrage (flag FLAG_CHARGING meanwhile). */
+export const BOMBARD_WARN = 1.0;
+/** Cannonballs in a row (calm, then enraged), the gap between two of them (tiles), and the delay from one landing to the next (s). */
+export const BOMBARD_ROW: [number, number] = [5, 7];
+export const BOMBARD_GAP = 1.2;
+export const BOMBARD_STEP = 0.16;
+/** Enraged, a second row lands this far behind the first (tiles), this long after it (s). */
+export const BOMBARD_BEHIND = 1.9;
+export const BOMBARD_LATER = 0.55;
+/** Flight time of its cannonballs (a little longer than the Mortier's: the rings give time to run). */
+export const BOMBARD_FLIGHT = 1.15;
 
 // ------------------------------------------------------------------ the Aimant (iteration 27): the magnet tank
 /** Seconds its field stays on (it pulls in and catches every shell around it), then off (it can be hit). */

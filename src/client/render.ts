@@ -1035,6 +1035,49 @@ function buildTank(info: TankInfo): TankView {
     view.tube = tube;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'bombard') {
+    // the Bombardier (iteration 35): a giant toy mortar on a gun carriage, bound with gold hoops, a short straight gun in
+    // front for close quarters, a pyramid of cannonballs and two ammunition crates on the back deck
+    barrel.geometry = geo.shortBarrel;
+    barrel.position.x = 0.3;
+    muzzle.position.x = 0.46;
+    const mount = new THREE.Group();
+    mount.position.set(-0.06, 0.05, 0);
+    mount.scale.setScalar(1.35);
+    const tube = new THREE.Group();
+    tube.position.set(0.04, 0.1, 0);
+    const pivot = new THREE.Group();
+    pivot.rotation.z = MORTAR_TILT + 0.12;
+    const pipe = new THREE.Mesh(mortarGeo.tube, barrelMat);
+    pipe.rotation.z = -Math.PI / 2;
+    pipe.position.x = 0.2;
+    const lip = new THREE.Mesh(mortarGeo.lip, goldMat);
+    lip.rotation.y = Math.PI / 2;
+    lip.position.x = 0.4;
+    pivot.add(pipe, lip);
+    for (const x of [0.04, 0.16, 0.28]) {
+      const hoop = new THREE.Mesh(mortarGeo.hoop, goldMat);
+      hoop.rotation.y = Math.PI / 2;
+      hoop.position.x = x;
+      pivot.add(hoop);
+    }
+    tube.add(pivot);
+    mount.add(tube);
+    turret.add(mount);
+    for (const [x, y, z] of [[-0.36, 0.43, -0.1], [-0.36, 0.43, 0.1], [-0.2, 0.43, -0.1], [-0.2, 0.43, 0.1], [-0.28, 0.56, 0]]) {
+      const b = new THREE.Mesh(mortarGeo.ball, cannonballMat);
+      b.position.set(x, y, z);
+      hull.add(b);
+    }
+    for (const z of [-0.27, 0.27]) {
+      const crate = new THREE.Mesh(geo.stud, goldMat);
+      crate.scale.set(1.6, 1.2, 1.6);
+      crate.position.set(0.36, 0.37, z);
+      hull.add(crate);
+    }
+    view.tube = tube;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
   if (armorGroup) {
     view.armor = armorGroup;
     const collar = turret.getObjectByName('collar');

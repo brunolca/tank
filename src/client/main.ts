@@ -378,6 +378,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
   const sowerFight = enemies.some((e) => e.kind === 'sower');
+  const bombardFight = enemies.some((e) => e.kind === 'bombard');
+  if (online && coopLike(msg.mode)) meetEnemies(enemies.map((e) => e.kind));
   if (coopLike(msg.mode)) {
     const kinds = [...new Set(enemies.map((e) => e.kind))];
     if (msg.daily) {
@@ -388,12 +390,12 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       const st = rushState?.stage ?? msg.mission;
       const finale = st >= RUSH_STAGES;
       banner(finale ? `Ronde des boss · le bouquet final${wx}` : `Ronde des boss · boss ${st}/${RUSH_STAGES}${wx}`, msg.name,
-        finale ? 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !' : bossTip(thunderFight, sowerFight, drillFight), `intro boss rush${wxCls}`);
+        finale ? 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !' : bossTip(thunderFight, sowerFight, drillFight, bombardFight), `intro boss rush${wxCls}`);
     } else if (msg.mode === 'taupe') {
       banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
     } else if (msg.mode === 'atelier') {
       banner(`Atelier · mission maison${wx}`, msg.name, `Tanks ennemis : ${enemies.length} · ${ATELIER_LIVES} vies`, `intro atelier${wxCls}${bossFight ? ' boss' : ''}`);
-    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, bossTip(thunderFight, sowerFight, drillFight), `intro boss${thunderFight ? ' storm' : ''}`);
+    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, bossTip(thunderFight, sowerFight, drillFight, bombardFight), `intro boss${thunderFight ? ' storm' : ''}`);
     else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
     const sub = $('#banner .b-sub');
     sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
@@ -405,6 +407,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (sowerFight) setTimeout(() => toast('Le Semeur : ses graines mûres l’épargnent, mais une graine touchée par ton obus explose aussitôt… et le blesse s’il est à côté !', 4600), 2200);
+  else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
   else if (levelFog !== undefined) setTimeout(() => toast(coopLike(msg.mode) ? 'Brouillard : au cœur de la brume, un tank ne se voit que de près… ou quand il tire. Les ennemis aussi te perdent de vue !' : 'Brouillard : cache-toi dans la brume ! Chaque tir trahit ta position.', 4600), 2200);
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
@@ -424,8 +427,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
 }
 
 /** One line on how to beat the boss of the table (the intro banner of a boss fight). */
-function bossTip(thunder: boolean, sower: boolean, drill: boolean) {
-  return thunder ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !'
+function bossTip(thunder: boolean, sower: boolean, drill: boolean, bombard = false) {
+  return bombard ? 'Il pilonne des rangées entières de boulets. Ne longe pas la rangée : avance vers lui ou recule !'
+    : thunder ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !'
     : sower ? 'Il sème des graines géantes qui explosent. Tire sur celles qui poussent à ses pieds !'
     : drill ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !'
     : 'Il encaisse plusieurs coups. Gare à sa salve circulaire !';
@@ -755,7 +759,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
         renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
-        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : 0xf2c14e), i * 180);
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : kind === 'bombard' ? 0xc9a66b : 0xf2c14e), i * 180);
         floater(e[1], e[2], `${specOf(kind).label} vaincu !`, 0xf2c14e);
         if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
         if (online && bossFight) setMusicIntensity(1);
@@ -797,7 +801,8 @@ function handleEvent(e: GameEvent, audible: boolean) {
       break;
     case 'lob': // « Le Mortier » (iteration 34): the barrel thumps, the cannonball is on its way (its ring shows where)
       renderer.lobShot(e[6], e[1], e[2], e[3], e[4]);
-      if (audible) sfx.lob();
+      // the Bombardier's barrage (iteration 35) fires a whole row in one go: one thump is enough
+      if (audible && performance.now() - lastLobSound > 90) { sfx.lob(); lastLobSound = performance.now(); }
       break;
     case 'land':
       renderer.lobLand(e[1], e[2]);
@@ -1002,6 +1007,7 @@ function renderBuffs(flags: number) {
 
 let bossFight = false;
 let bossKey = '';
+let lastLobSound = 0;
 const charging = new Set<number>();
 const alerted = new Set<number>();
 let lastAlert = 0;
@@ -1013,7 +1019,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   const bar = $('#boss-bar');
   for (const t of tanks) {
     const on = !!((t.fx ?? 0) & FLAG_CHARGING) && t.alive;
-    if (on && !charging.has(t.id) && online && (renderer.tankKind(t.id) === 'boss' || renderer.tankKind(t.id) === 'sower')) sfx.bossCharge();
+    if (on && !charging.has(t.id) && online && (renderer.tankKind(t.id) === 'boss' || renderer.tankKind(t.id) === 'sower' || renderer.tankKind(t.id) === 'bombard')) sfx.bossCharge();
     if (on) charging.add(t.id); else charging.delete(t.id);
     const seen = !!((t.fx ?? 0) & FLAG_ALERT) && t.alive;
     if (seen && !alerted.has(t.id) && online && performance.now() - lastAlert > 400) { sfx.alert(); lastAlert = performance.now(); }
@@ -1036,6 +1042,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   bar.classList.toggle('drill', bossKind === 'drill');
   bar.classList.toggle('thunder', bossKind === 'thunder');
   bar.classList.toggle('sower', bossKind === 'sower');
+  bar.classList.toggle('bombard', bossKind === 'bombard');
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
@@ -2283,6 +2290,7 @@ const BESTIARY: [TankKind, string][] = [
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
   ['sower', 'boss : sème des graines géantes qui explosent'],
+  ['bombard', 'boss : pilonne des rangées entières de boulets, d’un bout à l’autre'],
 ];
 // the crates (iteration 29): what each bonus does, in its colour
 const CRATES: [BonusKind, string][] = [
@@ -2294,7 +2302,23 @@ const CRATES: [BonusKind, string][] = [
   ['heavy', 'de gros obus qui traversent le liège et brisent les obus d’en face'],
 ];
 $('#crates-list').innerHTML = CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><span><b>${escapeHtml(BONUS_INFO[k].label)}</b> : ${escapeHtml(line)}</span></li>`).join('');
-$('#bestiary-list').innerHTML = BESTIARY.map(([k, line]) => `<li class="${isBossKind(k) ? 'boss' : ''}" style="--c:${hex(enemyColor(k))}"><span><b>${escapeHtml(specOf(k).label)}</b> : ${escapeHtml(line)}</span></li>`).join('');
+// enemies met in the campaign, the challenges, the boss rush… (iteration 35): the others are greyed out in the bestiary
+const MET_KEY = 'tanks.vus';
+const metKinds = new Set<string>((() => { try { const v = JSON.parse(localStorage.getItem(MET_KEY) ?? '[]'); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })());
+function meetEnemies(kinds: string[]) {
+  let fresh = false;
+  for (const k of kinds) if (BESTIARY.some(([b]) => b === k) && !metKinds.has(k)) { metKinds.add(k); fresh = true; }
+  if (!fresh) return;
+  try { localStorage.setItem(MET_KEY, JSON.stringify([...metKinds])); } catch {}
+  renderBestiary();
+}
+function renderBestiary() {
+  const met = (k: string) => demoMode || metKinds.has(k);
+  const n = BESTIARY.filter(([k]) => met(k)).length;
+  $('#bestiary-count').textContent = n >= BESTIARY.length ? `Tous rencontrés : ${n} / ${BESTIARY.length}` : `Rencontrés : ${n} / ${BESTIARY.length}`;
+  $('#bestiary-list').innerHTML = BESTIARY.map(([k, line]) => `<li class="${isBossKind(k) ? 'boss' : ''}${met(k) ? '' : ' unmet'}" style="--c:${hex(enemyColor(k))}"><span><b>${escapeHtml(specOf(k).label)}</b> : ${escapeHtml(line)}${met(k) ? '' : ' <i>(pas encore croisé)</i>'}</span></li>`).join('');
+}
+renderBestiary();
 $('#iteration-stamp').textContent = `Itération ${META.iteration}`;
 $('#iteration-stamp').title = META.title;
 $('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; sfx.click(); });

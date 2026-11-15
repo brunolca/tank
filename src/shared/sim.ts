@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -189,7 +189,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -324,7 +324,7 @@ export class Game {
       buffs: { shield: false, bounce: 0, turbo: 0, fan: 0, invuln: 0 },
       r: spec.size ?? TANK_R, hp: spec.hp ?? 1, maxHp: spec.hp ?? 1, reveal: 0, alert: false, vx: 0, vy: 0,
     };
-    if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : kind === 'sower' ? 3.2 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
+    if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : kind === 'sower' ? 3.2 : kind === 'bombard' ? 3.4 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind === 'magnet') t.mag = { on: false, t: 1.2 + Math.random() * 1.6, held: 0 };
     if (kind === 'mortar') t.mortar = { t: MORTAR_FIRST + Math.random() * 1.2, warn: 0, x: x, y: y };
@@ -756,18 +756,25 @@ export class Game {
 
   updateBoss(t: Tank) {
     const bs = t.boss!;
-    const thunder = t.kind === 'thunder', sower = t.kind === 'sower';
+    const thunder = t.kind === 'thunder', sower = t.kind === 'sower', bombard = t.kind === 'bombard';
     if (bs.warn > 0) {
       bs.warn -= DT;
-      if (bs.warn <= 0) { if (thunder) this.thunderCall(t); else if (sower) this.sow(t); else this.bossVolley(t); }
+      if (bombard) t.turret = rotateToward(t.turret, Math.atan2(bs.ty - t.y, bs.tx - t.x), 5 * DT); // its big barrel swings toward the row
+      if (bs.warn <= 0) { if (thunder) this.thunderCall(t); else if (sower) this.sow(t); else if (bombard) this.barrage(t); else this.bossVolley(t); }
       return;
     }
     bs.volleyT -= DT;
     if (bs.volleyT <= 0) {
       // the Grondeur only raises its rod when someone is out there to strike
       if (thunder && !this.tanks.some((o) => o.alive && o.team !== t.team && !under(o))) { bs.volleyT = 0.5; return; }
-      bs.warn = thunder ? THUNDER_WARN : sower ? SOWER_WARN : BOSS_VOLLEY_WARN;
-      bs.volleyT = (thunder ? THUNDER_EVERY : sower ? SOWER_EVERY : BOSS_VOLLEY_EVERY)[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
+      if (bombard) {
+        // the Bombardier picks its foe now (night, fog and tunnels hide them as usual) and aims while it charges
+        const f = this.barrageFoe(t);
+        if (!f) { bs.volleyT = 0.5; return; }
+        bs.tx = r2(f.x); bs.ty = r2(f.y);
+      }
+      bs.warn = thunder ? THUNDER_WARN : sower ? SOWER_WARN : bombard ? BOMBARD_WARN : BOSS_VOLLEY_WARN;
+      bs.volleyT = (thunder ? THUNDER_EVERY : sower ? SOWER_EVERY : bombard ? BOMBARD_EVERY : BOSS_VOLLEY_EVERY)[bs.rage ? 1 : 0] * (0.85 + Math.random() * 0.3);
     }
   }
 
@@ -1067,9 +1074,9 @@ export class Game {
   }
 
   /** Lob a cannonball from the Mortier's barrel to (x, y). */
-  lob(t: Tank, x: number, y: number): Lob {
+  lob(t: Tank, x: number, y: number, base = MORTAR_FLIGHT): Lob {
     const d = Math.hypot(x - t.x, y - t.y);
-    const dur = r2(MORTAR_FLIGHT + MORTAR_FLIGHT_PER * d);
+    const dur = r2(base + MORTAR_FLIGHT_PER * d);
     const lb: Lob = { id: this.nextId++, owner: t.id, team: t.team, x0: r2(t.x), y0: r2(t.y), x1: x, y1: y, t: 0, dur };
     this.lobs.push(lb);
     t.turret = Math.atan2(y - t.y, x - t.x);
@@ -1113,6 +1120,51 @@ export class Game {
       }
     }
     this.collapseBridges(x, y, R, owner);
+  }
+
+  // -------------------------------------------------------------- the Bombardier (iteration 35)
+
+  /** The foe the Bombardier shells next: one it can make out, preferably far enough for its barrel (else any of them). */
+  barrageFoe(t: Tank): Tank | undefined {
+    const foes = this.tanks.filter((o) => o.alive && o.team !== t.team && !under(o) && !o.chill && this.canSee(t, o));
+    if (!foes.length) return undefined;
+    const far = foes.filter((o) => Math.hypot(o.x - t.x, o.y - t.y) >= MORTAR_MIN);
+    const pool = far.length ? far : foes;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /**
+   * The Bombardier's barrage (iteration 35): a row of cannonballs across the line from the boss to its foe, centred on
+   * the foe (where it is now if it stayed near the spot aimed at, else on that spot), landing one after the other from
+   * one end to the other (a wall of blasts that sweeps sideways: step toward the boss or back, don't run along the row). Enraged, the row is
+   * longer and a second one falls behind it. Never right on itself or on its friends. Returns the cannonballs thrown.
+   */
+  barrage(t: Tank): number {
+    const bs = t.boss!;
+    const rage = bs.rage ? 1 : 0;
+    const f = this.tanks.find((o) => o.alive && o.team !== t.team && !under(o) && Math.hypot(o.x - bs.tx, o.y - bs.ty) < 1.6);
+    const cx = f ? f.x : bs.tx, cy = f ? f.y : bs.ty; // it follows its foe a little while it charges
+    const a = Math.atan2(cy - t.y, cx - t.x);
+    const ax = -Math.sin(a), ay = Math.cos(a); // across the line of fire
+    const n = BOMBARD_ROW[rage];
+    const dir = Math.random() < 0.5 ? 1 : -1; // which end the sweep starts from
+    let thrown = 0;
+    const rows = rage ? 2 : 1;
+    for (let row = 0; row < rows; row++) {
+      const bx = cx + Math.cos(a) * BOMBARD_BEHIND * row, by = cy + Math.sin(a) * BOMBARD_BEHIND * row;
+      for (let i = 0; i < n; i++) {
+        const k = (i - (n - 1) / 2) * dir;
+        const x = r2(Math.max(0.6, Math.min(W - 0.6, bx + ax * k * BOMBARD_GAP)));
+        const y = r2(Math.max(0.6, Math.min(H - 0.6, by + ay * k * BOMBARD_GAP)));
+        if (this.tanks.some((o) => o.alive && o.team === t.team && Math.hypot(o.x - x, o.y - y) < MORTAR_BLAST + o.r + 0.5)) continue;
+        if (this.lobs.some((l) => Math.hypot(l.x1 - x, l.y1 - y) < 0.5)) continue;
+        this.lob(t, x, y, BOMBARD_FLIGHT + i * BOMBARD_STEP + row * BOMBARD_LATER);
+        thrown++;
+      }
+    }
+    t.turret = a;
+    if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; }
+    return thrown;
   }
 
   /** Cannonballs in the air for the snapshot: [id, x0, y0, x1, y1, seconds in the air, flight time]. */
@@ -1859,7 +1911,7 @@ export class Game {
     }
     ai.seenX = foe.x; ai.seenY = foe.y; ai.seenT = 5;
     // the boss holds still (and holds its fire) while its volley charges
-    if (t.boss && t.boss.warn > 0) { t.turret += DT * 2.5; return; }
+    if (t.boss && t.boss.warn > 0) { if (t.kind !== 'bombard') t.turret += DT * 2.5; return; }
     if (t.mortar && t.mortar.warn > 0) return; // the Mortier holds still while it aims (updateMortar turns its barrel)
 
     if (ai.think <= 0) {
@@ -1952,7 +2004,7 @@ export class Game {
   /** Night, nobody in sight: sweep the turret and creep toward the last sighting, or prowl around. */
   private aiProwl(t: Tank) {
     const ai = t.ai!;
-    if (t.boss && t.boss.warn > 0) { t.turret += DT * 2.5; return; }
+    if (t.boss && t.boss.warn > 0) { if (t.kind !== 'bombard') t.turret += DT * 2.5; return; }
     ai.locked = false;
     ai.aimValid = false;
     ai.seenT -= DT;

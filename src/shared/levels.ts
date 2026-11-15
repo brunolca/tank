@@ -8,9 +8,9 @@ import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, W, Tile, TankKind } from './
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
 //         : bridge (iteration 33): a wooden bridge over a pit, tanks drive over it, shells fly over, a mine blast brings it down
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard',
 };
 
 export interface LevelDef {
@@ -1449,25 +1449,78 @@ const SOWER_ARENAS: string[][] = [
   ],
 ];
 
-export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower';
 /**
- * Which boss holds a boss mission, in turn: the Colosse (10, 50, 90…), the Foreur (20, 60, 100…), the Grondeur
- * (30, 70, 110…) and, since iteration 25, the Semeur (40, 80, 120…).
+ * The Bombardier's batteries (iteration 35): it sits at the back behind a parapet; the table is cut by low walls and
+ * cork, with short tunnels here and there (their roofs are the only sure shelter from its rows of cannonballs).
+ */
+const BOMBARD_ARENAS: string[][] = [
+  [
+    '......................',
+    '.1.......o.......#=#..',
+    '.........o............',
+    '.2...#=#.....HH.......',
+    '.............HH....#..',
+    '......oo...........#..',
+    '..................B...',
+    '...#=#....##..........',
+    '..........##...ooo....',
+    '...#=#....##..........',
+    '......................',
+    '......oo...........#..',
+    '.............HH....#..',
+    '.....#=#.....HH.......',
+    '.........o............',
+    '.........o.......#=#..',
+    '......................',
+  ],
+  [
+    '......................',
+    '.1.....#=#............',
+    '..............oo......',
+    '.2..HH..........#=#...',
+    '....HH................',
+    '.........oo...........',
+    '..#=#.........HH......',
+    '..............HH..B...',
+    '.......o..............',
+    '.......o......HH......',
+    '..#=#.........HH......',
+    '.........oo...........',
+    '....HH................',
+    '....HH..........#=#...',
+    '..............oo......',
+    '.......#=#............',
+    '......................',
+  ],
+];
+
+export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower' | 'bombard';
+/**
+ * Which boss holds a boss mission, in turn: the Colosse (10, 60, 110…), the Foreur (20, 70, 120…), the Grondeur
+ * (30, 80, 130…), the Semeur (40, 90, 140…) and, since iteration 35, the Bombardier (50, 100, 150…).
  */
 export function bossOf(mission: number): BossKind {
-  const k = Math.round(mission / 10) % 4;
-  return k === 2 ? 'drill' : k === 3 ? 'thunder' : k === 0 ? 'sower' : 'boss';
+  const k = Math.round(mission / 10) % 5;
+  return k === 2 ? 'drill' : k === 3 ? 'thunder' : k === 4 ? 'sower' : k === 0 ? 'bombard' : 'boss';
 }
 
 /** Endless-mode boss fights: an open arena, the boss and two escorts that get nastier. */
 export function bossLevel(mission: number, who: BossKind = bossOf(mission)): ParsedLevel {
-  const cycle = Math.floor(mission / 40); // how many times the four bosses came round already
+  const cycle = Math.floor(mission / 50); // how many times the five bosses came round already
+  if (who === 'bombard') {
+    const lvl = parseLevel({ name: `Le Bombardier · ${mission}`, map: BOMBARD_ARENAS[Math.max(0, cycle - 1) % BOMBARD_ARENAS.length] });
+    const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
+    lvl.enemies.push({ kind: esc[0], x: 16.5, y: 2.5 }, { kind: esc[1], x: 16.5, y: 14.5 });
+    // every other battery shells you at night, from the 100th (100, 200…): only the red rings light the way
+    if (mission >= 100 && cycle % 2 === 0) { lvl.night = true; lvl.name = `Le Bombardier de nuit · ${mission}`; }
+    return lvl;
+  }
   if (who === 'sower') {
     const lvl = parseLevel({ name: `Le Semeur · ${mission}`, map: SOWER_ARENAS[cycle % SOWER_ARENAS.length] });
     const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
     lvl.enemies.push({ kind: esc[0], x: 19.5, y: 2.5 }, { kind: esc[1], x: 19.5, y: 14.5 });
-    // from the second time round, every other field is sown in the wind (80, 160…; it blows down the table)
-    if (cycle % 2 === 0) { lvl.wind = Math.PI / 2; lvl.name = `Le Semeur dans le vent · ${mission}`; }
+    // every other field is sown in the wind, from the second time round (90, 190…; it blows down the table)
+    if (cycle % 2 === 1) { lvl.wind = Math.PI / 2; lvl.name = `Le Semeur dans le vent · ${mission}`; }
     return lvl;
   }
   if (who === 'thunder') {
@@ -1485,8 +1538,8 @@ export function bossLevel(mission: number, who: BossKind = bossOf(mission)): Par
   const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
   const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
   lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });
-  // every other Colosse from the 50th fights at night (50, 130, 210…)
-  if (mission >= 50 && cycle % 2 === 1) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
+  // every other Colosse from the 60th fights at night (60, 160, 260…)
+  if (mission >= 60 && cycle % 2 === 1) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
   return lvl;
 }
 
