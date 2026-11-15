@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, ICE, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_MINE, KO_SHELL, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -48,6 +48,31 @@ export interface Tank {
   slid?: boolean; // drove this tick (tables with ice): if not, it still slides on
   mag?: MagnetState; // the Aimant (iteration 27)
   chill?: number; // « Gel » (iteration 29): seconds left frozen in an ice cube
+  mortar?: MortarState; // the Mortier (iteration 34)
+}
+
+/** The Mortier: seconds until its next cannonball, the aiming moment before it fires, and where it will land. */
+export interface MortarState {
+  t: number;
+  warn: number; // > 0 while it holds still, barrel raised
+  x: number;
+  y: number;
+}
+
+/**
+ * A cannonball of the Mortier (iteration 34), lobbed over everything: it flies from (x0, y0) to (x1, y1) in `dur`
+ * seconds (shells, walls and tanks pass under it) and bursts where it lands.
+ */
+export interface Lob {
+  id: number;
+  owner: number;
+  team: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  t: number;
+  dur: number;
 }
 
 /** The Aimant: whether its field is on, seconds left in that phase, and the shells it caught. */
@@ -164,7 +189,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -249,6 +274,8 @@ export class Game {
   storm = false;
   stormNext = 3.5 + Math.random() * 1.5;
   bolts: Bolt[] = [];
+  /** « Le Mortier » (iteration 34): cannonballs in the air. */
+  lobs: Lob[] = [];
   /** Seconds left of the last lightning flash: the whole table is lit (the AI sees everyone, even at night). */
   flash = 0;
   /** Conveyor belts (iteration 16): one code per cell (0 none, 1 right, 2 left, 3 up, 4 down), empty when the map has none. */
@@ -300,6 +327,7 @@ export class Game {
     if (isBossKind(kind)) t.boss = { volleyT: kind === 'thunder' ? 4 : kind === 'sower' ? 3.2 : 5, warn: 0, spin: 0, rage: false, dig: 0, digT: kind === 'drill' ? 4 : 0, tx: x, ty: y };
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind === 'magnet') t.mag = { on: false, t: 1.2 + Math.random() * 1.6, held: 0 };
+    if (kind === 'mortar') t.mortar = { t: MORTAR_FIRST + Math.random() * 1.2, warn: 0, x: x, y: y };
     if (kind === 'frost') {
       // its frost turns any table into an ice table: momentum for everyone (and their speed in the snapshots)
       this.ice = true;
@@ -393,6 +421,7 @@ export class Game {
       } else if (t.boss) this.updateBoss(t);
       if (t.build) this.updateMason(t);
       if (t.mag) this.updateMagnet(t);
+      if (t.mortar) this.updateMortar(t);
       t.slid = false;
       if (t.ai) {
         this.updateAI(t);
@@ -408,6 +437,7 @@ export class Game {
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
     this.stepMines(DT);
+    if (this.lobs.length) this.stepLobs(DT);
     if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
     if (this.bonusOn) this.stepBonuses(DT);
     if (this.flags) this.stepFlags(DT);
@@ -985,6 +1015,110 @@ export class Game {
     st.t = a + Math.random() * (b - a);
     this.events.push(['build', cell % W, (cell / W) | 0, t.id]);
     if (t.ai) { t.ai.path = []; t.ai.pathT = 0; }
+  }
+
+  // -------------------------------------------------------------- the Mortier (iteration 34)
+
+  /**
+   * Every few seconds the Mortier picks a foe it can make out (night, fog and tunnels hide them as usual) between
+   * MORTAR_MIN and MORTAR_MAX away, walls or not, holds still for MORTAR_WARN with its barrel raised, then lobs a
+   * cannonball where the foe is heading (a little off the mark). Never where a friend of its stands.
+   */
+  updateMortar(t: Tank) {
+    const st = t.mortar!;
+    if (st.warn > 0) {
+      st.warn -= DT;
+      t.turret = rotateToward(t.turret, Math.atan2(st.y - t.y, st.x - t.x), 6 * DT);
+      if (st.warn <= 0) this.lob(t, st.x, st.y);
+      return;
+    }
+    st.t -= DT;
+    if (st.t > 0) return;
+    st.t = 0.4; // nobody to aim at right now: look again shortly
+    const spot = this.mortarSpot(t);
+    if (!spot) return;
+    st.x = spot.x; st.y = spot.y;
+    st.warn = MORTAR_WARN;
+    const [a, b] = MORTAR_EVERY;
+    st.t = a + Math.random() * (b - a);
+    if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; }
+  }
+
+  /** Where the Mortier would land its next cannonball (undefined: no foe in range, or only next to its friends). */
+  mortarSpot(t: Tank): Pt | undefined {
+    const foes = this.tanks.filter((o) => {
+      if (!o.alive || o.team === t.team || under(o) || !this.canSee(t, o)) return false;
+      const d = Math.hypot(o.x - t.x, o.y - t.y);
+      return d >= MORTAR_MIN && d <= MORTAR_MAX;
+    });
+    if (!foes.length) return undefined;
+    const f = foes[Math.floor(Math.random() * foes.length)];
+    for (let tries = 0; tries < 8; tries++) {
+      // half the time it aims where the foe is heading (along its hull), the rest of the time right at it
+      const lead = tries < 4 && Math.random() < 0.5 ? MORTAR_LEAD * Math.random() : 0;
+      const a = Math.random() * Math.PI * 2, off = Math.random() * MORTAR_SPREAD * (tries < 4 ? 1 : 1.8);
+      const x = r2(Math.max(0.6, Math.min(W - 0.6, f.x + Math.cos(f.body) * lead + Math.cos(a) * off)));
+      const y = r2(Math.max(0.6, Math.min(H - 0.6, f.y + Math.sin(f.body) * lead + Math.sin(a) * off)));
+      if (Math.hypot(x - t.x, y - t.y) < MORTAR_MIN - 0.4) continue;
+      if (this.tanks.some((o) => o.alive && o.team === t.team && Math.hypot(o.x - x, o.y - y) < MORTAR_BLAST + o.r + 0.6)) continue;
+      return { x, y };
+    }
+    return undefined;
+  }
+
+  /** Lob a cannonball from the Mortier's barrel to (x, y). */
+  lob(t: Tank, x: number, y: number): Lob {
+    const d = Math.hypot(x - t.x, y - t.y);
+    const dur = r2(MORTAR_FLIGHT + MORTAR_FLIGHT_PER * d);
+    const lb: Lob = { id: this.nextId++, owner: t.id, team: t.team, x0: r2(t.x), y0: r2(t.y), x1: x, y1: y, t: 0, dur };
+    this.lobs.push(lb);
+    t.turret = Math.atan2(y - t.y, x - t.x);
+    t.reveal = NIGHT_REVEAL; // the thump of the barrel gives it away at night
+    this.events.push(['lob', lb.x0, lb.y0, x, y, dur, t.id]);
+    return lb;
+  }
+
+  stepLobs(dt: number) {
+    for (const lb of this.lobs) {
+      lb.t += dt;
+      if (lb.t >= lb.dur) this.land(lb);
+    }
+    this.lobs = this.lobs.filter((lb) => lb.t < lb.dur);
+  }
+
+  /**
+   * A cannonball lands: tanks in reach are destroyed (a tunnel's roof shelters them), shells are swept away, mines go
+   * off, cork is blown up and bridges fall. The blast belongs to the Mortier, even if it was destroyed meanwhile.
+   */
+  land(lb: Lob) {
+    const { x1: x, y1: y } = lb;
+    const R = MORTAR_BLAST;
+    this.events.push(['land', x, y, lb.owner]);
+    const owner = this.tankById(lb.owner);
+    for (const t of this.tanks) {
+      if (t.alive && !this.inTunnel(t) && Math.hypot(t.x - x, t.y - y) < R + t.r * 0.4) this.killTank(t, owner, KO_LOB);
+    }
+    for (const b of this.bullets) if (!b.dead && Math.hypot(b.x - x, b.y - y) < R) b.dead = true;
+    for (const m of this.mines) {
+      if (!m.dead && Math.hypot(m.x - x, m.y - y) < R + 0.3 && (m.fuse < 0 || m.fuse > 0.12)) m.fuse = 0.12;
+    }
+    if (this.frost.size) this.meltFrost(x, y, R);
+    for (let cy = Math.floor(y - 2); cy <= Math.floor(y + 2); cy++) {
+      for (let cx = Math.floor(x - 2); cx <= Math.floor(x + 2); cx++) {
+        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (Math.hypot(cx + 0.5 - x, cy + 0.5 - y) < R + 0.35) {
+          this.tiles[cy * W + cx] = Tile.Empty;
+          this.events.push(['block', cx, cy]);
+        }
+      }
+    }
+    this.collapseBridges(x, y, R, owner);
+  }
+
+  /** Cannonballs in the air for the snapshot: [id, x0, y0, x1, y1, seconds in the air, flight time]. */
+  netLobs(): number[][] | undefined {
+    if (!this.lobs.length) return undefined;
+    return this.lobs.map((lb) => [lb.id, lb.x0, lb.y0, lb.x1, lb.y1, r2(lb.t), lb.dur]);
   }
 
   // -------------------------------------------------------------- the Aimant (iteration 27)
@@ -1613,7 +1747,7 @@ export class Game {
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
       | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
-      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
   /**
@@ -1726,6 +1860,7 @@ export class Game {
     ai.seenX = foe.x; ai.seenY = foe.y; ai.seenT = 5;
     // the boss holds still (and holds its fire) while its volley charges
     if (t.boss && t.boss.warn > 0) { t.turret += DT * 2.5; return; }
+    if (t.mortar && t.mortar.warn > 0) return; // the Mortier holds still while it aims (updateMortar turns its barrel)
 
     if (ai.think <= 0) {
       ai.think = spec.skill >= 2 ? 0.18 : 0.3;
@@ -1917,6 +2052,12 @@ export class Game {
       const d = Math.hypot(dx, dy);
       if (d < BOLT_R + t.r + 0.45) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }
     }
+    // a cannonball of the Mortier is coming down: everyone sees its ring on the floor and clears it (iteration 34)
+    for (const lb of this.lobs) {
+      const dx = t.x - lb.x1, dy = t.y - lb.y1;
+      const d = Math.hypot(dx, dy);
+      if (d < MORTAR_BLAST + t.r + 0.5) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }
+    }
     // the ground shakes where the Foreur is about to burst out: everyone clears the spot
     for (const o of this.tanks) {
       if (o === t || !o.alive || o.boss?.dig !== 3) continue;
@@ -1986,6 +2127,11 @@ export class Game {
       for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++)
         for (let cx = Math.floor(bo.x - 2); cx <= Math.floor(bo.x + 2); cx++)
           if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - bo.x, cy + 0.5 - bo.y) < BOLT_R + 0.5) blocked[cy * W + cx] = 1;
+    }
+    for (const lb of this.lobs) {
+      for (let cy = Math.floor(lb.y1 - 2); cy <= Math.floor(lb.y1 + 2); cy++)
+        for (let cx = Math.floor(lb.x1 - 2); cx <= Math.floor(lb.x1 + 2); cx++)
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - lb.x1, cy + 0.5 - lb.y1) < MORTAR_BLAST + 0.5) blocked[cy * W + cx] = 1;
     }
     for (const o of this.tanks) {
       if (o === t || !o.alive || o.boss?.dig !== 3) continue;

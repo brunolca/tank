@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
@@ -13,6 +13,8 @@ export interface RBonus { id: number; x: number; y: number; kind: number; blink:
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; heavy?: boolean; color?: number } // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number } // seed: a seed of the Semeur (iteration 25), its age in seconds
 /** « Drapeaux » (iteration 24): a flag, state 0 at home, 1 carried by `carrier`, 2 dropped (`left` seconds before it flies home). */
+/** « Le Mortier » (iteration 34): a cannonball in the air, from (x0, y0) to (x1, y1), t seconds into its dur-second flight. */
+export interface RLob { id: number; x0: number; y0: number; x1: number; y1: number; t: number; dur: number }
 export interface RFlag { team: number; x: number; y: number; carrier: number; state: number; left: number }
 
 const PX = 64; // floor texture pixels per tile
@@ -199,6 +201,7 @@ interface TankView {
   shieldGlow?: number;
   magnet?: MagnetView; // the Aimant (iteration 27)
   flake?: THREE.Group; // the Givré (iteration 31): the snowflake of ice crystals spinning on its turret
+  tube?: THREE.Group; // the Mortier (iteration 34): its stubby barrel raised toward the sky
   under?: boolean;
   ice?: THREE.Group; // « Gel » (iteration 29): the ice cube it is frozen in (in the scene, not the tank: it gives away invisible tanks)
   iceT?: number; // seconds since it froze
@@ -517,6 +520,17 @@ const frostGeo = {
   icicle: new THREE.ConeGeometry(0.035, 0.16, 6),
 };
 const frostCrystalMat = new THREE.MeshStandardMaterial({ color: 0xeaf8ff, roughness: 0.08, metalness: 0.2, emissive: 0x7fd0ff, emissiveIntensity: 0.55, transparent: true, opacity: 0.92 });
+// the Mortier (iteration 34): a stubby wide barrel raised toward the sky, a little pyramid of cannonballs on its back deck
+const MORTAR_TILT = 0.9; // elevation of the barrel (radians)
+const mortarGeo = {
+  tube: new THREE.CylinderGeometry(0.105, 0.125, 0.4, 16),
+  lip: new THREE.TorusGeometry(0.105, 0.03, 8, 18),
+  hoop: new THREE.TorusGeometry(0.125, 0.018, 6, 18),
+  ball: new THREE.SphereGeometry(0.085, 14, 10),
+  flight: new THREE.SphereGeometry(0.17, 18, 12),
+};
+const cannonballMat = new THREE.MeshStandardMaterial({ color: 0x3b2f27, roughness: 0.55, metalness: 0.25 });
+const lobShadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
 const skateMat = new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.15, metalness: 0.95, emissive: 0x16222c, emissiveIntensity: 0.4 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
 const steelBitMat = new THREE.MeshStandardMaterial({ color: 0xc9d2da, roughness: 0.25, metalness: 0.9, emissive: 0x15181c, emissiveIntensity: 0.4 });
@@ -988,6 +1002,37 @@ function buildTank(info: TankInfo): TankView {
       }
     }
     view.flake = flake;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'mortar') {
+    // no straight gun: a stubby tube raised toward the sky, bound with brass hoops, and spare cannonballs on the back
+    barrel.visible = false;
+    muzzle.visible = false;
+    const tube = new THREE.Group();
+    tube.position.set(0.04, 0.1, 0);
+    const pivot = new THREE.Group();
+    pivot.rotation.z = MORTAR_TILT;
+    const pipe = new THREE.Mesh(mortarGeo.tube, barrelMat);
+    pipe.rotation.z = -Math.PI / 2;
+    pipe.position.x = 0.2;
+    const lip = new THREE.Mesh(mortarGeo.lip, barrelMat);
+    lip.rotation.y = Math.PI / 2;
+    lip.position.x = 0.4;
+    pivot.add(pipe, lip);
+    for (const x of [0.08, 0.28]) {
+      const hoop = new THREE.Mesh(mortarGeo.hoop, brassMat);
+      hoop.rotation.y = Math.PI / 2;
+      hoop.position.x = x;
+      pivot.add(hoop);
+    }
+    tube.add(pivot);
+    turret.add(tube);
+    for (const [x, y, z] of [[-0.33, 0.43, -0.09], [-0.33, 0.43, 0.09], [-0.2, 0.43, 0], [-0.28, 0.57, 0]]) {
+      const b = new THREE.Mesh(mortarGeo.ball, cannonballMat);
+      b.position.set(x, y, z);
+      hull.add(b);
+    }
+    view.tube = tube;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (armorGroup) {
@@ -1512,6 +1557,7 @@ export class Renderer {
     this.bullets.clear();
     for (const m of this.mines.values()) { this.scene.remove(m); if (m.userData.ring) this.scene.remove(m.userData.ring); }
     this.mines.clear();
+    this.syncLobs([]);
     for (const c of this.crates.values()) this.removeCrate(c);
     this.crates.clear();
     for (const p of this.portals) {
@@ -2321,6 +2367,13 @@ export class Renderer {
         v.flake.rotation.y += dt * (t.fx && t.fx & FLAG_FROZEN ? 0 : 1.4);
         if (visible && Math.random() < 6 * dt) this.glow.emit({ x: t.x + (Math.random() - 0.5) * 0.6, y: 0.7, z: t.y + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 0.3, vy: 0.35, vz: (Math.random() - 0.5) * 0.3, life: 0.7, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: 0x9fdcff, drag: 1 });
       }
+      if (v.tube) {
+        // the Mortier (iteration 34): aiming, its barrel trembles and swells; it kicks back when it fires
+        const charging = !!((t.fx ?? 0) & FLAG_CHARGING);
+        const k = 1 + (charging ? 0.06 + Math.sin(this.time * 34) * 0.04 : 0) + v.recoil * 0.12;
+        v.tube.scale.set(1, k, k);
+        v.tube.position.x = 0.04 - v.recoil * 0.08;
+      }
       if (v.hopper) {
         const sh = (v.hopper.userData.shake = Math.max(0, (v.hopper.userData.shake ?? 0) - dt * 2.5));
         const charging = !!((t.fx ?? 0) & FLAG_CHARGING);
@@ -2555,7 +2608,7 @@ export class Renderer {
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
       glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
-      col = v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : 0xff5a20;
+      col = v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : v.tube ? 0xffa040 : 0xff5a20;
       if (Math.random() < 60 * dt) {
         // sparks sucked into the hull
         const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
@@ -2941,6 +2994,94 @@ export class Renderer {
         this.mines.delete(id);
       }
     }
+  }
+
+  // ---------------------------------------------------------------- « Le Mortier » (iteration 34)
+
+  private lobs = new Map<number, { ball: THREE.Mesh; shadow: THREE.Mesh; ring: THREE.Mesh; core: THREE.Mesh; puffT: number }>();
+
+  /**
+   * The cannonballs in the air: each flies in a high arc toward its target, its shadow growing on the floor, while a
+   * red ring tightens on the spot where it will land (the warning everyone can read, sound or not).
+   */
+  syncLobs(list: RLob[]) {
+    const seen = new Set<number>();
+    for (const l of list) {
+      seen.add(l.id);
+      let v = this.lobs.get(l.id);
+      if (!v) {
+        const ball = new THREE.Mesh(mortarGeo.flight, cannonballMat);
+        ball.castShadow = true;
+        const shadow = new THREE.Mesh(geo.disc, lobShadowMat.clone());
+        shadow.rotation.x = -Math.PI / 2;
+        const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xff3a24, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(l.x1, 0.045, l.y1);
+        const core = new THREE.Mesh(geo.disc, new THREE.MeshBasicMaterial({ color: 0xff5a30, transparent: true, opacity: 0, depthWrite: false }));
+        core.rotation.x = -Math.PI / 2;
+        core.position.set(l.x1, 0.04, l.y1);
+        core.scale.setScalar(MORTAR_BLAST);
+        this.scene.add(ball, shadow, ring, core);
+        v = { ball, shadow, ring, core, puffT: 0 };
+        this.lobs.set(l.id, v);
+      }
+      const u = Math.min(1, Math.max(0, l.t / l.dur));
+      const d = Math.hypot(l.x1 - l.x0, l.y1 - l.y0);
+      const peak = 1.6 + d * 0.2;
+      const x = l.x0 + (l.x1 - l.x0) * u, z = l.y0 + (l.y1 - l.y0) * u;
+      const h = 0.62 * (1 - u) + 4 * peak * u * (1 - u) + 0.17 * u;
+      v.ball.position.set(x, h, z);
+      v.ball.rotation.x += 0.15;
+      v.shadow.position.set(x, 0.03, z);
+      v.shadow.scale.setScalar(0.12 + 0.1 * (1 - h / (peak + 0.6)));
+      (v.shadow.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.25 * u;
+      // the ring closes in on the blast's edge, flickering faster and faster
+      const flick = 0.5 + 0.5 * Math.sin(this.time * (8 + u * 36));
+      v.ring.scale.setScalar(MORTAR_BLAST * (1 + (1 - u) * 0.9));
+      (v.ring.material as THREE.MeshBasicMaterial).opacity = (0.35 + 0.55 * u) * (0.65 + 0.35 * flick);
+      (v.core.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.2 * u * u;
+      // a thin trail of smoke behind the ball
+      v.puffT -= 1 / 60;
+      if (v.puffT <= 0 && u < 0.97) {
+        v.puffT = 0.05;
+        this.smoke.emit({ x, y: h, z, vy: 0.1, life: 0.5, s0: 0.06, s1: 0.16, c0: 0x9a8f80, c1: 0xd8d0c4, drag: 2 });
+      }
+    }
+    for (const [id, v] of this.lobs) {
+      if (seen.has(id)) continue;
+      this.scene.remove(v.ball, v.shadow, v.ring, v.core);
+      (v.shadow.material as THREE.Material).dispose();
+      (v.ring.material as THREE.Material).dispose();
+      (v.core.material as THREE.Material).dispose();
+      this.lobs.delete(id);
+    }
+  }
+
+  /** The Mortier fires (iteration 34): its barrel kicks back and a puff of smoke rises from it. */
+  lobShot(id: number, x: number, y: number, tx: number, ty: number) {
+    const v = this.tanks.get(id);
+    if (v) { v.recoil = 1; v.seenT = 1.6; }
+    const a = Math.atan2(ty - y, tx - x);
+    const mx = x + Math.cos(a) * 0.3, mz = y + Math.sin(a) * 0.3;
+    for (let i = 0; i < 12; i++) {
+      this.smoke.emit({ x: mx, y: 0.85, z: mz, vx: Math.cos(a) * 0.6 + (Math.random() - 0.5) * 0.6, vy: 1 + Math.random() * 1.2, vz: Math.sin(a) * 0.6 + (Math.random() - 0.5) * 0.6, life: 0.7 + Math.random() * 0.4, s0: 0.08, s1: 0.28, c0: 0xcfc6b8, c1: 0xf2ede6, drag: 2.5 });
+    }
+    this.glow.emit({ x: mx, y: 0.85, z: mz, life: 0.12, s0: 0.35, s1: 0.1, c0: 0xffd080 });
+  }
+
+  /** A cannonball lands: a burst, a shock ring as wide as its reach, splinters and dust. */
+  lobLand(x: number, y: number) {
+    this.explosion(x, y, false, 0xc9a66b);
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.06, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.4, size: MORTAR_BLAST * 1.2 });
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2.5;
+      this.debris.emit({ x, y: 0.2, z: y, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 3, vz: Math.sin(a) * sp, life: 0.9 + Math.random() * 0.5, s0: 0.05, s1: 0.03, c0: Math.random() < 0.5 ? 0xb88a5a : 0x5a4636, c1: 0x3a2a1a, grav: 9, drag: 0.8 });
+    }
+    this.shake = Math.max(this.shake, 0.3);
   }
 
   /** Where the Semeur last sowed: its new seeds fly out of there (iteration 25). */

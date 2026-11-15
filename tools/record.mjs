@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 32, arms: ['canon', 'sapeur'], seconds: 18, bridgeTraps: [1.5], caption: 'Nouveau : les ponts', sub: 'Des ponts de bois enjambent les ravins : les tanks roulent dessus, les obus passent par-dessus' },
-  { mission: 42, arms: ['sapeur', 'canon'], seconds: 16, bridgeMines: [3.5, 9], bridgeTraps: [10], caption: 'Une mine, et crac !', sub: 'Le souffle d’une mine fait tomber le pont… et tout ce qui roule dessus' },
-  { versus: [13], arms: ['ricochet', 'canon', 'fusee', 'sapeur'], seconds: 14, bridgeTraps: [2], caption: 'En versus aussi', sub: 'Coupe la route à tes rivaux : « Le pont a cédé ! »' },
-  { atelier: 8, seconds: 8, caption: 'Dans l’atelier', sub: 'Le pont rejoint la palette : dessine tes ravins' },
-  { mission: 1, arms: ['ricochet', 'canon'], seconds: 12, trickShots: [1.6], caption: 'Le ralenti se passe d’un appui', sub: 'Bouton « Passer › », Espace ou B à la manette' },
+  { mission: 43, arms: ['canon', 'ricochet'], seconds: 16, lobs: [2.5, 8, 12.5], caption: 'Nouveau : le Mortier', sub: 'Il tire en cloche, par-dessus les murs' },
+  { mission: 44, arms: ['ricochet', 'sapeur'], seconds: 16, lobs: [3, 9], caption: 'Le pilonnage : sors du cercle rouge !', sub: 'Le cercle se resserre là où le boulet va tomber' },
+  { mission: 53, arms: ['canon', 'fusee'], seconds: 12, lobs: [2, 7], caption: 'Des Mortiers dès la 45ᵉ mission', sub: 'Un boulet casse le liège, fait sauter les mines… et les ponts' },
+  { bestiary: 5, seconds: 5, caption: 'Au bestiaire', sub: 'Vingt tanks, chacun sa couleur, chacun sa ruse' },
+  { mission: 42, arms: ['sapeur', 'canon'], seconds: 10, bridgeMines: [3], bridgeTraps: [4], caption: 'Et toujours les ponts', sub: 'Une mine, et crac !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -82,6 +82,7 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.lobs ?? []) setTimeout(() => d.lob?.(), s * 1000); // « Le Mortier » (iteration 34): every Mortier fires at once
       for (const s of shot.frostMines ?? []) setTimeout(() => d.frostMine?.(), s * 1000); // a blast melts the Givré's frost (iteration 31)
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)
       for (const s of shot.sows ?? []) setTimeout(() => d.sow?.(), s * 1000); // the Semeur sows (iteration 25)

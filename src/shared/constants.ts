@@ -49,7 +49,8 @@ export type TankKind =
   | 'rampart'
   | 'sower'
   | 'magnet'
-  | 'frost';
+  | 'frost'
+  | 'mortar';
 
 export interface TankSpec {
   speed: number;
@@ -98,6 +99,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   magnet: { speed: 1.25, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.6, turretSpeed: 2.2, mines: 0, skill: 1, reaction: 0.55, aimError: 0.08, label: 'Aimant' },
   // iteration 31: it skates without sliding and leaves a trail of frost behind it, where everyone else slides (see FROST_*)
   frost: { speed: 2.1, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.6, turretSpeed: 2.4, mines: 0, skill: 1, reaction: 0.5, aimError: 0.08, label: 'Givré' },
+  // iteration 34: no straight gun at all, it lobs wooden cannonballs over the walls onto its foes (see MORTAR_*, Lob in sim.ts)
+  mortar: { speed: 0.95, maxBullets: 0, bounces: 0, rocket: false, fireCd: 9, turretSpeed: 2.6, mines: 0, skill: 0, reaction: 0.6, aimError: 0.1, label: 'Mortier' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -133,6 +136,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   sower: 0x86b33a,
   magnet: 0x474c58,
   frost: 0x9fd4ee,
+  mortar: 0xc9a66b,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -204,6 +208,24 @@ export const FROST_LIFE = 9;
 export const FROST_THAW = 1.6;
 /** How far around its centre (tiles) the Givré frosts the floor as it drives. */
 export const FROST_REACH = 0.42;
+
+// ------------------------------------------------------------------ the Mortier (iteration 34): the tank that fires over the walls
+/** Seconds between two cannonballs (min, max); the first one comes MORTAR_FIRST seconds into the mission. */
+export const MORTAR_EVERY: [number, number] = [3.3, 4.6];
+export const MORTAR_FIRST = 2.2;
+/** Seconds it holds still, barrel raised toward the target, before it fires (flag FLAG_CHARGING meanwhile). */
+export const MORTAR_WARN = 0.55;
+/** It only lobs at foes between these distances (tiles): right next to it, it is harmless. */
+export const MORTAR_MIN = 2.8;
+export const MORTAR_MAX = 14;
+/** Flight time of a cannonball: a base plus so much per tile. The target ring shows on the floor all along. */
+export const MORTAR_FLIGHT = 0.95;
+export const MORTAR_FLIGHT_PER = 0.075;
+/** Reach of the landing blast: tanks, shells and cork in it are gone, mines go off, bridges fall. */
+export const MORTAR_BLAST = 0.85;
+/** How far off the mark it may land (tiles), and how far ahead of a moving foe it aims (along its hull). */
+export const MORTAR_SPREAD = 0.55;
+export const MORTAR_LEAD = 1.1;
 
 // ------------------------------------------------------------------ the Aimant (iteration 27): the magnet tank
 /** Seconds its field stays on (it pulls in and catches every shell around it), then off (it can be hit). */
@@ -372,6 +394,7 @@ export const KO_MINE = 1;
 export const KO_BOLT = 2;
 export const KO_DRILL = 3;
 export const KO_FALL = 4; // « Les ponts » (iteration 33): the bridge gave way under it
+export const KO_LOB = 5; // « Le Mortier » (iteration 34): a cannonball fell on it
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */

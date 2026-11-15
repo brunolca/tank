@@ -8,9 +8,9 @@ import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, W, Tile, TankKind } from './
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
 //         : bridge (iteration 33): a wooden bridge over a pit, tanks drive over it, shells fly over, a mine blast brings it down
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar',
 };
 
 export interface LevelDef {
@@ -933,6 +933,52 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 34: the Mortier’s first stand: behind its wall bracket it lobs cannonballs over everything, two greys keep watch
+  43: {
+    name: 'Tir en cloche',
+    map: [
+      '......................',
+      '......................',
+      '..1......H......o.....',
+      '.........H......o..a..',
+      '..2......H............',
+      '.........H....####....',
+      '..............#.......',
+      '..............#.M.....',
+      '.....oo.......#.......',
+      '..............#.......',
+      '.........H....####....',
+      '.........H............',
+      '.........H......o..a..',
+      '.........H......o.....',
+      '......................',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 34: two Mortiers behind tall walls pound a lake shore, pink turrets and a yellow cover them
+  44: {
+    name: 'Le pilonnage',
+    map: [
+      '......................',
+      '..1..............H.M..',
+      '.................H....',
+      '..2.....oooo.....HHH..',
+      '......................',
+      '.......#......p.......',
+      '.......#..............',
+      '.......#....______....',
+      '............______..y.',
+      '.......#....______....',
+      '.......#..............',
+      '.......#......p.......',
+      '......................',
+      '........oooo.....HHH..',
+      '.................H....',
+      '.................H.M..',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -1169,6 +1215,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 42) {
       const rf = rng(mission * 8117 + 71);
       for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'violet' || e.kind === 'marine') && rf() < 0.2) { e.kind = 'frost'; break; }
+    }
+    // the Mortier (iteration 34) digs in from the 45th: one more stream, at most one of them, in place of a slow tank
+    if (opt.seed === undefined && mission > 44) {
+      const ro = rng(mission * 5413 + 79);
+      for (const e of enemies) if ((e.kind === 'brown' || e.kind === 'ash' || e.kind === 'marine' || e.kind === 'green') && ro() < 0.22) { e.kind = 'mortar'; break; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

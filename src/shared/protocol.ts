@@ -64,6 +64,8 @@ export type GameEvent =
   | ['mineSet', number, number]
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number]
+  | ['lob', number, number, number, number, number, number] // x0 y0 x1 y1 flightSeconds tankId: « Le Mortier » (iteration 34) lobs a cannonball (older tabs are told to reload)
+  | ['land', number, number, number] // x y tankId: it lands and bursts there (radius MORTAR_BLAST)
   | ['bridge', number, number] // cx cy: « Les ponts » (iteration 33), that bridge cell gives way and becomes a hole (older tabs are told to reload)
   | ['bonus', number, number, number, number] // x y kind tankId (picked up)
   | ['shield', number, number, number] // x y tankId (a shield absorbed a hit)
@@ -177,7 +179,7 @@ export type ServerMsg =
       left?: number; // « Drapeaux »: seconds left in the round (the clock runs on each side while it is played)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[] } // F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][] } // L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

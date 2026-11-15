@@ -1,4 +1,4 @@
-import { type TankKind, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -9,7 +9,7 @@ import { angDiff, beltStep } from '../shared/physics';
 import { BOSS_NAMES, RUSH_DUO_HP, RUSH_LIVES, RUSH_STAGES, rushLevel, rushOrder, rushDuo, weekLabel, weekNumber } from '../shared/rush';
 import type { BossKind } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, RushState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
-import { Game, driveStep, slideDrive } from '../shared/sim';
+import { Game, driveStep, slideDrive, type Tank } from '../shared/sim';
 import { BRANCHES, TRAINING_SECONDS, XP_PER_GALON, canBuy, cleanRanks, canBuyAny, freeGalons, trainSpec, type Progress, type Ranks } from '../shared/skills';
 import { renderTree } from './skills';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
@@ -18,7 +18,7 @@ import { gustAt, windAngle, windWords } from '../shared/wind';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
 import { Workshop, drawMap } from './atelier';
-import { Renderer, type RBonus, type RBullet, type RFlag, type RMine, type RTank } from './render';
+import { Renderer, type RBonus, type RBullet, type RFlag, type RLob, type RMine, type RTank } from './render';
 import { Film, REPLAYED, koCaption, type Reel } from './replay';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -193,7 +193,7 @@ setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 
 // ------------------------------------------------------------------ online game state
 
-interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; at: number }
+interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; at: number }
 
 let online = false;
 let tiles: number[] = [];
@@ -410,6 +410,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'mortar')) setTimeout(() => toast('Le Mortier tire en cloche, par-dessus les murs : quand un cercle rouge se resserre sous toi, file ! De près, il ne peut plus rien contre toi.', 5000), 2200);
   else if (enemies.some((e) => e.kind === 'frost')) setTimeout(() => toast('Le Givré patine sans jamais glisser et laisse du givre partout où il passe : là, ton tank dérape ! Une mine fait fondre le givre, et il fond tout seul une fois le Givré détruit.', 5000), 2200);
   else if (enemies.some((e) => e.kind === 'magnet')) setTimeout(() => toast('L’Aimant : quand son champ bleu brille, il attire et avale tes obus… puis te les renvoie tous d’un coup. Tire quand le champ s’éteint, ou pose une mine !', 4800), 2200);
   else if (enemies.some((e) => e.kind === 'rampart')) setTimeout(() => toast('Le Rempart renvoie tous les obus qui frappent son bouclier. Prends-le de côté, par-derrière… ou à la mine !', 4400), 2200);
@@ -509,7 +510,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
 }
 
 function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
-  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], at: performance.now() };
+  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], at: performance.now() };
   snaps.push(s);
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
@@ -722,7 +723,10 @@ function onlineFrame(dt: number) {
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = ctfBases ? a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
-  film.frame(dt, tanks, bullets, mines, bonuses, flags);
+  // the Mortier's cannonballs (iteration 34): their time in the air runs on between two snapshots, like everything else
+  const lobs: RLob[] = a.L.map((l) => ({ id: l[0], x0: l[1], y0: l[2], x1: l[3], y1: l[4], t: l[5] + u * DT * (b.k - a.k), dur: l[6] }));
+  renderer.syncLobs(lobs);
+  film.frame(dt, tanks, bullets, mines, bonuses, flags, lobs);
   updateNameTags(tanks);
   const myFlags = latest.T.get(myTankId)?.[5] ?? 0;
   renderBuffs(myFlags & 1 ? myFlags : 0);
@@ -790,6 +794,15 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'block':
       renderer.removeBlock(e[1], e[2]);
       if (audible) sfx.block();
+      break;
+    case 'lob': // « Le Mortier » (iteration 34): the barrel thumps, the cannonball is on its way (its ring shows where)
+      renderer.lobShot(e[6], e[1], e[2], e[3], e[4]);
+      if (audible) sfx.lob();
+      break;
+    case 'land':
+      renderer.lobLand(e[1], e[2]);
+      floater(e[1], e[2], 'Badaboum !', enemyColor('mortar'));
+      if (audible) sfx.lobLand();
       break;
     case 'bridge': // « Les ponts » (iteration 33): the planks fall into the pit
       if (renderer.collapseBridge(e[1], e[2])) floater(e[1] + 0.5, e[2] + 0.5, 'Crac !', 0xc98f55);
@@ -1939,7 +1952,9 @@ function attractFrame(dt: number) {
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = g.flags ? g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
-  film.frame(dt, tanks, bullets, mines, bonuses, flags);
+  const lobs: RLob[] = g.lobs.map((l) => ({ id: l.id, x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1, t: l.t + u * DT, dur: l.dur }));
+  renderer.syncLobs(lobs);
+  film.frame(dt, tanks, bullets, mines, bonuses, flags, lobs);
   const ended = !!attractEnd;
   if (attractOpts.drapeau && attractCtf) {
     const standing = [1, 2].filter((k) => g.aliveCount(k) > 0).length;
@@ -2045,6 +2060,7 @@ function reelFrame(dt: number): number {
   renderer.syncTanks(f.tanks, wasOnline ? myTankId : -1, f.dt);
   renderer.syncBullets(f.bullets, f.dt);
   renderer.syncMines(f.mines);
+  renderer.syncLobs(f.lobs);
   renderer.syncBonuses(f.bonuses);
   if (f.flags) renderer.syncFlags(f.flags);
   updateNameTags(f.tanks);
@@ -2262,6 +2278,7 @@ const BESTIARY: [TankKind, string][] = [
   ['rampart', 'son bouclier renvoie les obus : prends-le de côté'],
   ['magnet', 'son champ avale les obus et te les renvoie : tire quand il s’éteint'],
   ['frost', 'patine et givre le sol derrière lui : là, tout le monde dérape'],
+  ['mortar', 'tire en cloche par-dessus les murs : fuis le cercle rouge, fonce-lui dessus'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -2727,6 +2744,30 @@ if (params.has('demo')) {
       g.mines.push({ id: 910000 + g.tick, owner: heroes[0].id, team: heroes[0].team, x: best.x, y: best.y, t: 0, fuse: 0.7, dead: false });
       if (best.d < 0.6) reelWanted = best.foe; // it is on the bridge: its fall plays again in slow motion
       return Math.max(0.01, best.d);
+    },
+    /**
+     * The Mortier (iteration 34): each Mortier on the table lobs a cannonball at once, a little ahead of the nearest hero
+     * in its range (so the ring, the flight and the dodge show on camera). Returns the number of cannonballs.
+     */
+    lob() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const m of g.tanks) {
+        if (!m.alive || !m.mortar || m.mortar.warn > 0) continue;
+        let best: Tank | undefined, bd = Infinity;
+        for (const h of g.tanks) {
+          if (!h.alive || h.kind !== 'player') continue;
+          const d = Math.hypot(h.x - m.x, h.y - m.y);
+          if (d >= MORTAR_MIN && d <= MORTAR_MAX && d < bd) { bd = d; best = h; }
+        }
+        if (!best) continue;
+        m.mortar.x = Math.max(0.6, Math.min(W - 0.6, best.x + Math.cos(best.body) * 0.6));
+        m.mortar.y = Math.max(0.6, Math.min(H - 0.6, best.y + Math.sin(best.body) * 0.6));
+        m.mortar.warn = MORTAR_WARN;
+        n++;
+      }
+      return n;
     },
     /** A hero fires straight into each Rempart's shield (to catch the shell bouncing back on camera). */
     shieldShot() {

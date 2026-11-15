@@ -4,7 +4,7 @@ import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { KO_LOB, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -1785,6 +1785,119 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des Aimants');
   if (process.exitCode !== 1) console.log(`aimant OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${catches} obus attrapés, ${per.toFixed(3)} ms/tick)`);
+}
+
+// the Mortier (iteration 34): it lobs cannonballs over the walls, the blast lands where the ring was, shelters work
+{
+  const fail = (m: string) => { console.error('MORTIER:', m); process.exitCode = 1; };
+  {
+    // a wall between them: the cannonball flies over it and lands next to the player
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    for (let y = 4; y < 13; y++) tiles[y * W + 10] = Tile.Tall;
+    const g = new Game(tiles);
+    const p = g.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const m = g.addTank('mortar', 99, 15.5, 8.5, 0);
+    m.ai = undefined;
+    g.frozen = false;
+    let lobs = 0, flagged = false, shells = 0;
+    for (let i = 0; i < 30 * 5 && !g.lobs.length; i++) {
+      g.step(new Map());
+      if (g.buffFlags(m) & FLAG_CHARGING) flagged = true;
+      lobs += g.events.filter((e) => e[0] === 'lob').length;
+      g.events = [];
+      shells += g.bullets.length;
+    }
+    if (!lobs || !g.lobs.length) fail('pas de boulet par-dessus le mur');
+    if (!flagged) fail('pas d’annonce (FLAG_CHARGING) avant le tir');
+    if (shells) fail('le Mortier tire des obus droits');
+    const lb = g.lobs[0];
+    if (lb && Math.hypot(lb.x1 - p.x, lb.y1 - p.y) > 2) fail(`boulet loin de sa cible (${Math.hypot(lb.x1 - p.x, lb.y1 - p.y).toFixed(2)})`);
+    if (!g.netLobs() || g.netLobs()![0].length !== 7) fail('instantané des boulets');
+    // the player sits right where it lands: destroyed, credited to the Mortier, with its own cause
+    p.x = lb.x1; p.y = lb.y1;
+    let ko: unknown[] | undefined, land = false;
+    for (let i = 0; i < 30 * 3 && p.alive; i++) {
+      g.step(new Map());
+      for (const e of g.events) { if (e[0] === 'ko') ko = e; if (e[0] === 'land') land = true; }
+      g.events = [];
+    }
+    if (p.alive || !land) fail('le boulet ne détruit pas le joueur sous lui');
+    if (!ko || ko[2] !== m.id || ko[3] !== KO_LOB) fail(`mauvais « ko » (${JSON.stringify(ko)})`);
+  }
+  {
+    // too close: no cannonball; a tunnel roof shelters; it never lobs at its friends; nothing out of range
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 10.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const m = g.addTank('mortar', 99, 10.5 + MORTAR_MIN - 0.6, 8.5, 0);
+    m.ai = undefined;
+    g.frozen = false;
+    for (let i = 0; i < 30 * 6; i++) { g.step(new Map()); g.events = []; }
+    if (g.lobs.length || g.events.some((e) => e[0] === 'lob')) fail('boulet tiré à bout portant');
+    m.x = 10.5 + MORTAR_MAX + 1; p.x = 1.5; m.x = Math.min(W - 0.6, p.x + MORTAR_MAX + 1);
+    let any = false;
+    for (let i = 0; i < 30 * 6; i++) { g.step(new Map()); if (g.lobs.length) any = true; g.events = []; }
+    if (any) fail('boulet tiré hors de portée');
+    m.x = 15.5; p.x = 5.5;
+    const ally = g.addTank('ash', 99, 5.5, 8.5, 0);
+    ally.ai = undefined;
+    any = false;
+    for (let i = 0; i < 30 * 8; i++) { g.step(new Map()); if (g.lobs.some((l) => Math.hypot(l.x1 - ally.x, l.y1 - ally.y) < MORTAR_BLAST + 0.5)) any = true; g.events = []; }
+    if (any) fail('boulet tiré sur un allié');
+  }
+  {
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    tiles[8 * W + 4] = tiles[10 * W + 4] = Tile.Wall;
+    tiles[9 * W + 4] = Tile.Tunnel;
+    tiles[9 * W + 7] = Tile.Cork;
+    const g = new Game(tiles);
+    const p = g.addTank('player', 0, 4.5, 9.5, 0x3d7bff, 'p1', 'P');
+    const m = g.addTank('mortar', 99, 15.5, 9.5, 0);
+    m.ai = undefined;
+    g.frozen = false;
+    g.land({ id: 1, owner: m.id, team: 99, x0: 15.5, y0: 9.5, x1: 4.5, y1: 9.5, t: 0, dur: 1 });
+    if (!p.alive) fail('le toit du tunnel ne protège pas');
+    g.land({ id: 2, owner: m.id, team: 99, x0: 15.5, y0: 9.5, x1: 7.5, y1: 9.5, t: 0, dur: 1 });
+    if (g.tiles[9 * W + 7] !== Tile.Empty) fail('le boulet ne casse pas le liège');
+  }
+  // missions: handmade 43 and 44, then some generated ones; never in the daily challenge nor the mole
+  const mm: number[] = [];
+  for (let mission = 1; mission <= 140; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'mortar')) mm.push(mission);
+  if (!mm.includes(43) || !mm.includes(44)) fail('missions 43 et 44 sans Mortier');
+  if (mm.some((x) => x < 43)) fail('Mortier avant la 43ᵉ mission');
+  if (mm.length < 8) fail(`trop peu de missions avec des Mortiers (${mm.length})`);
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'mortar')) fail('Mortier dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'mortar')) fail('Mortier dans la taupe');
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'M' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Mortier refusé (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Boum', map }));
+  if (back?.map[8][15] !== 'M') fail('atelier : le Mortier se perd dans le code');
+  if (killXp('mortar') !== 2) fail('galons du Mortier');
+  if (SPECS.mortar.maxBullets !== 0 || MORTAR_WARN <= 0) fail('fiche du Mortier');
+  // duos of AI players clear the Mortier missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, landed = 0;
+  for (const mission of [43, 44, mm.find((x) => x > 44)!]) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        landed += s2.events.filter((e) => e[0] === 'land').length;
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des Mortiers');
+  if (landed < 6) fail(`les Mortiers ne tirent presque pas (${landed} boulets)`);
+  if (process.exitCode !== 1) console.log(`mortier OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${landed} boulets tombés, ${per.toFixed(3)} ms/tick)`);
 }
 
 // the Givré (iteration 31): it frosts the floor it drives over, everyone else slides there; frost melts, blasts melt it

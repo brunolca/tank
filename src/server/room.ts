@@ -522,6 +522,8 @@ export class Room extends DurableObject<Env> {
     else if (att.v < 27) tanks = tanks.map((t) => (t.kind === 'magnet' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 31 draw the Givré as a plain grey tank (its frost is not shown, they just see tanks slide)
     if (!att?.v || att.v < 31) tanks = tanks.map((t) => (t.kind === 'frost' ? { ...t, kind: 'ash' } : t));
+    // tabs older than iteration 34 draw the Mortier as a brown turret (its cannonballs are not shown, they just see the blasts)
+    if (!att?.v || att.v < 34) tanks = tanks.map((t) => (t.kind === 'mortar' ? { ...t, kind: 'brown' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,
@@ -741,10 +743,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L });
     }
 
     this.phaseTimer -= DT;
@@ -861,7 +863,7 @@ export class Room extends DurableObject<Env> {
         if (this.settle < 0) this.settle = 0;
         this.settle += DT;
         game.storm = false; // the sky calms down once the mission is won (strikes already announced still fall)
-        if (game.bullets.length === 0 || this.settle >= SETTLE_MAX) {
+        if ((game.bullets.length === 0 && game.lobs.length === 0) || this.settle >= SETTLE_MAX) {
           if (this.mode === 'rush') this.splits.push(this.runTicks - this.splits.reduce((n, v) => n + v, 0)); // time spent on this boss, retries included
           this.setPhase('cleared', this.clearedTraining());
           game.cheer(0); // the AI teammates celebrate (iteration 30)

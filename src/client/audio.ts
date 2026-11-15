@@ -334,6 +334,22 @@ export const sfx = {
     noise(t, 1, 1100, 0.6, 0.9, 'lowpass', 70);
     noise(t + 0.12, 0.5, 4200, 0.9, 0.18, 'bandpass', 2400);
   },
+  /** « Le Mortier » (iteration 34): the hollow « ploc » of the barrel, then the cannonball whistling up and away. */
+  lob() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.16, 160, 60, 0.6, 'sine');
+    noise(t, 0.12, 500, 1.2, 0.35, 'bandpass', 220);
+    tone(t + 0.08, 0.7, 900, 1500, 0.05, 'sine');
+  },
+  /** It lands: a whistle falling, then a wooden thud and a burst. */
+  lobLand() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.45, 120, 35, 0.7, 'sine');
+    noise(t, 0.7, 1600, 0.7, 0.75, 'lowpass', 90);
+    tone(t, 0.08, 420, 180, 0.25, 'triangle');
+  },
   /** « Suis-moi ! » (iteration 20): two cheerful toots of a toy horn. */
   rally() {
     if (!ctx) return;

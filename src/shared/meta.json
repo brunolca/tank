@@ -1,7 +1,7 @@
 {
-  "iteration": 33,
-  "date": "2026-11-14",
-  "title": "Les ponts",
+  "iteration": 34,
+  "date": "2026-11-15",
+  "title": "Le Mortier",
   "journal": [
     {
       "iteration": 1,
@@ -401,6 +401,18 @@
         "Coupe la route aux ennemis, ou attends qu’ils traversent… mais gare à ton propre pont : ils savent poser des mines eux aussi.",
         "Deux nouvelles missions, « Le ravin » (32) et « Les passerelles » (42), des ponts dans les missions générées dès la 45ᵉ, une arène de versus à ponts, et le pont dans la palette de l’atelier.",
         "Le ralenti se passe d’un appui : bouton « Passer › », Espace, Entrée, Échap ou B à la manette."
+      ]
+    },
+    {
+      "iteration": 34,
+      "date": "2026-11-15",
+      "title": "Le Mortier",
+      "notes": [
+        "Un nouvel ennemi couleur sable, le Mortier : il n’a pas de canon droit, il tire des boulets en cloche par-dessus les murs.",
+        "Un cercle rouge se resserre au sol là où le boulet va tomber : sors-en vite ! Le toit d’un tunnel te protège, et de près le Mortier ne peut plus rien contre toi.",
+        "Ses boulets cassent le liège, font sauter les mines et peuvent faire tomber les ponts… même sur ses propres alliés s’ils traînent là.",
+        "Deux nouvelles missions, « Tir en cloche » (43) et « Le pilonnage » (44), puis des Mortiers dans les missions générées à partir de la 45ᵉ.",
+        "Le Mortier rejoint l’atelier et le bestiaire, et le ralenti raconte « Un boulet tombé du ciel ! »."
       ]
     }
   ]

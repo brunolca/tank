@@ -3,10 +3,10 @@
 // again in slow motion, the camera leaning toward it. Nothing goes through the network: it is only a film of what
 // this screen already showed, so it works the same online, alone against rivals and in the demo.
 import type { GameEvent } from '../shared/protocol';
-import { KO_BOLT, KO_DRILL, KO_FALL, KO_MINE } from '../shared/constants';
-import type { RBonus, RBullet, RFlag, RMine, RTank } from './render';
+import { KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE } from '../shared/constants';
+import type { RBonus, RBullet, RFlag, RLob, RMine, RTank } from './render';
 
-export interface FilmFrame { dt: number; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; events: GameEvent[] }
+export interface FilmFrame { dt: number; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; lobs?: RLob[]; events: GameEvent[] } // lobs: the Mortier's cannonballs (iteration 34)
 
 /** Seconds of play kept on film. */
 const KEEP = 5;
@@ -15,7 +15,7 @@ const BEFORE = 1.5;
 const AFTER = 0.75;
 
 /** Events played again in the replay: only what is drawn (no map change, no crate drop, no bubble, no toast). */
-export const REPLAYED = new Set(['shot', 'bounce', 'pop', 'boom', 'mboom', 'shield', 'hurt', 'deflect', 'catch', 'unload', 'volley', 'warp', 'bolt', 'erupt', 'bridge', 'mineSet', 'bonus', 'freeze', 'flag']);
+export const REPLAYED = new Set(['shot', 'bounce', 'pop', 'boom', 'mboom', 'shield', 'hurt', 'deflect', 'catch', 'unload', 'volley', 'warp', 'bolt', 'erupt', 'bridge', 'land', 'mineSet', 'bonus', 'freeze', 'flag']);
 
 export class Film {
   private frames: FilmFrame[] = [];
@@ -24,9 +24,9 @@ export class Film {
 
   event(e: GameEvent) { this.pending.push(e); }
 
-  frame(dt: number, tanks: RTank[], bullets: RBullet[], mines: RMine[], bonuses: RBonus[], flags?: RFlag[]) {
+  frame(dt: number, tanks: RTank[], bullets: RBullet[], mines: RMine[], bonuses: RBonus[], flags?: RFlag[], lobs?: RLob[]) {
     if (!(dt > 0)) dt = 1 / 60;
-    this.frames.push({ dt, tanks, bullets, mines, bonuses, flags, events: this.pending });
+    this.frames.push({ dt, tanks, bullets, mines, bonuses, flags, lobs: lobs?.length ? lobs : undefined, events: this.pending });
     this.pending = [];
     this.span += dt;
     while (this.frames.length > 2 && this.span - this.frames[0].dt > KEEP) this.span -= this.frames.shift()!.dt;
@@ -95,7 +95,7 @@ export class Reel {
   get done() { return this.t >= this.end; }
 
   /** Moves the film on by `realDt` real seconds: the events of the frames passed, and the picture to draw now. */
-  step(realDt: number): { events: GameEvent[]; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; dt: number } {
+  step(realDt: number): { events: GameEvent[]; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; lobs: RLob[]; dt: number } {
     const sp = this.speed();
     this.t = Math.min(this.end, this.t + realDt * sp);
     const events: GameEvent[] = [];
@@ -114,7 +114,9 @@ export class Reel {
       if (!bb || (bb.x - ba.x) ** 2 + (bb.y - ba.y) ** 2 > 1.5) return ba;
       return { ...ba, x: lerp(ba.x, bb.x, u), y: lerp(ba.y, bb.y, u) };
     });
-    return { events, tanks, bullets, mines: a.mines, bonuses: a.bonuses, flags: a.flags, dt: realDt * sp };
+    // a cannonball in the air (iteration 34): its flight time runs on between two frames
+    const lobs = (a.lobs ?? []).map((la) => ({ ...la, t: la.t + u * a.dt }));
+    return { events, tanks, bullets, mines: a.mines, bonuses: a.bonuses, flags: a.flags, lobs, dt: realDt * sp };
   }
 }
 
@@ -138,6 +140,7 @@ export function koCaption(r: Reel, name: (id: number) => string | undefined, bos
   if (cause === KO_MINE) how = self ? 'Sa propre mine !' : 'Sur la mine !';
   else if (cause === KO_BOLT) how = 'Frappé par la foudre !';
   else if (cause === KO_DRILL) how = 'Surgi de sous la table !';
+  else if (cause === KO_LOB) how = 'Un boulet tombé du ciel !';
   else if (cause === KO_FALL) how = self ? 'Il a scié son propre pont !' : 'Le pont a cédé !';
   else if (self) how = n > 0 ? 'Son propre ricochet !' : 'Oups !';
   else if (n >= 3) how = `Ricochet ×${n} : chapeau !`;
