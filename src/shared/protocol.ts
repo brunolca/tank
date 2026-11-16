@@ -9,7 +9,8 @@ import type { NetFlag } from './drapeau';
 // 'atelier' (a mission drawn in the workshop) came with iteration 14: older tabs are told to reload anyway (welcome.v).
 // 'drapeau' (capture the flag, Bleus against Rouges) came with iteration 24: older tabs are told to reload (welcome.v).
 // 'rush' (« La ronde des boss »: the four bosses, then two at once) came with iteration 28: older tabs are told to reload (welcome.v).
-export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush';
+// 'caisses' (« La chasse aux caisses »: every crate is a point) came with iteration 37: older tabs are told to reload (welcome.v).
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush' | 'caisses';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
@@ -53,7 +54,7 @@ export type NetBullet = [number, number, number, number, number, number, number]
 // mine: [id, x, y, blinking]
 export type NetMine = [number, number, number, number] | [number, number, number, number, number]; // 5th: a seed of the Semeur (iteration 25), 1 + its age in tenths of a second
 // bonus crate: [id, x, y, kind (index in BONUS_KINDS), blinking]
-export type NetBonus = [number, number, number, number, number];
+export type NetBonus = [number, number, number, number, number] | [number, number, number, number, number, number]; // id x y kind blink [gold: 1, the golden crate of « La chasse aux caisses », iteration 37]
 
 export type GameEvent =
   | ['shot', number, number, number, number, number] // x y ang rocket shooterId
@@ -91,6 +92,7 @@ export type GameEvent =
   | ['thaw', number, number, number] // x y tankId: its ice cube melts (iteration 29)
   | ['unload', number, number, number, number] // x y tankId shells: the Aimant throws back the shells it caught (iteration 27; older clients ignore it)
   | ['emote', number, number, number, number] // x y tankId line: « Les bulles » (iteration 30), a quick-chat bubble (index in EMOTES) above that tank; older clients ignore it
+  | ['hunt', number, number, number, number, number] // x y tankId points total: « La chasse aux caisses » (iteration 37), a crate picked up (points 1 or 3), dropped by a destroyed tank (-1), or the golden crate drops (tankId 0)
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
@@ -143,7 +145,7 @@ export interface Results {
   // ff: teammates destroyed (coop-like modes, iteration 8)
   // g: galons earned in the coop campaign (iteration 19)
   // team: « Drapeaux », 1 Bleus or 2 Rouges; caps: flags they brought home
-  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number; team?: number; caps?: number }[];
+  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number; team?: number; caps?: number; crates?: number }[]; // crates: « La chasse aux caisses » (iteration 37), crates picked up over the game
   winner?: string;
 }
 
@@ -179,7 +181,7 @@ export type ServerMsg =
       left?: number; // « Drapeaux »: seconds left in the round (the clock runs on each side while it is played)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][] } // L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[] } // H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

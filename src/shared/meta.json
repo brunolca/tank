@@ -1,7 +1,7 @@
 {
-  "iteration": 36,
+  "iteration": 37,
   "date": "2026-11-16",
-  "title": "Les dunes",
+  "title": "La chasse aux caisses",
   "journal": [
     {
       "iteration": 1,
@@ -437,6 +437,18 @@
         "Deux nouvelles missions : « Les dunes » (46), une mer de sable entre les deux camps, et « Nuit à l’oasis » (48), une île au milieu d’un lac, un seul pont pour y entrer et du sable tout autour.",
         "À partir de la 47ᵉ mission, environ deux missions générées sur cinq ont leurs dunes. Le versus gagne une arène des sables.",
         "Le sable rejoint la palette de l’atelier : dessine tes propres déserts."
+      ]
+    },
+    {
+      "iteration": 37,
+      "date": "2026-11-16",
+      "title": "La chasse aux caisses",
+      "notes": [
+        "Nouveau mode : « La chasse aux caisses ». Chacun pour soi, une minute par manche, et les caisses pleuvent sur la table : chaque caisse ramassée vaut un point… et garde son bonus.",
+        "Touché ? Tu lâches une de tes caisses là où tu es tombé, et n’importe qui peut la ramasser. Tu reviens dans ton coin deux secondes et demie plus tard.",
+        "À 18 secondes de la fin, une caisse dorée tombe au milieu de la table : elle vaut 3 points d’un coup. Tout le monde fonce dessus !",
+        "Le tableau des scores compte les caisses de chacun en direct, le chrono rougit dans les dix dernières secondes, et le plus gros tas gagne la manche. Premier à 3 manches.",
+        "Les rivaux pilotés par l’ordinateur adorent les caisses : ils traversent toute la table pour les chiper. La chasse s’invite aussi de temps en temps en fond d’écran de l’accueil."
       ]
     }
   ]

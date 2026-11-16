@@ -138,6 +138,29 @@ try {
   if (cf.moved < 0.3) fail(`drapeaux : le rival ne bouge pas (${cf.moved})`);
   await ctf.context().close();
 
+  // « La chasse aux caisses » (iteration 37): alone against two rivals, crates on the table, a scoreboard of 3 rows and a clock
+  const hunt = await page('caisses', server.url + '/');
+  await sleep(1500);
+  await hunt.click('#btn-create');
+  await hunt.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1000);
+  await hunt.click('#mode-select button[data-mode="caisses"]');
+  await hunt.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  await hunt.click('#btn-rival');
+  await sleep(500);
+  await hunt.click('#btn-rival');
+  await sleep(1000);
+  await hunt.click('#btn-start');
+  await sleep(9000); // intro, then a few seconds of crates
+  const hs = await state(hunt);
+  if (!hs.online || hs.myTankId < 0) fail(`chasse aux caisses : pas en partie (écran ${hs.screen}, phase ${hs.phase})`);
+  if (hs.tanks !== 3) fail(`chasse aux caisses : ${hs.tanks} tank(s) au lieu de 3`);
+  if (!hs.hunt || Object.keys(hs.hunt.got).length !== 3) fail(`chasse aux caisses : compteur de caisses absent (${JSON.stringify(hs.hunt)})`);
+  if (hs.hunt?.board !== 3) fail('chasse aux caisses : le tableau ne montre pas les 3 tanks');
+  if (!/⏱/.test(await hunt.locator('#hud-enemies').innerText())) fail('chasse aux caisses : pas de chrono');
+  if (hs.moved < 0.3) fail(`chasse aux caisses : les rivaux ne bougent pas (${hs.moved})`);
+  await hunt.context().close();
+
   // coop campaign alone with an AI teammate (iteration 20): add one, start, call it with T
   const mate = await page('coéquipier', server.url + '/');
   await sleep(1500);
@@ -191,5 +214,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, coop avec un coéquipier, ronde des boss, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, coop avec un coéquipier, ronde des boss, mode démo).');
 process.exit(0);

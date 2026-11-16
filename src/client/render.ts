@@ -6,10 +6,11 @@ import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { isRivalId } from '../shared/rivals';
 import { CTF_RETURN, TEAM_COLORS } from '../shared/drapeau';
+import { GOLD_COLOR as GOLD } from '../shared/caisses';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
-export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean }
+export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean; gold?: boolean } // gold: « La chasse aux caisses » (iteration 37), the golden crate
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; heavy?: boolean; color?: number } // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number } // seed: a seed of the Semeur (iteration 25), its age in seconds
 /** « Drapeaux » (iteration 24): a flag, state 0 at home, 1 carried by `carrier`, 2 dropped (`left` seconds before it flies home). */
@@ -1170,7 +1171,7 @@ export class Renderer {
   private bullets = new Map<number, THREE.Mesh>();
   private mines = new Map<number, THREE.Group>();
   private crates = new Map<number, CrateView>();
-  private crateMats = new Map<BonusKind, THREE.MeshStandardMaterial>();
+  private crateMats = new Map<BonusKind | 'gold', THREE.MeshStandardMaterial>();
   private cubeMat = new THREE.MeshStandardMaterial({ color: 0xd6f2ff, emissive: 0x6fb8e0, emissiveIntensity: 0.35, transparent: true, opacity: 0.55, roughness: 0.08, metalness: 0.1, depthWrite: false });
   private iceEdgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
   private bubbleMat = new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x2a9fd0, emissiveIntensity: 0.6, transparent: true, opacity: 0.4, roughness: 0.15, depthWrite: false });
@@ -2959,17 +2960,26 @@ export class Renderer {
       if (!kind) continue; // unknown kind from a newer server: just don't draw it
       seen.add(b.id);
       let c = this.crates.get(b.id);
+      const tint = b.gold ? GOLD : BONUS_INFO[kind].color;
       if (!c) {
-        let mat = this.crateMats.get(kind);
-        if (!mat) { mat = new THREE.MeshStandardMaterial({ map: crateTexture(kind), roughness: 0.7 }); this.crateMats.set(kind, mat); }
+        let mat = this.crateMats.get(b.gold ? 'gold' : kind);
+        if (!mat) {
+          // the golden crate (iteration 37): gilded wood that shines
+          mat = b.gold ? new THREE.MeshStandardMaterial({ color: 0xffd45a, emissive: 0x8a5a00, emissiveIntensity: 0.55, metalness: 0.6, roughness: 0.3, map: crateTexture(kind) })
+            : new THREE.MeshStandardMaterial({ map: crateTexture(kind), roughness: 0.7 });
+          this.crateMats.set(b.gold ? 'gold' : kind, mat);
+        }
         const root = new THREE.Group();
         const box = new THREE.Mesh(geo.crate, mat);
         box.castShadow = true;
-        const halo = new THREE.Mesh(geo.halo, new THREE.MeshBasicMaterial({ color: BONUS_INFO[kind].color, transparent: true, opacity: 0.7, depthWrite: false }));
+        if (b.gold) box.scale.setScalar(1.35);
+        const halo = new THREE.Mesh(geo.halo, new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.7, depthWrite: false }));
         halo.rotation.x = -Math.PI / 2;
         halo.position.y = 0.02;
-        const beam = new THREE.Mesh(geo.beam, new THREE.MeshBasicMaterial({ color: BONUS_INFO[kind].color, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+        if (b.gold) halo.scale.setScalar(1.6);
+        const beam = new THREE.Mesh(geo.beam, new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
         beam.position.y = 0.9;
+        if (b.gold) beam.scale.set(1.6, 2.2, 1.6);
         root.add(box, halo, beam);
         root.position.set(b.x, 0, b.y);
         this.scene.add(root);
@@ -2987,9 +2997,9 @@ export class Renderer {
       c.box.rotation.x = fall * 1.5;
       const pulse = 0.5 + Math.sin(this.time * 4 + b.id) * 0.2;
       (c.halo.material as THREE.MeshBasicMaterial).opacity = b.blink ? (Math.sin(this.time * 18) > 0 ? 0.7 : 0.1) : pulse;
-      (c.beam.material as THREE.MeshBasicMaterial).opacity = (b.blink ? 0.08 : 0.16) * (1 - fall);
+      (c.beam.material as THREE.MeshBasicMaterial).opacity = (b.blink ? 0.08 : b.gold ? 0.3 : 0.16) * (1 - fall);
       c.box.visible = !b.blink || Math.sin(this.time * 18) > -0.6;
-      if (Math.random() < 0.06) this.glow.emit({ x: b.x + (Math.random() - 0.5) * 0.5, y: 0.2, z: b.y + (Math.random() - 0.5) * 0.5, vy: 0.8, life: 0.6, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO[kind].color });
+      if (Math.random() < (b.gold ? 0.4 : 0.06)) this.glow.emit({ x: b.x + (Math.random() - 0.5) * (b.gold ? 1 : 0.5), y: 0.2, z: b.y + (Math.random() - 0.5) * (b.gold ? 1 : 0.5), vy: b.gold ? 1.4 : 0.8, life: 0.6, s0: b.gold ? 0.08 : 0.05, s1: 0.01, c0: 0xffffff, c1: tint });
     }
     for (const [id, c] of this.crates) {
       if (!seen.has(id)) { this.removeCrate(c); this.crates.delete(id); }

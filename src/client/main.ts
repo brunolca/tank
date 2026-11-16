@@ -3,6 +3,7 @@ import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelie
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags, type NetFlag } from '../shared/drapeau';
+import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROUND, HUNT_TARGET, huntArena, newHunt, HUNT_CRATES } from '../shared/caisses';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep, floorSpeed } from '../shared/physics';
@@ -53,7 +54,7 @@ let bestMission = Math.max(1, Number(localStorage.getItem('tanks.best')) || 1);
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 /** The coop campaign and the daily challenge share their rules (lives, enemies, results). */
-const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau';
+const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses';
 
 function renderProfile(el: HTMLElement) {
   el.innerHTML = `
@@ -230,6 +231,10 @@ let myTeam = 0; // « Drapeaux »: my team (1 Bleus, 2 Rouges), 0 elsewhere
 let ctfBases: [number, number][] | undefined; // « Drapeaux »: the bases of the round
 let ctfLeft = CTF_ROUND; // « Drapeaux »: seconds left in the round when the last phase message came
 let ctfLeftAt = 0;
+/** « La chasse aux caisses » (iteration 37): crates of each tank this round (tank id → crates), from the snapshots. */
+let huntGot = new Map<number, number>();
+let huntKey = '';
+const HUNT_RESPAWN_TXT = String(HUNT_RESPAWN).replace('.', ','); // « 2,5 »
 const INTERP = 3;
 let lastTanks: RTank[] = [];
 let lastBullets: RBullet[] = [];
@@ -336,6 +341,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   currentLevelName = msg.name;
   renderer.setLevel(tiles, msg.tanks, belts);
   renderer.setFrost(undefined);
+  huntGot = new Map(); huntKey = '';
+  if (msg.mode === 'caisses') { ctfLeft = HUNT_ROUND; ctfLeftAt = performance.now(); }
   // « Drapeaux » (iteration 24): the two bases, and a ring of the team's colour under each tank
   const bs = msg.mode === 'drapeau' && Array.isArray(msg.bases) && msg.bases.length >= 4 ? msg.bases.map(Number) : undefined;
   ctfBases = bs && bs.every(Number.isFinite) ? [[bs[0], bs[1]], [bs[2], bs[3]]] : undefined;
@@ -369,6 +376,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     ? `<b>Atelier</b><span>${escapeHtml(msg.name)}</span>`
     : msg.mode === 'drapeau'
     ? `<b>Manche ${msg.mission}</b><span>Drapeaux · premier à ${CTF_TARGET}</span>`
+    : msg.mode === 'caisses'
+    ? `<b>Manche ${msg.mission}</b><span>Chasse aux caisses · premier à ${HUNT_TARGET}</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
@@ -402,6 +411,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   } else if (msg.mode === 'drapeau') {
     banner(`Drapeaux · manche ${msg.mission}${wx}`, msg.name,
       `${myTeam ? `Tu joues chez les ${TEAM_NAMES[myTeam - 1]} (${myTeam === 1 ? 'à gauche' : 'à droite'}) : ` : ''}rapporte le drapeau adverse à ta base !`, `intro ctf team${myTeam}${wxCls}`);
+  } else if (msg.mode === 'caisses') {
+    banner(`Chasse aux caisses · manche ${msg.mission}${wx}`, 'Ramasse un max de caisses !',
+      `Chaque caisse vaut un point, la caisse dorée en vaut ${HUNT_GOLD}. Touché ? Tu en lâches une.`, `intro hunt${wxCls}`);
   } else {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
@@ -460,7 +472,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   }
   if (council) { council = undefined; $('#council').hidden = true; }
   if (prev === msg.phase && msg.phase === 'playing') return;
-  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || msg.phase === 'roundEnd')) queueReel();
+  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || (msg.phase === 'roundEnd' && currentMode !== 'caisses'))) queueReel();
   else if (msg.phase !== 'cleared' && msg.phase !== 'failed' && msg.phase !== 'roundEnd') stopReel();
   switch (msg.phase) {
     case 'intro':
@@ -499,6 +511,9 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
         const w = msg.win ?? 0;
         banner(w ? (w === myTeam ? 'Manche gagnée !' : myTeam ? 'Manche perdue…' : 'Fin de manche') : 'Fin de manche', msg.text ?? '',
           `Bleus ${teamScores[0]} · ${teamScores[1]} Rouges`, `${w && myTeam && w !== myTeam ? 'bad' : 'good'} ctf team${w}`);
+      } else if (currentMode === 'caisses') {
+        const mine = huntGot.get(myTankId);
+        banner('Temps écoulé !', msg.text ?? '', mine !== undefined ? `Tu as ramassé ${mine} caisse${mine > 1 ? 's' : ''}` : '', 'good hunt');
       } else banner('Fin de manche', msg.text ?? '', '', 'good');
       break;
     case 'gameover':
@@ -520,6 +535,15 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
   applyFrost(msg.I);
+  if (Array.isArray(msg.H)) {
+    const key = msg.H.join(',');
+    if (key !== huntKey) {
+      huntKey = key;
+      huntGot = new Map();
+      for (let k = 0; k + 1 < msg.H.length; k += 2) huntGot.set(msg.H[k] | 0, Math.max(0, msg.H[k + 1] | 0));
+      renderHud();
+    }
+  }
   for (const e of msg.E) {
     evq.push({ k: msg.k, e });
     if (e[0] === 'block') tiles[e[2] * W + e[1]] = Tile.Empty; // prediction sees the freshest map
@@ -689,11 +713,11 @@ function onlineFrame(dt: number) {
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
   updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
-  if (currentMode === 'drapeau') {
-    // the round clock: it runs while the round is being played
+  if (currentMode === 'drapeau' || currentMode === 'caisses') {
+    // the round clock: it runs while the round is being played (« La chasse aux caisses » too, iteration 37)
     const left = Math.max(0, Math.ceil(phase === 'playing' ? ctfLeft - (performance.now() - ctfLeftAt) / 1000 : ctfLeft));
     $('#hud-enemies').textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-    $('#hud-enemies').classList.toggle('hurry', left <= 30 && phase === 'playing');
+    $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : 30) && phase === 'playing');
   } else {
     $('#hud-enemies').textContent = coopLike(currentMode) ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
     $('#hud-enemies').classList.remove('hurry');
@@ -724,7 +748,7 @@ function onlineFrame(dt: number) {
   const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3], seed: m[4] ? (m[4] - 1) / 10 : undefined }));
   renderer.syncMines(mines);
   lastMines = mines;
-  const bonuses: RBonus[] = a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4] }));
+  const bonuses: RBonus[] = a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4], gold: c[5] === 1 }));
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = ctfBases ? a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
@@ -756,6 +780,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
       break;
     case 'boom':
       if (online && audible && currentMode === 'drapeau' && e[3] === myTankId) toast(`Touché ! Retour à la base dans ${CTF_RESPAWN} secondes…`, 2600);
+      if (online && audible && currentMode === 'caisses' && e[3] === myTankId) toast(`Touché ! Retour dans ton coin dans ${HUNT_RESPAWN_TXT} secondes…`, 2400);
       if (isBossKind(renderer.tankKind(e[3]) ?? '')) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
@@ -822,6 +847,28 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'crate':
       if (audible) sfx.crate();
       break;
+    case 'hunt': {
+      // « La chasse aux caisses » (iteration 37): [x, y, tankId, points, total]
+      const [, x, y, who, pts, total] = e;
+      if (!who) {
+        renderer.bonusBurst(x, y, GOLD_COLOR, true);
+        floater(x, y, 'La caisse dorée !', GOLD_COLOR);
+        if (audible) sfx.gold();
+        if ((online && audible) || (attractHunt && document.body.classList.contains('demo') && screen === 'game')) toast(`La caisse dorée est tombée : elle vaut ${HUNT_GOLD} points !`, 3000);
+        break;
+      }
+      const me = online && who === myTankId;
+      if (attract) renderAttractHunt();
+      if (pts < 0) {
+        floater(x, y - 0.4, me ? 'Tu perds une caisse !' : '−1 caisse', 0xff8a5c);
+        if (audible) sfx.hunt(-1, me);
+        break;
+      }
+      const color = online ? infos.get(who)?.color : attract?.tankById(who)?.color;
+      floater(x, y - 0.5, pts > 1 ? `+${pts} ! (${total})` : `+1 (${total})`, pts > 1 ? GOLD_COLOR : color ?? 0xffffff);
+      if (audible) sfx.hunt(pts, me);
+      break;
+    }
     case 'bonus': {
       const kind = BONUS_KINDS[e[3]];
       if (!kind) break;
@@ -876,8 +923,8 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (what === 5) { if (online && audible) { toast('Plus que 30 secondes pour rapporter un drapeau !', 3000); sfx.alert(); } break; }
       const color = TEAM_COLORS[team - 1] ?? 0xffffff;
       if (what === 4) {
-        // a destroyed tank is back at its base
-        renderer.bonusBurst(x, y, color);
+        // a destroyed tank is back at its base (or its corner, in a hunt)
+        renderer.bonusBurst(x, y, currentMode === 'caisses' || attractHunt ? renderer.tankColor(who) ?? color : color);
         if (online && who === myTankId) floaterOnMe('De retour !');
         break;
       }
@@ -1349,6 +1396,14 @@ function renderHud() {
   const sb = $('#scoreboard');
   if (currentMode === 'drapeau') {
     sb.innerHTML = TEAM_NAMES.map((n, i) => `<div class="sb-row ctf${myTeam === i + 1 ? ' mine' : ''}"><i style="--c:${hex(TEAM_COLORS[i])}"></i><span>${n}</span><b>${teamScores[i]}</b></div>`).join('');
+  } else if (currentMode === 'caisses') {
+    // « La chasse aux caisses » (iteration 37): crates this round, then rounds won
+    sb.innerHTML = [...infos.values()]
+      .filter((t) => t.kind === 'player')
+      .map((t) => ({ t, n: huntGot.get(t.id) ?? 0 }))
+      .sort((a, b) => b.n - a.n)
+      .map(({ t, n }) => `<div class="sb-row hunt${t.id === myTankId ? ' mine' : ''}"><i style="--c:${hex(t.color)}"></i><span>${escapeHtml(t.name ?? '?')}${isRivalId(t.pid ?? '') ? ' <em>IA</em>' : ''}</span><em class="crates" title="Caisses de la manche">▣ ${n}</em><b title="Manches gagnées">${scores[t.pid ?? ''] ?? 0}</b></div>`)
+      .join('');
   } else if (currentMode === 'versus') {
     sb.innerHTML = lobbyPlayers
       .filter((p) => scores[p.id] !== undefined)
@@ -1400,10 +1455,10 @@ function renderLobby() {
   start.hidden = !isHost;
   $('#lobby-wait').hidden = isHost;
   const n = lobbyPlayers.filter((p) => p.connected).length;
-  const need = lobbyMode === 'versus' || lobbyMode === 'drapeau' ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
+  const need = lobbyMode === 'versus' || lobbyMode === 'drapeau' || lobbyMode === 'caisses' ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
   const noMap = lobbyMode === 'atelier' && !lobbyAtelier;
   start.disabled = n < need || noMap;
-  start.textContent = n < need ? (lobbyMode === 'versus' || lobbyMode === 'drapeau' ? 'Ajoute un rival ou invite un ami' : `Il faut ${need} joueurs`) : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
+  start.textContent = n < need ? (lobbyMode === 'versus' || lobbyMode === 'drapeau' || lobbyMode === 'caisses' ? 'Ajoute un rival ou invite un ami' : `Il faut ${need} joueurs`) : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   renderLobbyAtelier(isHost);
   const today = dayNumber();
   $('#mode-desc').textContent = lobbyMode === 'daily'
@@ -1420,6 +1475,8 @@ function renderLobby() {
     ? `Campagne coopérative : ${LEVELS.length + Object.keys(EXTRA_LEVELS).length} missions faites main, mêlées aux missions générées à l’infini, avec un boss toutes les 10 missions. Vies partagées, +1 vie toutes les 5 missions. Des caisses bonus tombent pendant les missions. Pas assez de monde ? Ajoute jusqu’à 3 coéquipiers pilotés par l’ordinateur.`
     : lobbyMode === 'drapeau'
     ? `Drapeaux : les Bleus contre les Rouges (les tanks de la liste sont répartis un sur deux). Chaque équipe a son drapeau planté à sa base : file prendre celui d’en face et rapporte-le chez toi pour gagner la manche. Un tank touché revient à sa base ${CTF_RESPAWN} secondes plus tard ; le porteur touché lâche le drapeau, et un coéquipier le renvoie à la base d’un simple contact. Sans drapeau rapporté en ${Math.floor(CTF_ROUND / 60)} min ${CTF_ROUND % 60}, c’est l’égalité. Première équipe à ${CTF_TARGET} manches. Les rivaux pilotés par l’ordinateur complètent les équipes.`
+    : lobbyMode === 'caisses'
+    ? `La chasse aux caisses : chacun pour soi, ${HUNT_ROUND} secondes par manche, et les caisses pleuvent. Chaque caisse ramassée vaut un point (et son bonus). Un tank touché lâche une de ses caisses et revient dans son coin ${HUNT_RESPAWN_TXT} secondes plus tard. À ${HUNT_GOLD_AT} secondes de la fin tombe la caisse dorée : ${HUNT_GOLD} points d’un coup ! Le plus gros tas gagne la manche, premier à ${HUNT_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
   renderWeapons();
   renderCheckpoints(isHost);
@@ -1666,22 +1723,24 @@ function showResults(r: Results) {
     : r.taupe ? (r.taupe.winner === 'taupe' ? 'La taupe l’emporte !' : 'Les loyaux l’emportent !')
     : r.atelier ? (r.atelier.won ? `« ${r.atelier.name} » réussie !` : `« ${r.atelier.name} » : plus de vies…`)
     : r.drapeau ? (r.drapeau.winner ? `Les ${TEAM_NAMES[r.drapeau.winner - 1]} remportent les drapeaux ! (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})` : `Égalité aux drapeaux (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})`)
+    : r.mode === 'caisses' ? `${r.players[0]?.name ?? ''} remporte la chasse aux caisses !`
     : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
   const ctf = !!r.drapeau;
+  const hunt = r.mode === 'caisses';
   const coop = coopLike(r.mode);
   const ff = coop && r.players.some((p) => p.ff !== undefined);
   const gal = r.players.some((p) => p.g !== undefined);
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? '<th title="Drapeaux rapportés à la base">Drapeaux</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? '<th title="Drapeaux rapportés à la base">Drapeaux</th>' : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
           const team = ctf && (p.team === 1 || p.team === 2) ? ` <em class="ia" style="color:${hex(TEAM_COLORS[p.team - 1])}">${TEAM_NAMES[p.team - 1]}</em>` : '';
           return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}${team}${p.bot !== undefined ? ` <em class="ia">IA ${RIVAL_LEVELS[rivalLevel(p.bot)].label.toLowerCase()}</em>` : ''}</td>${
             coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
-          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
+          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}${hunt ? `<td>${p.crates || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
     </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
@@ -1703,7 +1762,9 @@ let attractPrev = new Map<number, { x: number; y: number; body: number; turret: 
 interface AttractVersus { round: number; levels?: number[]; scores?: number[]; chain?: boolean }
 /** « Drapeaux » (iteration 24): two teams of AI rivals, for the videos and the home-screen background. */
 interface AttractFlags { round: number; levels?: number[]; teams?: [number, number]; chain?: boolean; carry?: boolean } // carry: the round opens with a Bleu already holding the red flag, by the Rouges' base (videos)
-interface AttractOpts { drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
+/** « La chasse aux caisses » (iteration 37): four AI rivals racing for the crates, for the videos and the home-screen background. */
+interface AttractHunt { round: number; levels?: number[]; scores?: number[]; chain?: boolean; seconds?: number } // seconds: how long the round lasts (videos)
+interface AttractOpts { caisses?: AttractHunt; drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -1721,13 +1782,16 @@ function startAttract(opts: AttractOpts = attractOpts) {
   clearBubbles();
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
-  if (!opts.versus && !opts.drapeau && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
+  if (!opts.versus && !opts.drapeau && !opts.caisses && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
     const r = Math.random();
     if (r < 0.1) { startAttractVersus({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; }
     if (r < 0.2) { startAttractFlags({ round: Math.floor(Math.random() * 12), levels: [1, 2, 2, 1] }); return; } // and, from iteration 24, a flag round
+    if (r < 0.3) { startAttractHunt({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 37, a crate hunt
   }
-  if (opts.versus) { startAttractVersus(opts.versus, opts.arms); return; }
-  if (opts.drapeau) { startAttractFlags(opts.drapeau, opts.arms); return; }
+  if (opts.caisses) { startAttractHunt(opts.caisses, opts.arms); return; }
+  attractHunt = undefined;
+  if (opts.versus) { attractHunt = undefined; startAttractVersus(opts.versus, opts.arms); return; }
+  if (opts.drapeau) { attractHunt = undefined; startAttractFlags(opts.drapeau, opts.arms); return; }
   attractCtf = undefined;
   if (document.body.classList.contains('vs-demo')) { document.body.classList.remove('vs-demo'); $('#hud').hidden = true; }
   const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : opts.rush ? rushLevel(opts.rush.week, opts.rush.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
@@ -1814,6 +1878,80 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
 }
 
 let attractCtf: (AttractFlags & { teams: [number, number] }) | undefined;
+let attractHunt: (AttractHunt & { scores: number[]; names: string[] }) | undefined;
+
+/** « La chasse aux caisses » (iteration 37): four rivals, one per corner, racing for the crates until the clock runs out. */
+function startAttractHunt(h: AttractHunt, arms?: Weapon[]) {
+  const lvl = huntArena(h.round);
+  const g = new Game(lvl.tiles, lvl.belts);
+  g.bonusOn = true;
+  g.bonusNext = HUNT_CRATES.first; g.bonusEvery = HUNT_CRATES.every; g.bonusCap = HUNT_CRATES.cap;
+  g.night = !!lvl.night;
+  g.wind = lvl.wind;
+  g.hunt = newHunt();
+  // a shorter round for the videos: the clock starts part-way (the golden crate still drops HUNT_GOLD_AT seconds before the end)
+  g.hunt.time = Math.max(0, HUNT_ROUND - (h.seconds ?? HUNT_ROUND));
+  const names = [0, 1, 2, 3].map((i) => RIVAL_NAMES[(h.round + i * 3 + 1) % RIVAL_NAMES.length]);
+  lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
+    const t = g.addTank('player', i + 1, x, y, PLAYER_COLORS[i], `ia:${i + 1}`, names[i]);
+    g.arm(t, (arms?.length ? arms : VS_ARMS)[i % (arms?.length || VS_ARMS.length)]);
+    t.body = t.turret = Math.atan2(8.5 - y, 11 - x);
+    makeRival(g, t, h.levels?.[i] ?? 2);
+  });
+  g.frozen = false;
+  attract = g;
+  attractOpts = { caisses: h, arms };
+  attractVs = undefined;
+  attractCtf = undefined;
+  attractHunt = { ...h, scores: h.scores ?? [0, 0, 0, 0], names };
+  attractEnd = 0;
+  attractPrev.clear();
+  renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
+  renderer.setNight(g.night);
+  renderer.setStorm(false);
+  renderer.setWind(g.wind);
+  renderer.fogAlly = () => true;
+  renderer.setFog(undefined);
+  renderAttractHunt();
+}
+
+function renderAttractHunt() {
+  const h = attractHunt, g = attract;
+  if (!h || !g?.hunt || !document.body.classList.contains('demo') || screen !== 'game') return;
+  document.body.classList.add('vs-demo');
+  $('#hud').hidden = false;
+  $('#scoreboard').innerHTML = g.tanks
+    .filter((t) => t.kind === 'player')
+    .map((t, i) => ({ t, i, n: g.hunt!.got.get(t.id) ?? 0 }))
+    .sort((a, b) => b.n - a.n)
+    .map(({ t, i, n }) => `<div class="sb-row hunt"><i style="--c:${hex(t.color)}"></i><span>${escapeHtml(t.name ?? '')} <em>IA</em></span><em class="crates">▣ ${n}</em><b>${h.scores[i]}</b></div>`)
+    .join('');
+}
+
+/** The hunt's clock in the demo (the scoreboard follows the crates as they are picked up). */
+function attractHuntClock(g: Game) {
+  const left = Math.max(0, Math.ceil(HUNT_ROUND - (g.hunt?.time ?? 0)));
+  const el = $('#hud-enemies');
+  el.textContent = `Chasse aux caisses · ⏱ 0:${String(left).padStart(2, '0')}`;
+  el.classList.toggle('hurry', left <= HUNT_HURRY && !attractEnd);
+}
+
+function endAttractHunt(g: Game) {
+  const h = attractHunt!;
+  const tanks = g.tanks.filter((t) => t.kind === 'player');
+  let best = 0, w = -1, tie = false;
+  tanks.forEach((t, i) => {
+    const n = g.hunt?.got.get(t.id) ?? 0;
+    if (n > best) { best = n; w = i; tie = false; } else if (n === best && n > 0) tie = true;
+  });
+  if (tie) w = -1;
+  if (w >= 0) { h.scores[w]++; g.cheer(tanks[w].team); }
+  renderAttractHunt();
+  if (document.body.classList.contains('demo') && screen === 'game') {
+    banner(`Chasse aux caisses · manche ${h.round + 1}`, w >= 0 ? `${h.names[w]} gagne la manche !` : 'Égalité !', w >= 0 ? `${best} caisse${best > 1 ? 's' : ''} ramassée${best > 1 ? 's' : ''}` : '', 'intro hunt');
+    setTimeout(hideBanner, 2400);
+  }
+}
 
 /** Two AI rivals against two on a flag arena (iteration 24): a flag brought home takes the round (tanks come back at their base). */
 function startAttractFlags(c: AttractFlags, arms?: Weapon[]) {
@@ -1956,7 +2094,7 @@ function attractFrame(dt: number) {
   renderer.syncBullets(bullets, dt);
   const mines: RMine[] = g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined }));
   renderer.syncMines(mines);
-  const bonuses: RBonus[] = g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 }));
+  const bonuses: RBonus[] = g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 && !c.gold, gold: c.gold }));
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = g.flags ? g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
@@ -1972,6 +2110,15 @@ function attractFrame(dt: number) {
       attract = undefined;
       if (c.chain && Math.max(...c.teams) < CTF_TARGET) startAttract({ drapeau: { ...c, round: c.round + 1, teams: c.teams, carry: false }, arms: attractOpts.arms });
       else { attractOpts = {}; startAttract({}); }
+    }
+  } else if (attractOpts.caisses && attractHunt) {
+    attractHuntClock(g);
+    if (!attractEnd && (g.hunt?.time ?? 0) >= HUNT_ROUND) { attractEnd = g.tick + TICK_RATE * 2.5; g.frozen = true; endAttractHunt(g); }
+    if (attractEnd && g.tick > attractEnd) {
+      const h = attractHunt;
+      attract = undefined;
+      if (h.chain && Math.max(...h.scores) < HUNT_TARGET) startAttract({ caisses: { ...h, round: h.round + 1, scores: h.scores }, arms: attractOpts.arms });
+      else { attractOpts = {}; attractHunt = undefined; startAttract({}); }
     }
   } else if (attractOpts.versus) {
     const alive = g.tanks.filter((t) => t.alive && t.kind === 'player').length;
@@ -2379,7 +2526,7 @@ setupFeedback({
         level: online ? currentLevelName : undefined,
         lives: online && coopLike(currentMode) ? lives : undefined,
         daily: online ? dailyState : undefined,
-        scores: online && (currentMode === 'versus' || currentMode === 'drapeau') ? scores : undefined,
+        scores: online && (currentMode === 'versus' || currentMode === 'drapeau' || currentMode === 'caisses') ? scores : undefined,
         teams: online && currentMode === 'drapeau' ? teamScores : undefined,
         players: lobbyPlayers.map((p) => ({ name: p.name, host: p.host, connected: p.connected, me: p.id === pid || undefined })),
         me: me ? { x: r2(me.x), y: r2(me.y), alive: me.alive, pendingInputs: pending.length } : undefined,
@@ -2427,7 +2574,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -2473,6 +2620,17 @@ if (params.has('demo')) {
       return ctfArena(round).name;
     },
     /**
+     * « La chasse aux caisses » (iteration 37): four AI rivals racing for the crates on the arena of that round.
+     * `seconds`: how long the round lasts (shorter for the videos; the golden crate still drops near the end),
+     * `chain`: the next rounds follow, with the scores.
+     */
+    caisses(round = 0, levels?: number[], arms?: Weapon[], seconds?: number, chain = false) {
+      show('game');
+      attract = undefined;
+      startAttract({ caisses: { round, levels, chain, seconds }, arms: arms?.filter(isWeapon) });
+      return huntArena(round).name;
+    },
+    /**
      * « Suis-moi ! » (iteration 20): the first hero of the demo calls the others, who drop everything and come along
      * (they become AI teammates for the occasion). Returns how many answered.
      */
@@ -2509,7 +2667,7 @@ if (params.has('demo')) {
       const me: PlayerInfo = { id: pid, name: myName, color: PLAYER_COLORS[0], host: true, connected: true, score: 0, weapon: myWeapon };
       const bots: PlayerInfo[] = [0, 1, 2].map((i) => ({ id: `ia:${i + 1}`, name: RIVAL_NAMES[i * 3], color: PLAYER_COLORS[i + 1], host: false, connected: true, score: 0, weapon: VS_ARMS[i], bot: i }));
       lobbyPlayers = [me];
-      lobbyMode = mode === 'coop' || mode === 'drapeau' ? mode : 'versus';
+      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' ? mode : 'versus';
       roomCode = 'SOLO7';
       phase = 'lobby';
       renderLobby();
@@ -2519,7 +2677,7 @@ if (params.has('demo')) {
       setTimeout(() => {
         lobbyPlayers = keep.players; lobbyMode = keep.mode; roomCode = keep.room; phase = keep.phase;
         show('game');
-        if (attractOpts.versus) renderVsBoard(); else if (attractOpts.drapeau) renderCtfBoard(); else $('#hud').hidden = true;
+        if (attractOpts.versus) renderVsBoard(); else if (attractOpts.drapeau) renderCtfBoard(); else if (attractOpts.caisses) renderAttractHunt(); else $('#hud').hidden = true;
       }, ms);
     },
     /** Storm: announce a lightning strike right next to the first enemy still standing (or any tank). */

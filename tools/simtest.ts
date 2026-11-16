@@ -10,6 +10,7 @@ import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/phy
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
+import { HUNT_CRATES, HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, huntArena, huntLeader, newHunt } from '../src/shared/caisses';
 import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
 
@@ -2346,4 +2347,84 @@ console.log('total', Date.now() - t0, 'ms');
   const per = spent / Math.max(1, steps);
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick dans les dunes`);
   if (process.exitCode !== 1) console.log(`sable OK (missions des sables : ${dunes.slice(0, 8).join(', ')}…, ${cleared}/4 gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « La chasse aux caisses » (iteration 37): a crate scores, a destroyed tank drops one and comes back, the golden crate,
+// and AI rivals that really race for the crates, cheaply
+{
+  const fail = (m: string) => { console.error('chasse aux caisses : ' + m); process.exitCode = 1; };
+  {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    g.bonusOn = true; g.bonusNext = 999;
+    g.hunt = newHunt();
+    const a = g.addTank('player', 1, 3.5, 3.5, 0, 'a', 'A');
+    const b = g.addTank('player', 2, 18.5, 13.5, 0, 'b', 'B');
+    g.frozen = false;
+    g.step(new Map());
+    const c = g.spawnBonus('bounce')!;
+    c.x = a.x; c.y = a.y; c.t = 1;
+    g.step(new Map());
+    if (g.hunt.got.get(a.id) !== 1) fail('une caisse ramassée ne compte pas');
+    if (!g.events.some((e) => e[0] === 'hunt' && e[3] === a.id && e[4] === 1 && e[5] === 1)) fail('pas d’événement « +1 »');
+    g.events = [];
+    // destroyed: one crate drops on the floor, the tank comes back at its corner
+    a.x = 11.5; a.y = 8.5;
+    g.killTank(a, b);
+    if (g.hunt.got.get(a.id) !== 0) fail('un tank détruit ne lâche pas de caisse');
+    if (!g.bonuses.some((o) => Math.hypot(o.x - 11.5, o.y - 8.5) < 1.5)) fail('la caisse lâchée n’est pas sur place');
+    if (g.events.some((e) => e[0] === 'loot')) fail('la caisse lâchée ne doit pas passer pour le butin d’un Pilleur');
+    for (let i = 0; i < 30 * HUNT_RESPAWN + 2; i++) g.step(new Map());
+    if (!a.alive || Math.hypot(a.x - 3.5, a.y - 3.5) > 0.01) fail('un tank détruit ne revient pas dans son coin');
+    // a tank with no crate drops nothing
+    const before = g.bonuses.length;
+    b.buffs.invuln = 0;
+    g.killTank(b, a);
+    if (g.bonuses.length !== before) fail('un tank sans caisse en lâche une');
+    // the golden crate drops near the end, never expires, and is worth three
+    g.hunt.time = HUNT_ROUND - HUNT_GOLD_AT - 0.01;
+    g.step(new Map());
+    const gold = g.bonuses.find((o) => o.gold);
+    if (!gold) fail('pas de caisse dorée');
+    else {
+      if (Math.hypot(gold.x - W / 2, gold.y - H / 2) > 6) fail('la caisse dorée tombe loin du centre');
+      const nb = g.netBonuses().find((n) => n[0] === gold.id)!;
+      if (nb[5] !== 1) fail('la caisse dorée ne voyage pas');
+      gold.t = 40;
+      g.step(new Map());
+      if (gold.dead) fail('la caisse dorée a disparu');
+      gold.x = a.x; gold.y = a.y;
+      const n0 = g.hunt.got.get(a.id) ?? 0;
+      g.step(new Map());
+      if ((g.hunt.got.get(a.id) ?? 0) !== n0 + HUNT_GOLD) fail('la caisse dorée ne vaut pas 3');
+    }
+    const nh = g.netHunt()!;
+    if (nh.length !== 4 || nh[0] !== a.id) fail(`vue réseau inattendue ${JSON.stringify(nh)}`);
+    if (huntLeader(new Map([[1, 2], [2, 2]])) !== 0 || huntLeader(new Map([[1, 1], [2, 3]])) !== 2 || huntLeader(new Map([[1, 0]])) !== 0) fail('mauvais gagnant de manche');
+  }
+  // AI rivals on every arena: they pick crates up, rounds play out cheaply
+  let total = 0, worst = 0, spent = 0, steps = 0;
+  for (let round = 0; round < 8; round++) {
+    const lvl = huntArena(round);
+    if (lvl.storm || lvl.fog !== undefined) fail(`${lvl.name} : orage ou brouillard dans l’arène`);
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.bonusOn = true; g.bonusNext = HUNT_CRATES.first; g.bonusEvery = HUNT_CRATES.every; g.bonusCap = HUNT_CRATES.cap;
+    g.night = !!lvl.night; g.wind = lvl.wind;
+    g.hunt = newHunt();
+    lvl.spawns.slice(0, 4).forEach(([x, y], i) => makeRival(g, g.addTank('player', i + 1, x, y, 0, `ia:${i + 1}`, `R${i}`), 2));
+    g.frozen = false;
+    while (g.hunt.time < HUNT_ROUND) {
+      const t1 = performance.now();
+      g.step(new Map());
+      const dt = performance.now() - t1;
+      spent += dt; steps++; worst = Math.max(worst, dt);
+      g.events = [];
+    }
+    const n = [...g.hunt.got.values()].reduce((s, v) => s + v, 0);
+    total += n;
+    if (g.tanks.filter((t) => t.alive).length < 2) fail(`manche ${round} : les tanks ne reviennent pas`);
+  }
+  const per = spent / Math.max(1, steps);
+  if (total < 8 * 6) fail(`les rivaux ne ramassent presque rien (${total} caisses en 8 manches)`);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`chasse aux caisses OK (${total} caisses en 8 manches, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
 }

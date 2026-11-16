@@ -7,12 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 46, arms: ['canon', 'sapeur'], seconds: 16, sandTraps: [3.5, 9.5], caption: 'Nouveau terrain : le sable', sub: 'On y roule moins vite, et les mines s’y enfouissent' },
-  { mission: 46, arms: ['sapeur', 'ricochet'], seconds: 12, sandTraps: [2.5, 7], caption: 'Le piège des dunes', sub: 'Les ennemis ne voient pas les mines enfouies' },
-  { mission: 48, arms: ['canon', 'fusee'], seconds: 13, sandTraps: [4, 9], caption: 'Nuit à l’oasis', sub: 'Une île, un seul pont, du sable tout autour' },
-  { mission: 49, arms: ['ricochet', 'canon'], seconds: 10, sandTraps: [4], caption: 'Des dunes dans les missions générées', sub: 'À partir de la 47ᵉ mission' },
-  { versus: [14, [1, 2, 1]], arms: ['canon', 'sapeur'], seconds: 10, caption: 'Une arène des sables en versus', sub: 'Pose tes mines là où ils passent' },
-  { mission: 50, arms: ['canon', 'ricochet'], seconds: 9, volleys: [2.5, 6.5], caption: 'Et toujours le Bombardier', sub: 'Ne longe pas la rangée !' },
+  { caisses: [2, [2, 2, 1, 2], 40], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 16, caption: 'Nouveau mode : la chasse aux caisses', sub: 'Chaque caisse ramassée vaut un point' },
+  { rivals: 5.5, lobby: 'caisses', seconds: 5.5, caption: 'Chacun pour soi', sub: 'Entre amis ou contre des rivaux pilotés par l’ordinateur' },
+  { still: true, seconds: 20, caption: 'Touché ? Tu lâches une caisse', sub: 'Et à la fin tombe la caisse dorée : 3 points !' },
+  { caisses: [0, [2, 1, 2, 2], 24], arms: ['sapeur', 'canon', 'fusee', 'ricochet'], seconds: 14, caption: 'Une chasse de nuit', sub: 'Les caisses brillent dans le noir' },
+  { mission: 46, arms: ['canon', 'sapeur'], seconds: 10, sandTraps: [3.5], caption: 'Et toujours les dunes', sub: 'Les mines s’enfouissent dans le sable' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -53,13 +52,15 @@ try {
   for (const shot of MONTAGE) {
     await page.evaluate((shot) => {
       const d = window.__demo;
-      if (shot.home) d.home(shot.home * 1000);
+      if (shot.still) { /* the table of the previous shot goes on */ }
+      else if (shot.home) d.home(shot.home * 1000);
       else if (shot.cratesHelp) d.crates(shot.cratesHelp * 1000); // the list of crates on the home screen (iteration 29)
       else if (shot.bestiary) d.bestiary(shot.bestiary * 1000); // the bestiary on the home screen (iteration 25)
       else if (shot.atelier) d.atelier(shot.atelier * 1000);
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
+      else if (shot.caisses) d.caisses(shot.caisses[0], shot.caisses[1], shot.arms, shot.caisses[2], !!shot.caisses[3]); // « La chasse aux caisses » (iteration 37)
       else if (shot.drapeau) d.drapeau(shot.drapeau[0], shot.drapeau[1], shot.arms, true, !!shot.drapeau[2]); // « Drapeaux » (iteration 24)
       else if (shot.rivals) d.rivals(shot.rivals * 1000, shot.lobby); // the game goes on behind the lobby (versus, or coop teammates)
       else if (shot.daily) d.daily(shot.daily[0], shot.daily[1]);

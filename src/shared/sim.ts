@@ -6,6 +6,7 @@ import {
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
+import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
 import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
@@ -118,6 +119,7 @@ export interface Bonus {
   y: number;
   t: number;
   dead: boolean;
+  gold?: boolean; // « La chasse aux caisses » (iteration 37): the golden crate, worth three (it never expires)
 }
 
 export interface Bullet {
@@ -313,6 +315,8 @@ export class Game {
   /** Where each tank of a flag round started (it comes back there), and how long until destroyed ones return. */
   private ctfHome = new Map<number, [number, number]>();
   private ctfBack = new Map<number, number>();
+  /** « La chasse aux caisses » (iteration 37): the crates of the round (undefined in every other mode). */
+  hunt?: HuntState;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -451,6 +455,53 @@ export class Game {
     if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
     if (this.bonusOn) this.stepBonuses(DT);
     if (this.flags) this.stepFlags(DT);
+    if (this.hunt) this.stepHunt(DT);
+  }
+
+  // -------------------------------------------------------------- « La chasse aux caisses » (iteration 37)
+
+  /** The clock of the round, the tanks coming back at their corner, and the golden crate in the last seconds. */
+  stepHunt(dt: number) {
+    const h = this.hunt!;
+    h.time += dt;
+    this.ctfRespawn(dt, HUNT_RESPAWN);
+    if (!h.gold && h.time >= HUNT_ROUND - HUNT_GOLD_AT) {
+      h.gold = true;
+      // in the middle of the table if it is free, anywhere otherwise
+      const c = this.spawnBonus(undefined, true);
+      if (c) {
+        c.gold = true;
+        this.events.push(['hunt', r2(c.x), r2(c.y), 0, HUNT_GOLD, 0]);
+        for (const o of this.tanks) if (o.alive && o.ai && o.kind === 'player') o.ai.pathT = Math.min(o.ai.pathT, 0.3); // everyone heads for it
+      }
+    }
+  }
+
+  /** A crate picked up in a hunt: a point (three for the golden one). */
+  private huntScore(t: Tank, c: Bonus) {
+    const h = this.hunt!;
+    const n = c.gold ? HUNT_GOLD : 1;
+    const total = (h.got.get(t.id) ?? 0) + n;
+    h.got.set(t.id, total);
+    this.events.push(['hunt', r2(c.x), r2(c.y), t.id, n, total]);
+  }
+
+  /** A tank destroyed in a hunt drops one of its crates where it fell. */
+  private huntDrop(t: Tank) {
+    const h = this.hunt!;
+    const n = h.got.get(t.id) ?? 0;
+    if (n <= 0) return;
+    h.got.set(t.id, n - 1);
+    this.dropLoot(t, BONUS_KINDS[Math.floor(Math.random() * BONUS_KINDS.length)], false);
+    this.events.push(['hunt', r2(t.x), r2(t.y), t.id, -1, n - 1]);
+  }
+
+  /** Crates of each tank this round, for the snapshots: flat pairs [tankId, crates]. */
+  netHunt(): number[] | undefined {
+    if (!this.hunt) return undefined;
+    const out: number[] = [];
+    for (const t of this.tanks) if (t.kind === 'player') out.push(t.id, this.hunt.got.get(t.id) ?? 0);
+    return out;
   }
 
   // -------------------------------------------------------------- « Le Givré » (iteration 31)
@@ -551,12 +602,12 @@ export class Game {
   }
 
   /** Destroyed tanks come back at their starting spot a few seconds later, briefly untouchable. */
-  private ctfRespawn(dt: number) {
+  private ctfRespawn(dt: number, delay = CTF_RESPAWN) {
     for (const t of this.tanks) {
-      if (t.kind !== 'player' || (t.team !== 1 && t.team !== 2)) continue;
+      if (t.kind !== 'player' || t.team < 1 || t.team > 4) continue; // two teams for the flags, one per tank in a hunt
       if (!this.ctfHome.has(t.id)) this.ctfHome.set(t.id, [t.x, t.y]);
       if (t.alive) continue;
-      const left = (this.ctfBack.get(t.id) ?? CTF_RESPAWN) - dt;
+      const left = (this.ctfBack.get(t.id) ?? delay) - dt;
       if (left > 0) { this.ctfBack.set(t.id, left); continue; }
       this.ctfBack.delete(t.id);
       const [hx, hy] = this.ctfHome.get(t.id)!;
@@ -713,7 +764,7 @@ export class Game {
     }
     for (const c of this.bonuses) {
       c.t += dt;
-      if (c.t >= BONUS_LIFE) { c.dead = true; continue; }
+      if (c.t >= BONUS_LIFE && !c.gold) { c.dead = true; continue; }
       if (c.t < 0.5) continue; // still dropping in
       if (this.belts.length) [c.x, c.y] = beltStep(this.tiles, this.belts, c.x, c.y, BONUS_R, dt); // and so do the crates
       for (const t of this.tanks) {
@@ -723,6 +774,7 @@ export class Game {
           c.dead = true;
           this.giveBonus(t, c.kind);
           if (t.kind === 'thief') t.loot = c.kind;
+          if (this.hunt && t.kind === 'player') this.huntScore(t, c);
           this.events.push(['bonus', r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), t.id]);
           break;
         }
@@ -732,9 +784,13 @@ export class Game {
   }
 
   /** Drop a crate on a free tile, away from every tank, mine and crate. */
-  spawnBonus(kind?: BonusKind): Bonus | undefined {
+  spawnBonus(kind?: BonusKind, middle = false): Bonus | undefined {
     for (let tries = 0; tries < 60; tries++) {
-      const cx = 1 + Math.floor(Math.random() * (W - 2)), cy = 1 + Math.floor(Math.random() * (H - 2));
+      // middle: the golden crate of a hunt looks for a spot near the centre first (fair to every corner)
+      const spread = middle && tries < 40 ? 2 + tries / 6 : 0;
+      const cx = spread ? Math.floor(W / 2 + (Math.random() * 2 - 1) * spread) : 1 + Math.floor(Math.random() * (W - 2));
+      const cy = spread ? Math.floor(H / 2 + (Math.random() * 2 - 1) * spread) : 1 + Math.floor(Math.random() * (H - 2));
+      if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) continue;
       if (this.tiles[cy * W + cx] !== Tile.Empty) continue;
       const x = cx + 0.5, y = cy + 0.5;
       const near = (ox: number, oy: number, d: number) => (ox - x) ** 2 + (oy - y) ** 2 < d * d;
@@ -1652,6 +1708,7 @@ export class Game {
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
     this.events.push(['ko', t.id, killer?.id ?? 0, cause, n]);
     if (t.loot && this.bonusOn) this.dropLoot(t, t.loot);
+    if (this.hunt && t.kind === 'player') this.huntDrop(t);
     this.onKill?.(t, killer);
     this.quips(t, killer);
   }
@@ -1710,7 +1767,7 @@ export class Game {
   }
 
   /** A Pilleur falls: the crate it stole tumbles out of its sack, on the free cell nearest to the wreck. */
-  dropLoot(t: Tank, kind: BonusKind) {
+  dropLoot(t: Tank, kind: BonusKind, loot = true) {
     t.loot = undefined;
     const cx0 = Math.floor(t.x), cy0 = Math.floor(t.y);
     let best: [number, number] | undefined, bd = Infinity;
@@ -1726,7 +1783,7 @@ export class Game {
     const c: Bonus = { id: this.nextId++, kind, x: best[0], y: best[1], t: 0, dead: false };
     this.bonuses.push(c);
     this.events.push(['crate', c.x, c.y, BONUS_KINDS.indexOf(kind)]);
-    this.events.push(['loot', c.x, c.y, BONUS_KINDS.indexOf(kind)]);
+    if (loot) this.events.push(['loot', c.x, c.y, BONUS_KINDS.indexOf(kind)]);
   }
 
   /**
@@ -1829,7 +1886,7 @@ export class Game {
     this.events.push(['freeze', r2(t.x), r2(t.y), t.id, n]);
   }
   netBonuses(): NetBonus[] {
-    return this.bonuses.map((c) => [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
+    return this.bonuses.map((c): NetBonus => c.gold ? [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), 0, 1] : [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
   }
   netBullets(): NetBullet[] {
     return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), (b.rocket ? 1 : 0) | (b.heavy ? SHELL_HEAVY : 0), b.owner]);
@@ -2206,7 +2263,8 @@ export class Game {
           if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - o.x, cy + 0.5 - o.y) < DRILL_BLAST + 0.5) blocked[cy * W + cx] = 1;
     }
     // the Pilleur looks across the whole table when there is a crate to snatch (iteration 15)
-    const thief = t.kind === 'thief' && this.bonuses.some((c) => c.t >= 0.3);
+    // and so do the rivals of « La chasse aux caisses » (iteration 37): every crate is a point
+    const thief = (t.kind === 'thief' || (!!this.hunt && t.kind === 'player')) && this.bonuses.some((c) => c.t >= 0.3);
     const slowOnBelts = this.belts.length > 0 && this.speedOf(t) < BELT_SPEED + 0.5;
     const prev = new Int32Array(W * H).fill(-2);
     const dist = new Int32Array(W * H);
@@ -2239,10 +2297,12 @@ export class Game {
     if (ai.goal !== undefined && prev[ai.goal] !== -2 && ai.goal !== start) best = ai.goal;
     // AI-driven player tanks (demo) love bonus crates
     if (best < 0 && (thief || (t.kind === 'player' && this.bonuses.length && Math.random() < 0.8))) {
+      let bestD = Infinity;
       for (const c of this.bonuses) {
         const cell = Math.floor(c.y) * W + Math.floor(c.x);
         if (prev[cell] === -2 || dist[cell] > (thief ? THIEF_REACH : 9)) continue;
-        if (best < 0 || dist[cell] < dist[best]) best = cell;
+        const d = dist[cell] - (c.gold ? 12 : 0); // the golden crate is worth a detour
+        if (d < bestD) { bestD = d; best = cell; }
       }
     }
     if (best < 0) {

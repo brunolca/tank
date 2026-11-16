@@ -189,6 +189,22 @@ export const sfx = {
     [659, 880, 1109, 1319].forEach((f, i) => tone(t + i * 0.055, 0.16, f, f, 0.12, 'triangle'));
     tone(t + 0.22, 0.25, 2637, 2637, 0.03, 'sine');
   },
+  /** « La chasse aux caisses » (iteration 37): a coin in the piggy bank (a fanfare for the golden crate), or one falling out. */
+  hunt(points: number, mine: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (points < 0) { [988, 740, 523].forEach((f, i) => tone(t + i * 0.07, 0.14, f, f * 0.97, 0.08, 'triangle')); return; }
+    const v = mine ? 0.13 : 0.06;
+    tone(t, 0.08, 1976, 1976, v, 'square');
+    tone(t + 0.07, 0.3, 2637, 2637, v, 'square');
+    if (points > 1) [1047, 1319, 1568, 2093].forEach((f, i) => tone(t + 0.16 + i * 0.08, 0.3, f, f, 0.1, 'triangle'));
+  },
+  /** The golden crate drops: a little bell rings three times. */
+  gold() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 3; i++) { tone(t + i * 0.16, 0.5, 1568, 1568, 0.09, 'sine'); tone(t + i * 0.16, 0.4, 3136, 3136, 0.03, 'sine'); }
+  },
   shieldBreak() {
     if (!ctx) return;
     const t = ctx.currentTime;

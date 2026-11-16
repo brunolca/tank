@@ -1012,3 +1012,9 @@ body.replaying #banner { visibility: hidden; }
 body.replaying #hud, body.replaying #mine-btn, body.replaying #emote-pad { opacity: 0.25; }
 body.replaying #demo-caption { opacity: 0; }
 body.replaying #toast { bottom: calc(11vh + 16px); }
+
+/* « La chasse aux caisses » (iteration 37) */
+.sb-row.hunt .crates { margin-left: auto; font-size: 12px; font-weight: 900; letter-spacing: 0; color: #ffd45a; text-transform: none; }
+.sb-row.hunt.mine { box-shadow: inset 0 0 0 2px rgba(255, 212, 90, 0.6); }
+#banner.hunt .b-kicker::before { content: '▣ '; color: #ffc93a; }
+#banner.hunt .b-title { color: #ffd45a; text-shadow: 0 0 24px rgba(255, 190, 40, 0.55); }
