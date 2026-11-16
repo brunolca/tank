@@ -1,4 +1,4 @@
-import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, W, Tile, TankKind } from './constants';
+import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -6,6 +6,7 @@ import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, W, Tile, TankKind } from './
 //           solid tiles (walls or holes) on either its left and right or its top and bottom, which gives its direction
 //         > < ^ V conveyor belts (iteration 16): tanks, mines and crates ride them (the cell stays floor underneath)
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
+//         , sand (iteration 36): tanks drive slower on it, a mine laid there is buried (hidden from the foes' AI); the cell stays floor
 //         : bridge (iteration 33): a wooden bridge over a pit, tanks drive over it, shells fly over, a mine blast brings it down
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)
@@ -979,6 +980,53 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 36: a sea of sand between the two camps: everyone crawls across it, and a mine laid in the sand is buried
+  46: {
+    name: 'Les dunes',
+    map: [
+      '......,,,,,,,,,,......',
+      '.....,,,,,,,,,,,,..a..',
+      '...##,,,,,##,,,,,##...',
+      '.....,,,,,,,,,,,,.....',
+      '....,,,,o,,,,o,,,,....',
+      '....,,,,o,,,,o,,,,.p..',
+      '..1.,,,,,,,,,,,,,,....',
+      '....,,,,,,##,,,,,,....',
+      '....,,,,,,##,,,,,,.y..',
+      '....,,,,,,##,,,,,,....',
+      '..2.,,,,,,,,,,,,,,....',
+      '....,,,,o,,,,o,,,,.p..',
+      '....,,,,o,,,,o,,,,....',
+      '.....,,,,,,,,,,,,.....',
+      '...##,,,,,##,,,,,##...',
+      '.....,,,,,,,,,,,,..a..',
+      '......,,,,,,,,,,......',
+    ],
+  },
+  // iteration 36: a night oasis ringed with sand, a violet on its island and one bridge in; the whites prowl the dunes
+  48: {
+    name: 'Nuit à l’oasis',
+    night: true,
+    map: [
+      '......................',
+      '..........,,,,....w...',
+      '...###...,,,,,,.......',
+      '.......,,,,,,,,,,.....',
+      '......,,,,____,,,,....',
+      '.....,,,,______,,,,.m.',
+      '..1..,,,__,,,,__,,,...',
+      '.....,,,_,,,,,,_,,,...',
+      '.....,,,_,,v,,,_,,,.g.',
+      '.....,,,_,,,,,,_,,,...',
+      '..2..,,,__,,,,__,,,...',
+      '.....,,,,__::__,,,,.m.',
+      '......,,,,,,,,,,,,....',
+      '.......,,,,,,,,,,.....',
+      '...###...,,,,,,.......',
+      '..........,,,,....w...',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -1034,7 +1082,7 @@ export interface ParsedLevel {
   wind?: number;
   /** Fog (iteration 26): the seed of the banks of mist, when there is fog. */
   fog?: number;
-  /** Floor layer: conveyor belts (iteration 16) and ice (iteration 21), one code per cell (0 none, 1 right, 2 left, 3 up, 4 down, 5 ice), only when the map has some. */
+  /** Floor layer: conveyor belts (iteration 16), ice (iteration 21) and sand (iteration 36), one code per cell (0 none, 1 right, 2 left, 3 up, 4 down, 5 ice, 6 sand), only when the map has some. */
   belts?: number[];
 }
 
@@ -1058,6 +1106,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === BRIDGE_CHAR) tiles[i] = Tile.Bridge;
       else if ((BELT_CHARS as readonly string[]).includes(c)) (belts ??= new Array(W * H).fill(0))[i] = (BELT_CHARS as readonly string[]).indexOf(c) + 1;
       else if (c === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[i] = ICE;
+      else if (c === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SAND;
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
@@ -1070,6 +1119,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
         const k = (BELT_CHARS as readonly string[]).indexOf(row[x]);
         if (k >= 0) (belts ??= new Array(W * H).fill(0))[y * W + x] = k + 1;
         else if (row[x] === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = ICE;
+        else if (row[x] === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = SAND;
 
       }
     }
@@ -1166,6 +1216,26 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
         }
       }
     }
+    // from the 47th, about two missions in five have dunes (iteration 36): patches of sand on the floor, mirrored like
+    // the rest, on their own random stream (the walls and everything else stay put; the daily challenge stays as it was)
+    let belts: number[] | undefined;
+    if (opt.seed === undefined && mission > 46) {
+      const rs = rng(mission * 6263 + 97);
+      if (rs() < 0.4) {
+        belts = new Array(W * H).fill(0);
+        const blobs = 2 + Math.floor(rs() * 2);
+        for (let k = 0; k < blobs; k++) {
+          const cx = 6 + rs() * (W - 12), cy = 2 + rs() * (H - 4), rx = 1.6 + rs() * 1.8, ry = 1.4 + rs() * 1.6;
+          for (let y = 0; y < H; y++) for (let x = 5; x < W - 5; x++) {
+            const i = y * W + x;
+            if (((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 > 1) continue;
+            if (tiles[i] === Tile.Empty) belts[i] = SAND;
+            if (tiles[W * H - 1 - i] === Tile.Empty) belts[W * H - 1 - i] = SAND;
+          }
+        }
+        if (!belts.some(Boolean)) belts = undefined;
+      }
+    }
     const tier = Math.min(3, Math.floor((mission - 1) / 8));
     const count = Math.min(8, 3 + Math.floor((mission - 16) / 3));
     const enemies: ParsedLevel['enemies'] = [];
@@ -1243,8 +1313,8 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
       ? storm ? `Brume d’orage ${mission}` : `Mission de brume ${mission}`
       : wind !== undefined
       ? storm ? `Tempête ${mission}` : night ? `Nuit de vent ${mission}` : `Coup de vent ${mission}`
-      : storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : `Mission spéciale ${mission}`;
-    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm, wind, fog };
+      : storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : belts ? `Mission des sables ${mission}` : `Mission spéciale ${mission}`;
+    return { name: opt.name ?? name, tiles, spawns, enemies, night, storm, wind, fog, belts };
   }
   return parseLevel(LEVELS[0]);
 }
@@ -1552,8 +1622,8 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 export function versusArena(round: number): ParsedLevel {
-  // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21) and the ravine of mission 32 (iteration 33)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32]);
+  // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21), the ravine of mission 32 (iteration 33) and the dunes of mission 46 (iteration 36)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[46]); // and the dunes of mission 46 (iteration 36)
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

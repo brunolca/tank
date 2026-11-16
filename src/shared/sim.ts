@@ -1,12 +1,12 @@
 import {
-  BELT_DIRS, BELT_SPEED, ICE, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BELT_DIRS, BELT_SPEED, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
-import { angDiff, beltStep, glideStep, onIce, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
@@ -280,6 +280,15 @@ export class Game {
   flash = 0;
   /** Conveyor belts (iteration 16): one code per cell (0 none, 1 right, 2 left, 3 up, 4 down), empty when the map has none. */
   belts: number[] = [];
+  /** Some floor cells are sand (iteration 36): tanks drive slower on them, mines laid there are buried. */
+  sand = false;
+  /**
+   * A mine buried in the sand (iteration 36) is hidden from the AI of the other side until its fuse is lit (or it is
+   * right under their nose): they drive straight into the trap. Seeds of the Semeur are never buried.
+   */
+  hiddenMine(m: Mine, t: Tank): boolean {
+    return this.sand && m.team !== t.team && m.fuse < 0 && m.seed === undefined && onSand(this.belts, m.x, m.y) && Math.hypot(m.x - t.x, m.y - t.y) > SAND_SPOT + t.r;
+  }
   /** Some floor cells are ice (iteration 21): tanks keep their momentum on them. */
   ice = false;
   /**
@@ -313,6 +322,7 @@ export class Game {
     this.tiles = tiles.slice();
     if (belts?.some(Boolean)) this.belts = belts.slice();
     this.ice = this.belts.includes(ICE);
+    this.sand = this.belts.includes(SAND);
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -1307,11 +1317,12 @@ export class Game {
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
     const px = t.x, py = t.y;
+    const speed = this.speedOf(t) * (this.sand ? floorSpeed(this.belts, t.x, t.y) : 1); // sand slows everyone down (iteration 36)
     if (this.ice && t.kind !== 'frost') { // the Givré skates on its own frost without sliding (iteration 31)
       if (t.slid) return; // one step per tick on the ice: momentum is integrated once
       t.slid = true;
-      [t.x, t.y, t.body, t.vx, t.vy] = slideDrive(this.tiles, this.belts, t.x, t.y, t.body, t.vx, t.vy, mx, my, this.speedOf(t), dt, t.r);
-    } else [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, this.speedOf(t), dt, t.r);
+      [t.x, t.y, t.body, t.vx, t.vy] = slideDrive(this.tiles, this.belts, t.x, t.y, t.body, t.vx, t.vy, mx, my, speed, dt, t.r);
+    } else [t.x, t.y, t.body] = driveStep(this.tiles, t.x, t.y, t.body, mx, my, speed, dt, t.r);
     if ((t.x - px) ** 2 + (t.y - py) ** 2 > 1) {
       // went through a portal
       this.events.push(['warp', r2(px), r2(py), r2(t.x), r2(t.y), t.id]);
@@ -1563,10 +1574,11 @@ export class Game {
     this.events.push(ev);
     const owner = this.tankById(m.owner);
     const killer = m.by !== undefined ? this.tankById(m.by) ?? owner : owner;
+    const cause = m.seed === undefined && this.sand && onSand(this.belts, m.x, m.y) ? KO_SAND : KO_MINE; // a buried mine (iteration 36)
     for (const t of this.tanks) {
       if (t === owner && t.ranks && t.ranks[1] >= 3) continue; // « Sang-froid »: one's own mines spare one
       if (t === owner && m.seed !== undefined && m.by === undefined) continue; // a ripe seed spares the Semeur: only a shot one hurts it
-      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, killer, KO_MINE);
+      if (t.alive && Math.hypot(t.x - m.x, t.y - m.y) < R + t.r * 0.4) this.killTank(t, killer, cause);
     }
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
@@ -2085,6 +2097,7 @@ export class Game {
     }
     for (const m of this.mines) {
       if (m.seed !== undefined && m.owner === t.id) continue; // the Semeur strolls among its own seeds
+      if (this.hiddenMine(m, t)) continue; // buried in the sand: it does not see it (iteration 36)
       const dx = t.x - m.x, dy = t.y - m.y;
       const d = Math.hypot(dx, dy);
       // on a bridge, the blast reaches further: the planks give way under it (iteration 33)
@@ -2170,6 +2183,7 @@ export class Game {
     }
     for (const m of this.mines) {
       if (m.seed !== undefined && m.owner === t.id) continue;
+      if (this.hiddenMine(m, t)) continue; // buried in the sand (iteration 36)
       const R = (m.blast ?? MINE_BLAST) + 0.4, k = Math.ceil(R + BRIDGE_REACH);
       for (let cy = Math.floor(m.y - k); cy <= Math.floor(m.y + k); cy++)
         for (let cx = Math.floor(m.x - k); cx <= Math.floor(m.x + k); cx++)
@@ -2210,7 +2224,7 @@ export class Game {
         const n = ny * W + nx;
         if (prev[n] !== -2 || blocked[n]) continue;
         if (dx && dy && (blocked[y * W + nx] || blocked[ny * W + x])) continue;
-        if (slowOnBelts && this.belts[n] && this.belts[n] !== ICE) {
+        if (slowOnBelts && this.belts[n] && this.belts[n] !== ICE && this.belts[n] !== SAND) {
           // a tank slower than the belts cannot drive up one: it plans around (or rides it) instead (iteration 16)
           const [bx, by] = BELT_DIRS[this.belts[n]];
           if (bx * dx + by * dy < 0) continue;
@@ -2237,7 +2251,7 @@ export class Game {
         const cx = (c % W) + 0.5, cy = Math.floor(c / W) + 0.5;
         const df = Math.hypot(foe.x - cx, foe.y - cy);
         let score = -Math.abs(df - ai.prefDist) + Math.random() * 2.5 + Math.min(dist[c], 6) * 0.15;
-        for (const m of this.mines) score += Math.min(4, Math.hypot(m.x - cx, m.y - cy)) * 0.8;
+        for (const m of this.mines) if (!this.hiddenMine(m, t)) score += Math.min(4, Math.hypot(m.x - cx, m.y - cy)) * 0.8;
         for (const o of this.tanks) if (o.alive && o !== t && o.team === t.team && Math.hypot(o.x - cx, o.y - cy) < 1.5) score -= 2;
         if (t.kind === 'frost' && !this.frost.has(c)) score += 1.5; // the Givré loves fresh floor to frost (iteration 31)
         if (score > bestScore) { bestScore = score; best = c; }

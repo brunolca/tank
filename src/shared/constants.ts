@@ -306,6 +306,16 @@ export const ICE = 5;
 /** Grip on ice (per second): how fast a tank's sliding speed bends toward where its driver steers. Low = slippery. */
 export const ICE_GRIP = 1.7;
 
+// ------------------------------------------------------------------ sand (iteration 36)
+/** Map character of a sand cell. Like the ice, sand lives in the floor layer (code SAND), the cell itself stays floor. */
+export const SAND_CHAR = ',';
+/** Floor-layer code of a sand cell. */
+export const SAND = 6;
+/** How much of its speed a tank keeps on sand. */
+export const SAND_SLOW = 0.6;
+/** A buried mine (laid on sand) stays hidden from the foes' AI until its fuse is lit, unless they come this close. */
+export const SAND_SPOT = 0.9;
+
 // ------------------------------------------------------------------ night
 /** At night the AI only makes out foes this close (tiles), unless they just gave themselves away by firing. */
 export const NIGHT_SIGHT = 4.5;
@@ -415,6 +425,7 @@ export const KO_BOLT = 2;
 export const KO_DRILL = 3;
 export const KO_FALL = 4; // « Les ponts » (iteration 33): the bridge gave way under it
 export const KO_LOB = 5; // « Le Mortier » (iteration 34): a cannonball fell on it
+export const KO_SAND = 6; // « Les dunes » (iteration 36): a mine buried in the sand
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */

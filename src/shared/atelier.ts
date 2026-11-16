@@ -62,6 +62,8 @@ export const BRUSHES: Brush[] = [
   { ch: 'M', label: 'Mortier', group: 'tank' },
   // iteration 35: the fifth boss (share-code letter k)
   { ch: 'B', label: 'Bombardier', group: 'tank' },
+  // iteration 36: sand (share-code letter l)
+  { ch: ',', label: 'Sable', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

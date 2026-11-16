@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
@@ -1122,6 +1122,8 @@ export class Renderer {
   private iceGeo = new THREE.BoxGeometry(1, 0.03, 1);
   private iceMesh?: THREE.InstancedMesh;
   private iceCells = new Set<number>();
+  /** « Les dunes » (iteration 36): the sand cells of the table, painted into the floor texture. */
+  private sandCells = new Set<number>();
   /** « Le Givré » (iteration 31): its frost, slabs of ice laid and melted as the snapshots say. */
   private frostMat = new THREE.MeshStandardMaterial({ map: iceTexture(), color: 0xe6f6ff, roughness: 0.18, metalness: 0.15, emissive: 0x5fa8d8, emissiveIntensity: 0.18, transparent: true, opacity: 0.88 });
   private frostMesh?: THREE.InstancedMesh;
@@ -1619,6 +1621,7 @@ export class Renderer {
     for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
     this.setCtf(undefined);
 
+    this.sandCells = new Set(belts.flatMap((b, i) => (b === SAND && tiles[i] === Tile.Empty ? [i] : [])));
     this.paintFloor(tiles);
     this.addBelts(belts);
     this.addIce(tiles, belts);
@@ -1901,6 +1904,64 @@ export class Renderer {
     }
   }
 
+  /** Is this point of the table on sand? (iteration 36: deep tread marks, dust, buried mines) */
+  onSand(x: number, y: number) {
+    if (!this.sandCells.size || x < 0 || y < 0 || x >= W || y >= H) return false;
+    return this.sandCells.has(Math.floor(y) * W + Math.floor(x));
+  }
+
+  /**
+   * « Les dunes » (iteration 36): the sand is painted right into the floor texture, so the tread marks dig into it.
+   * Rounded patches that run into each other, grains, and wind ripples across them.
+   */
+  private paintSand(g: CanvasRenderingContext2D) {
+    if (!this.sandCells.size) return;
+    const cells = [...this.sandCells];
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    // cell by cell, with simple shapes only (one big clipped or blurred path brings accelerated canvases to their knees)
+    const disc = (cx: number, cy: number, r: number) => { g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); };
+    // a darker rim, then the sand: overlapping discs and squares give the patch soft, rounded edges
+    g.fillStyle = 'rgba(170,110,40,0.35)';
+    for (const i of cells) disc((i % W) * PX + PX / 2, Math.floor(i / W) * PX + PX / 2, PX * 0.74);
+    g.fillStyle = '#e6b866';
+    for (const i of cells) {
+      const x = (i % W) * PX, y = Math.floor(i / W) * PX;
+      disc(x + PX / 2, y + PX / 2, PX * 0.68);
+      g.fillRect(x, y, PX, PX);
+    }
+    for (const i of cells) {
+      const x0 = (i % W) * PX, y0 = Math.floor(i / W) * PX;
+      g.save();
+      g.beginPath();
+      g.rect(x0, y0, PX, PX);
+      g.clip();
+      // a warmer heart, grains, and wind ripples (a dark crest line and its sunlit edge just above), continuous from cell to cell
+      const hg = g.createRadialGradient(x0 + PX / 2, y0 + PX / 2, 4, x0 + PX / 2, y0 + PX / 2, PX * 0.7);
+      hg.addColorStop(0, 'rgba(240,196,110,0.7)');
+      hg.addColorStop(1, 'rgba(240,196,110,0)');
+      g.fillStyle = hg;
+      g.fillRect(x0, y0, PX, PX);
+      for (let k = 0; k < 60; k++) {
+        g.fillStyle = rnd() < 0.55 ? 'rgba(140,90,30,0.28)' : 'rgba(255,240,200,0.45)';
+        g.fillRect(x0 + rnd() * PX, y0 + rnd() * PX, 1.5, 1.5);
+      }
+      g.lineCap = 'round';
+      for (let yy = Math.floor(y0 / 11) * 11 - 11; yy < y0 + PX + 11; yy += 11) {
+        for (const [dy, col, lw] of [[0, 'rgba(150,95,30,0.3)', 2], [-2, 'rgba(255,236,190,0.5)', 1.2]] as const) {
+          g.strokeStyle = col; g.lineWidth = lw;
+          g.beginPath();
+          for (let xx = x0 - 8; xx <= x0 + PX + 8; xx += 8) {
+            const y = yy + dy + Math.sin(xx * 0.045 + yy * 0.7) * 3.5 + Math.sin(xx * 0.013 + yy) * 2;
+            if (xx === x0 - 8) g.moveTo(xx, y); else g.lineTo(xx, y);
+          }
+          g.stroke();
+        }
+      }
+      g.restore();
+    }
+  }
+
   /** Is this point of the table on ice? (tread marks turn to frost, sliding throws ice shavings) */
   onIce(x: number, y: number) {
     if (x < 0 || y < 0 || x >= W || y >= H) return false;
@@ -2175,6 +2236,7 @@ export class Renderer {
     g.lineWidth = 1;
     for (let x = 1; x < W; x++) { g.beginPath(); g.moveTo(x * PX, 0); g.lineTo(x * PX, ch); g.stroke(); }
     for (let y = 1; y < H; y++) { g.beginPath(); g.moveTo(0, y * PX); g.lineTo(cw, y * PX); g.stroke(); }
+    this.paintSand(g);
     // vignette near the border
     const vg = g.createRadialGradient(cw / 2, ch / 2, ch * 0.3, cw / 2, ch / 2, cw * 0.62);
     vg.addColorStop(0, 'rgba(0,0,0,0)');
@@ -2446,17 +2508,26 @@ export class Renderer {
         }
       } else if (d > 0.22) {
         const bx = t.x, by = t.y, ang = t.body;
+        const sand = this.onSand(t.x, t.y); // in the dunes (iteration 36): deeper tracks and a cloud of dust
         this.floorMark((g) => {
           g.save();
           g.translate(bx * PX, by * PX);
           g.rotate(ang);
-          g.fillStyle = 'rgba(90,60,30,0.16)';
+          g.fillStyle = sand ? 'rgba(120,70,20,0.3)' : 'rgba(90,60,30,0.16)';
           for (const off of [-0.3, 0.3]) for (let k = -1; k <= 1; k++) g.fillRect(k * 5 - 2, off * PX - 5, 4, 10);
+          if (sand) {
+            g.fillStyle = 'rgba(255,236,190,0.35)';
+            for (const off of [-0.3, 0.3]) g.fillRect(-8, off * PX + 5, 16, 2);
+          }
           g.restore();
         });
         v.lastMarkX = t.x; v.lastMarkY = t.y;
-        if (Math.random() < 0.5 && !(t.invisible && t.id !== myId)) {
-          this.smoke.emit({ x: t.x - Math.cos(t.body) * 0.4, y: 0.08, z: t.y - Math.sin(t.body) * 0.4, vy: 0.3, life: 0.6, s0: 0.06, s1: 0.16, c0: 0xd9c4a0, c1: 0xe8dcc8, drag: 2 });
+        if ((sand || Math.random() < 0.5) && !(t.invisible && t.id !== myId)) {
+          for (let k = 0, n = sand ? 2 : 1; k < n; k++) {
+            this.smoke.emit(sand
+              ? { x: t.x - Math.cos(t.body) * 0.4 + (Math.random() - 0.5) * 0.5, y: 0.1, z: t.y - Math.sin(t.body) * 0.4 + (Math.random() - 0.5) * 0.5, vx: (Math.random() - 0.5) * 0.7, vy: 0.45 + Math.random() * 0.3, vz: (Math.random() - 0.5) * 0.7, life: 0.9, s0: 0.1, s1: 0.32, c0: 0xe2b56a, c1: 0xf1dcae, drag: 1.6 }
+              : { x: t.x - Math.cos(t.body) * 0.4, y: 0.08, z: t.y - Math.sin(t.body) * 0.4, vy: 0.3, life: 0.6, s0: 0.06, s1: 0.16, c0: 0xd9c4a0, c1: 0xe8dcc8, drag: 2 });
+          }
         }
       }
     }
@@ -3025,6 +3096,14 @@ export class Renderer {
       const far = Math.abs(mn.x - g.position.x) + Math.abs(mn.y - g.position.z) > 1;
       g.position.x += (mn.x - g.position.x) * (far ? 1 : 0.5);
       g.position.z += (mn.y - g.position.z) * (far ? 1 : 0.5);
+      // « Les dunes » (iteration 36): laid in the sand, a mine sinks in until only its cap shows; it pops up when its fuse is lit
+      const buried = !mn.blink && this.onSand(mn.x, mn.y);
+      const depth = buried ? -0.115 : 0;
+      if (buried && !g.userData.buried && g.position.y > -0.01) {
+        for (let k = 0; k < 6; k++) this.smoke.emit({ x: mn.x + (Math.random() - 0.5) * 0.3, y: 0.06, z: mn.y + (Math.random() - 0.5) * 0.3, vx: (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 1.2, life: 0.7, s0: 0.08, s1: 0.22, c0: 0xe2b56a, c1: 0xf1dcae, drag: 2 });
+      }
+      g.userData.buried = buried;
+      g.position.y += (depth - g.position.y) * (buried ? 0.06 : 0.35);
       const led = g.getObjectByName('led') as THREE.Mesh;
       const on = mn.blink ? Math.sin(this.time * 22) > 0 : Math.sin(this.time * 3) > 0.6;
       led.material = on ? this.ledOn : this.ledOff;

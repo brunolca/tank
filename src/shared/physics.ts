@@ -1,4 +1,4 @@
-import { BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, isPit, Tile } from './constants';
+import { BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, isPit, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -253,7 +253,7 @@ export function beltAt(belts: ArrayLike<number> | undefined, x: number, y: numbe
  */
 export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | undefined, x: number, y: number, r: number, dt: number): [number, number] {
   const b = beltAt(belts, x, y);
-  if (!b || b === ICE) return [x, y]; // ice does not carry anything (iteration 21, see glideStep)
+  if (!b || b === ICE || b === SAND) return [x, y]; // ice and sand do not carry anything (iterations 21 and 36)
   const [dx, dy] = BELT_DIRS[b] ?? [0, 0];
   const px = x, py = y;
   const sp = BELT_SPEED * dt;
@@ -267,6 +267,16 @@ export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | un
     if (w) [x, y] = w;
   }
   return [x, y];
+}
+
+/** Is the centre of this point on a sand cell? (iteration 36) */
+export function onSand(belts: ArrayLike<number> | undefined, x: number, y: number): boolean {
+  return beltAt(belts, x, y) === SAND;
+}
+
+/** Share of its speed a tank keeps where it stands: SAND_SLOW on sand, 1 elsewhere (server and client prediction alike). */
+export function floorSpeed(belts: ArrayLike<number> | undefined, x: number, y: number): number {
+  return beltAt(belts, x, y) === SAND ? SAND_SLOW : 1;
 }
 
 /** Is the centre of this point on an ice cell? (iteration 21) */

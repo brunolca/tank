@@ -1,7 +1,7 @@
 {
-  "iteration": 35,
-  "date": "2026-11-15",
-  "title": "Le Bombardier",
+  "iteration": 36,
+  "date": "2026-11-16",
+  "title": "Les dunes",
   "journal": [
     {
       "iteration": 1,
@@ -425,6 +425,18 @@
         "À mi-vie, il se met en colère : la rangée s’allonge et une deuxième tombe juste derrière. Le toit d’un tunnel reste le seul abri sûr, et de près il n’a qu’un petit canon.",
         "Une mission sur deux, à partir de la 100ᵉ, le Bombardier tire de nuit : seuls ses cercles rouges éclairent la table. On peut aussi le poser dans l’atelier.",
         "Le bestiaire de l’accueil compte maintenant vingt et un tanks et se souvient de ceux que tu as croisés : les autres restent grisés jusqu’à votre première rencontre."
+      ]
+    },
+    {
+      "iteration": 36,
+      "date": "2026-11-16",
+      "title": "Les dunes",
+      "notes": [
+        "Nouveau terrain : le sable. Des dunes dorées s’étendent sur la table, et tous les tanks y roulent moins vite, toi comme les ennemis. On y voit les traces de chenilles bien creusées et un petit nuage de poussière derrière chaque tank.",
+        "Une mine posée dans le sable s’enfouit : il ne reste qu’une petite bosse. Les ennemis ne la voient pas et foncent droit dessus… jusqu’à ce qu’elle s’allume. Le ralenti le raconte : « Une mine cachée dans le sable ! ».",
+        "Deux nouvelles missions : « Les dunes » (46), une mer de sable entre les deux camps, et « Nuit à l’oasis » (48), une île au milieu d’un lac, un seul pont pour y entrer et du sable tout autour.",
+        "À partir de la 47ᵉ mission, environ deux missions générées sur cinq ont leurs dunes. Le versus gagne une arène des sables.",
+        "Le sable rejoint la palette de l’atelier : dessine tes propres déserts."
       ]
     }
   ]

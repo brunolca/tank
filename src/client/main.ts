@@ -1,11 +1,11 @@
-import { type TankKind, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags, type NetFlag } from '../shared/drapeau';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
-import { angDiff, beltStep } from '../shared/physics';
+import { angDiff, beltStep, floorSpeed } from '../shared/physics';
 import { BOSS_NAMES, RUSH_DUO_HP, RUSH_LIVES, RUSH_STAGES, rushLevel, rushOrder, rushDuo, weekLabel, weekNumber } from '../shared/rush';
 import type { BossKind } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, RushState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
@@ -372,7 +372,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(SAND) ? ' · Sable' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
   const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${mapIce ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
@@ -420,6 +420,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
+  else if (belts.includes(SAND)) setTimeout(() => toast('Sable : on y roule moins vite. Une mine posée dans le sable s’enfouit : les ennemis ne la voient pas venir !', 4600), 2200);
   else if (mapIce) setTimeout(() => toast('Glace : ton tank glisse et garde son élan. Freine tôt, braque en avance… et profite des glissades pour esquiver !', 4400), 2200);
   else if (belts.some(Boolean)) setTimeout(() => toast('Tapis roulants : ils emportent les tanks, les mines et les caisses. Remonter le courant, ça ralentit !', 4200), 2200);
   else if (tiles.some(isTunnel)) setTimeout(() => toast('Tunnels : roule dedans pour disparaître aux yeux de l’ennemi. Les obus rebondissent dessus, mais on ne peut pas tirer de l’intérieur.', 4200), 2200);
@@ -562,7 +563,7 @@ function predictStep(x: number, y: number, body: number, vx: number, vy: number,
   const snap = s ?? snaps[snaps.length - 1];
   const fl = snap?.T.get(myTankId)?.[5] ?? 0;
   const turbo = fl & BONUS_INFO.turbo.flag;
-  const speed = mySpec.speed * (turbo ? TURBO_MULT : 1);
+  const speed = mySpec.speed * (turbo ? TURBO_MULT : 1) * (belts.length ? floorSpeed(belts, x, y) : 1); // sand slows us down, as on the server (iteration 36)
   if (fl & FLAG_FROZEN) { // « Gel » (iteration 29): stuck in the ice cube, only a belt moves it, as on the server
     if (belts.length) [x, y] = beltStep(tiles, belts, x, y, TANK_R, DT);
     return [x, y, body, 0, 0];
@@ -2743,6 +2744,35 @@ if (params.has('demo')) {
      */
     /** Watch the bridges for the next few seconds: the first enemy to cross one falls (see bridgeTrap). */
     bridgeTrap(seconds = 8) { if (attract) bridgeTrapUntil = attract.tick + Math.round(seconds / DT); return !!attract; },
+    /**
+     * « Les dunes » (iteration 36): a hero's mine is buried in the sand just ahead of a moving enemy, on its way: it does
+     * not see it and drives into the trap (its fall plays again in slow motion). Returns how far ahead it lies (0: none).
+     */
+    sandTrap() {
+      const g = attract;
+      if (!g) return 0;
+      const sandAt = (c: number) => c >= 0 && c < W * H && g.belts[c] === SAND && g.tiles[c] === Tile.Empty;
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      const foes = g.tanks.filter((t) => t.alive && t.team !== heroes[0]?.team && !isBossKind(t.kind) && t.spec.speed > 0);
+      if (!heroes.length || !foes.length) return 0;
+      let best: { x: number; y: number; d: number; foe: number } | undefined;
+      for (const f of foes) {
+        const cands = (f.ai?.path ?? []).slice(0, 4);
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) cands.push((Math.floor(f.y) + dy) * W + Math.floor(f.x) + dx);
+        for (const c of cands) {
+          if (!sandAt(c)) continue;
+          const x = (c % W) + 0.5, y = Math.floor(c / W) + 0.5, d = Math.hypot(f.x - x, f.y - y);
+          if (d < 0.6 || d > 1.5 || heroes.some((h) => Math.hypot(h.x - x, h.y - y) < 2.6)) continue;
+          if (g.mines.some((m) => Math.hypot(m.x - x, m.y - y) < 1)) continue;
+          const onWay = (f.ai?.path ?? []).includes(c) ? -1 : 0; // on its planned way first
+          if (!best || d + onWay < best.d) best = { x, y, d: d + onWay, foe: f.id };
+        }
+      }
+      if (!best) return 0;
+      g.mines.push({ id: 920000 + g.tick, owner: heroes[0].id, team: heroes[0].team, x: best.x, y: best.y, t: 0.3, fuse: -1, dead: false });
+      reelWanted = best.foe;
+      return Math.max(0.01, best.d + 1);
+    },
     bridgeMine() {
       const g = attract;
       if (!g) return 0;

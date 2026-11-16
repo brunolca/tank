@@ -3,8 +3,9 @@ import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decode
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
+import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { KO_LOB, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -2248,4 +2249,101 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (landed < 10) fail(`le Bombardier ne tire presque pas (${landed} boulets)`);
   if (process.exitCode !== 1) console.log(`Bombardier OK (${cleared} partie(s) gagnée(s) par l’IA, ${landed} boulets tombés, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Les dunes » (iteration 36): sand slows every tank down, a mine laid in it is buried (hidden from the foes' AI) and its blast says so
+{
+  const fail = (m: string) => { console.error('SABLE:', m); process.exitCode = 1; };
+  const open = new Array(W * H).fill(Tile.Empty);
+  const sandy = new Array(W * H).fill(0);
+  for (let y = 0; y < H; y++) for (let x = 6; x < 16; x++) sandy[y * W + x] = SAND;
+  // the same drive on bare floor and on sand
+  const run = (belts?: number[]) => {
+    const g = new Game(open, belts);
+    const t = g.addTank('player', 1, 7.5, 8.5, 0x3d7bff, 'p1', 'P');
+    g.frozen = false;
+    for (let i = 0; i < 30; i++) g.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+    return t.x - 7.5;
+  };
+  const bare = run(), slow = run(sandy);
+  if (Math.abs(slow / bare - SAND_SLOW) > 0.03) fail(`sur le sable, le tank devrait rouler à ${SAND_SLOW} de sa vitesse (${(slow / bare).toFixed(2)})`);
+  // the client prediction runs the same steps
+  let [px, py, pb] = [7.5, 8.5, 0];
+  for (let i = 0; i < 30; i++) [px, py, pb] = driveStep(open, px, py, pb, 1, 0, playerSpec().speed * floorSpeed(sandy, px, py), DT);
+  if (Math.abs(px - 7.5 - slow) > 1e-6) fail(`la prédiction ne colle pas au serveur sur le sable (${(px - 7.5).toFixed(3)} contre ${slow.toFixed(3)})`);
+  // a buried mine is hidden from the foes, not from friends, and shows up once its fuse is lit
+  const g = new Game(open, sandy);
+  const me = g.addTank('player', 1, 3.5, 3.5, 0x3d7bff, 'p1', 'P');
+  const mate = g.addTank('player', 1, 3.5, 13.5, 0x3d7bff, 'p2', 'Q');
+  const foe = g.addTank('ash', 99, 14.5, 8.5, 0);
+  g.frozen = false;
+  const mine = { id: 777, owner: me.id, team: me.team, x: 10.5, y: 8.5, t: 1, fuse: -1, dead: false };
+  const bare2 = { id: 778, owner: me.id, team: me.team, x: 3.5, y: 8.5, t: 1, fuse: -1, dead: false };
+  g.mines.push(mine, bare2);
+  if (!g.hiddenMine(mine, foe)) fail('une mine enfouie devrait échapper à l’ennemi');
+  if (g.hiddenMine(mine, mate)) fail('un coéquipier devrait voir la mine enfouie');
+  if (g.hiddenMine(bare2, foe)) fail('une mine hors du sable devrait se voir');
+  // the foe drives into it: it lights up, it is seen, and the blast is told as a buried mine
+  foe.ai = undefined;
+  let ko: unknown[] | undefined, seenLit = false;
+  for (let i = 0; i < 240 && !ko; i++) {
+    g.driveTank(foe, -1, 0, DT);
+    g.step(new Map());
+    if (mine.fuse >= 0 && !mine.dead && !g.hiddenMine(mine, foe)) seenLit = true;
+    ko = g.events.find((e) => e[0] === 'ko' && e[1] === foe.id);
+    g.events = [];
+  }
+  if (!ko) fail('l’ennemi aurait dû sauter sur la mine enfouie');
+  else if (ko[3] !== KO_SAND) fail(`la mine enfouie devrait être racontée comme telle (${JSON.stringify(ko)})`);
+  if (!seenLit) fail('une mine allumée devrait se voir');
+  // a mine on bare floor still says « Sur la mine ! »
+  const g2 = new Game(open, sandy);
+  const v2 = g2.addTank('brown', 99, 3.5, 8.5, 0);
+  const o2 = g2.addTank('player', 1, 3.5, 2.5, 0x3d7bff, 'p1', 'P');
+  g2.frozen = false;
+  g2.mines.push({ id: 5, owner: o2.id, team: 1, x: 3.5, y: 8.5, t: 1, fuse: 0.01, dead: false });
+  g2.step(new Map());
+  const k2 = g2.events.find((e) => e[0] === 'ko' && e[1] === v2.id);
+  if (!k2 || k2[3] !== KO_MINE) fail(`mine hors du sable mal racontée : ${JSON.stringify(k2)}`);
+  // the missions: two handmade ones, dunes in some generated missions from the 47th, never in the daily challenge
+  for (const n of [46, 48]) if (!getMission(n).belts?.includes(SAND)) fail(`la mission ${n} devrait avoir du sable`);
+  const dunes: number[] = [];
+  for (let n = 41; n <= 140; n++) {
+    const lvl = getMission(n);
+    if (EXTRA_LEVELS[n] || isBossMission(n) || !lvl.belts?.includes(SAND)) continue;
+    if (n < 47) fail(`du sable trop tôt (mission ${n})`);
+    lvl.belts.forEach((b, i) => { if (b === SAND && lvl.tiles[i] !== Tile.Empty) fail(`mission ${n} : du sable sous un mur`); if (b && b !== SAND) fail(`mission ${n} : code de sol inattendu`); });
+    dunes.push(n);
+  }
+  if (dunes.length < 15 || dunes.length > 50) fail(`missions des sables : ${dunes.length} sur 90`);
+  for (let d = 0; d < 30; d++) for (let st = 0; st < DAILY_STAGES; st++) if (dailyLevel(20000 + d, st).belts?.includes(SAND)) fail('du sable dans le défi du jour');
+  if (getMission(dunes[0]).belts?.join() !== getMission(dunes[0]).belts?.join()) fail('le sable des missions générées doit être stable');
+  // in the workshop
+  const map = blankMap();
+  map[8] = map[8].slice(0, 8) + ',,,,' + map[8].slice(12);
+  map[3] = map[3].slice(0, 15) + 'a' + map[3].slice(16);
+  if (checkAtelier(map)) fail(`atelier : sable refusé (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Dune', map }));
+  if (back?.map[8].slice(8, 12) !== ',,,,') fail('atelier : le sable se perd dans le code');
+  if (!atelierLevel({ name: 'Dune', map }).belts?.includes(SAND)) fail('atelier : pas de sable dans la mission jouée');
+  // AI duos play the sand missions without trouble, and cheaply
+  let spent = 0, steps = 0, cleared = 0;
+  for (const n of [46, 48, dunes[0], dunes[1]]) {
+    const lvl = getMission(n);
+    const s2 = new Game(lvl.tiles, lvl.belts);
+    if (lvl.night) s2.night = true;
+    for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 90 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick dans les dunes`);
+  if (process.exitCode !== 1) console.log(`sable OK (missions des sables : ${dunes.slice(0, 8).join(', ')}…, ${cleared}/4 gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
 }

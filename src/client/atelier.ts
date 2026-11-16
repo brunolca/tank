@@ -7,7 +7,7 @@ import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const GROUND = '.#Ho_=*+><^V~'; // then four conveyor belts (iteration 16) and the ice (iteration 21)
+const GROUND = '.#Ho_=*+><^V~,'; // then four conveyor belts (iteration 16), the ice (iteration 21) and the sand (iteration 36)
 
 /** Draw a map onto a 2D canvas (the editor, the lobby preview). `hot`: a cell to highlight (the brush under the cursor). */
 export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number; y: number; ch: string }) {
@@ -107,6 +107,18 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
     g.beginPath();
     g.moveTo(px + s * 0.2, py + s * 0.62); g.lineTo(px + s * 0.55, py + s * 0.3);
     g.moveTo(px + s * 0.45, py + s * 0.8); g.lineTo(px + s * 0.8, py + s * 0.48);
+    g.stroke();
+    g.lineWidth = 1; g.lineCap = 'butt';
+  } else if (c === ',') {
+    // sand: warm gold, a few grains and two wind ripples
+    g.fillStyle = '#e6b866'; g.fillRect(px, py, s, s);
+    g.strokeStyle = 'rgba(150,95,30,0.55)'; g.lineWidth = Math.max(1, s * 0.06); g.lineCap = 'round';
+    g.beginPath();
+    for (const k of [0.38, 0.7]) {
+      g.moveTo(px + s * 0.12, py + s * k);
+      g.quadraticCurveTo(px + s * 0.35, py + s * (k - 0.12), px + s * 0.55, py + s * k);
+      g.quadraticCurveTo(px + s * 0.72, py + s * (k + 0.1), px + s * 0.88, py + s * (k - 0.04));
+    }
     g.stroke();
     g.lineWidth = 1; g.lineCap = 'butt';
   } else if (c === '1' || c === '2') {

@@ -7,11 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 50, arms: ['canon', 'ricochet'], seconds: 17, volleys: [3.2, 9.5, 14.5], caption: 'Nouveau boss : le Bombardier', sub: 'Il pilonne des rangées entières de boulets' },
-  { mission: 50, arms: ['ricochet', 'sapeur'], seconds: 13, bossHp: 4, volleys: [2.5, 8.5], caption: 'En colère : deux rangées d’un coup', sub: 'Ne longe pas la rangée : avance ou recule !' },
-  { mission: 100, arms: ['canon', 'fusee'], seconds: 12, volleys: [2.5, 8], caption: 'Le Bombardier de nuit', sub: 'Seuls les cercles rouges éclairent la table' },
-  { bestiary: 5, seconds: 5, caption: 'Au bestiaire : vingt et un tanks', sub: 'Ceux que tu n’as pas encore croisés restent grisés' },
-  { mission: 43, arms: ['sapeur', 'canon'], seconds: 10, lobs: [2.5, 7], caption: 'Et toujours le Mortier', sub: 'Un boulet tombé du ciel !' },
+  { mission: 46, arms: ['canon', 'sapeur'], seconds: 16, sandTraps: [3.5, 9.5], caption: 'Nouveau terrain : le sable', sub: 'On y roule moins vite, et les mines s’y enfouissent' },
+  { mission: 46, arms: ['sapeur', 'ricochet'], seconds: 12, sandTraps: [2.5, 7], caption: 'Le piège des dunes', sub: 'Les ennemis ne voient pas les mines enfouies' },
+  { mission: 48, arms: ['canon', 'fusee'], seconds: 13, sandTraps: [4, 9], caption: 'Nuit à l’oasis', sub: 'Une île, un seul pont, du sable tout autour' },
+  { mission: 49, arms: ['ricochet', 'canon'], seconds: 10, sandTraps: [4], caption: 'Des dunes dans les missions générées', sub: 'À partir de la 47ᵉ mission' },
+  { versus: [14, [1, 2, 1]], arms: ['canon', 'sapeur'], seconds: 10, caption: 'Une arène des sables en versus', sub: 'Pose tes mines là où ils passent' },
+  { mission: 50, arms: ['canon', 'ricochet'], seconds: 9, volleys: [2.5, 6.5], caption: 'Et toujours le Bombardier', sub: 'Ne longe pas la rangée !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -91,6 +92,7 @@ try {
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
+      for (const s of shot.sandTraps ?? []) setTimeout(() => d.sandTrap?.(), s * 1000); // « Les dunes » (iteration 36): a buried mine on an enemy's way
       for (const s of shot.bridgeTraps ?? []) setTimeout(() => d.bridgeTrap?.(8), s * 1000); // « Les ponts » (iteration 33): the next enemy on a bridge falls
       for (const s of shot.bridgeMines ?? []) setTimeout(() => d.bridgeMine?.(), s * 1000); // a mine beside the bridge nearest to an enemy // « Le ralenti » (iteration 32): a ricochet, then its replay
       for (const s of shot.replays ?? []) setTimeout(() => d.replay?.(), s * 1000);
