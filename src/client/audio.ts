@@ -199,6 +199,13 @@ export const sfx = {
     tone(t + 0.07, 0.3, 2637, 2637, v, 'square');
     if (points > 1) [1047, 1319, 1568, 2093].forEach((f, i) => tone(t + 0.16 + i * 0.08, 0.3, f, f, 0.1, 'triangle'));
   },
+  /** « Nouveau au bestiaire ! » (iteration 38): a little wooden xylophone run, then a bell. */
+  newcomer() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [784, 988, 1175, 1568].forEach((f, i) => { tone(t + i * 0.07, 0.12, f, f, 0.09, 'triangle'); tone(t + i * 0.07, 0.04, f * 3, f * 3, 0.03, 'sine'); });
+    tone(t + 0.3, 0.6, 2093, 2093, 0.05, 'sine');
+  },
   /** The golden crate drops: a little bell rings three times. */
   gold() {
     if (!ctx) return;

@@ -7,11 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { caisses: [2, [2, 2, 1, 2], 40], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 16, caption: 'Nouveau mode : la chasse aux caisses', sub: 'Chaque caisse ramassée vaut un point' },
-  { rivals: 5.5, lobby: 'caisses', seconds: 5.5, caption: 'Chacun pour soi', sub: 'Entre amis ou contre des rivaux pilotés par l’ordinateur' },
-  { still: true, seconds: 20, caption: 'Touché ? Tu lâches une caisse', sub: 'Et à la fin tombe la caisse dorée : 3 points !' },
-  { caisses: [0, [2, 1, 2, 2], 24], arms: ['sapeur', 'canon', 'fusee', 'ricochet'], seconds: 14, caption: 'Une chasse de nuit', sub: 'Les caisses brillent dans le noir' },
-  { mission: 46, arms: ['canon', 'sapeur'], seconds: 10, sandTraps: [3.5], caption: 'Et toujours les dunes', sub: 'Les mines s’enfouissent dans le sable' },
+  { journal: 9, seconds: 9, caption: 'Nouveau : la boîte à jouets', sub: 'Menus en bois, étiquettes en ruban adhésif, carnet de bord sur papier ligné' },
+  { rivals: 6, lobby: 'caisses', seconds: 6, caption: 'Un salon taillé dans le bois', sub: 'Onglets en papier, boutons en bois peint' },
+  { mission: 28, arms: ['canon', 'sapeur'], seconds: 15, caption: 'Sur la glace, chaque tank laisse ses rayures', sub: 'Même le blanc invisible se trahit : suivez ses traces !' },
+  { still: true, seconds: 8, newcomers: [[0.3, ['white', 'frost']]], caption: 'Nouveau au bestiaire !', sub: 'Une fiche épinglée pour chaque ennemi croisé la première fois' },
+  { mission: 41, arms: ['ricochet', 'fusee'], seconds: 11, caption: 'Verglas : les Givrés givrent le sol', sub: 'Leurs rayures et les vôtres restent un moment sur la glace' },
+  { caisses: [2, [2, 2, 1, 2], 40], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 12, caption: 'Et toujours la chasse aux caisses', sub: 'Chaque caisse ramassée vaut un point' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -54,6 +55,7 @@ try {
       const d = window.__demo;
       if (shot.still) { /* the table of the previous shot goes on */ }
       else if (shot.home) d.home(shot.home * 1000);
+      else if (shot.journal) d.journal(shot.journal * 1000); // « La boîte à jouets » (iteration 38): the home screen and the journal
       else if (shot.cratesHelp) d.crates(shot.cratesHelp * 1000); // the list of crates on the home screen (iteration 29)
       else if (shot.bestiary) d.bestiary(shot.bestiary * 1000); // the bestiary on the home screen (iteration 25)
       else if (shot.atelier) d.atelier(shot.atelier * 1000);
@@ -93,6 +95,7 @@ try {
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
+      for (const [s, kinds] of shot.newcomers ?? []) setTimeout(() => d.newcomer?.(kinds), s * 1000); // « Nouveau au bestiaire ! » (iteration 38)
       for (const s of shot.sandTraps ?? []) setTimeout(() => d.sandTrap?.(), s * 1000); // « Les dunes » (iteration 36): a buried mine on an enemy's way
       for (const s of shot.bridgeTraps ?? []) setTimeout(() => d.bridgeTrap?.(8), s * 1000); // « Les ponts » (iteration 33): the next enemy on a bridge falls
       for (const s of shot.bridgeMines ?? []) setTimeout(() => d.bridgeMine?.(), s * 1000); // a mine beside the bridge nearest to an enemy // « Le ralenti » (iteration 32): a ricochet, then its replay

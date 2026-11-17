@@ -19,6 +19,7 @@ export interface RLob { id: number; x0: number; y0: number; x1: number; y1: numb
 export interface RFlag { team: number; x: number; y: number; carrier: number; state: number; left: number }
 
 const PX = 64; // floor texture pixels per tile
+const SPX = 32; // skate scratch texture pixels per tile (iteration 38)
 const RAIN_DROPS = 700;
 const WALL_H = 0.8;
 const TALL_H = 1.5;
@@ -1123,6 +1124,15 @@ export class Renderer {
   private iceGeo = new THREE.BoxGeometry(1, 0.03, 1);
   private iceMesh?: THREE.InstancedMesh;
   private iceCells = new Set<number>();
+  /** Skate scratches (iteration 38): the ice slabs hide the floor's tread marks, so the tanks scratch a layer of their own above
+   * the ice. That is how a white (invisible) tank gives itself away on the ice, as it does on the bare floor. */
+  private scratchCanvas?: HTMLCanvasElement;
+  private scratchCtx?: CanvasRenderingContext2D;
+  private scratchTex?: THREE.CanvasTexture;
+  private scratchMesh?: THREE.Mesh;
+  private scratchDirty = false;
+  private scratchFade = 0;
+  private scratchTimer = 0;
   /** « Les dunes » (iteration 36): the sand cells of the table, painted into the floor texture. */
   private sandCells = new Set<number>();
   /** « Le Givré » (iteration 31): its frost, slabs of ice laid and melted as the snapshots say. */
@@ -2273,6 +2283,42 @@ export class Renderer {
     }
     this.paintHoles(g, tiles);
     this.floorTex.needsUpdate = true;
+    if (this.scratchCtx) { this.scratchCtx.clearRect(0, 0, W * SPX, H * SPX); this.scratchDirty = true; }
+  }
+
+  /** Two thin skate scratches under the tracks of a tank sliding on the ice (iteration 38). */
+  private iceScratch(x: number, y: number, ang: number, len: number) {
+    if (!this.scratchCtx) {
+      const c = (this.scratchCanvas = document.createElement('canvas'));
+      c.width = W * SPX;
+      c.height = H * SPX;
+      this.scratchCtx = c.getContext('2d')!;
+      this.scratchTex = new THREE.CanvasTexture(c);
+      this.scratchTex.colorSpace = THREE.SRGBColorSpace;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshLambertMaterial({ map: this.scratchTex, transparent: true, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(W / 2, 0.031, H / 2); // just above the slabs of ice (0.027) and of frost
+      mesh.renderOrder = 1;
+      this.scene.add(mesh);
+      this.scratchMesh = mesh;
+    }
+    const g = this.scratchCtx;
+    g.save();
+    g.translate(x * SPX, y * SPX);
+    g.rotate(ang);
+    g.lineCap = 'round';
+    const l = Math.min(0.5, len + 0.06) * SPX;
+    for (const off of [-0.3, 0.3]) {
+      // a pale groove with a darker blue edge: readable on the white-blue ice
+      g.strokeStyle = 'rgba(70,120,160,0.42)';
+      g.lineWidth = 2.6;
+      g.beginPath(); g.moveTo(-l, off * SPX + 1); g.lineTo(0, off * SPX + 1); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.85)';
+      g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(-l, off * SPX); g.lineTo(0, off * SPX); g.stroke();
+    }
+    g.restore();
+    this.scratchDirty = true;
   }
 
   /**
@@ -2502,6 +2548,7 @@ export class Renderer {
         const mvx = t.x - v.lastMarkX, mvy = t.y - v.lastMarkY;
         const side = Math.abs(Math.sin(Math.atan2(mvy, mvx) - t.body));
         v.lastMarkX = t.x; v.lastMarkY = t.y;
+        this.iceScratch(t.x, t.y, Math.atan2(mvy, mvx), Math.hypot(mvx, mvy));
         if (!(t.invisible && t.id !== myId)) {
           for (let k = 0, n = side > 0.35 ? 3 : 1; k < n; k++) {
             this.smoke.emit({ x: t.x - mvx * 1.5 + (Math.random() - 0.5) * 0.5, y: 0.06, z: t.y - mvy * 1.5 + (Math.random() - 0.5) * 0.5, vx: -mvx * 3 + (Math.random() - 0.5) * 0.6, vy: 0.5 + Math.random() * 0.4, vz: -mvy * 3 + (Math.random() - 0.5) * 0.6, life: 0.5, s0: 0.05, s1: 0.12, c0: 0xffffff, c1: 0xdff3ff, drag: 2.5 });
@@ -3471,6 +3518,21 @@ export class Renderer {
       this.floorTex.needsUpdate = true;
       this.floorDirty = false;
       this.floorTimer = 0.1;
+    }
+    if (this.scratchCtx) {
+      // the skate scratches fade slowly (a few seconds), as the ice smooths over
+      this.scratchFade += dt;
+      if (this.scratchFade > 0.5) {
+        this.scratchFade = 0;
+        const g = this.scratchCtx;
+        g.globalCompositeOperation = 'destination-out';
+        g.fillStyle = 'rgba(0,0,0,0.06)';
+        g.fillRect(0, 0, W * SPX, H * SPX);
+        g.globalCompositeOperation = 'source-over';
+        this.scratchDirty = true;
+      }
+      this.scratchTimer -= dt;
+      if (this.scratchDirty && this.scratchTimer <= 0) { this.scratchTex!.needsUpdate = true; this.scratchDirty = false; this.scratchTimer = 0.1; }
     }
     this.shake *= Math.exp(-dt * 8);
     this.camera.position.copy(this.basePos);

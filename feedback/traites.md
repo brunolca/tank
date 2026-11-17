@@ -27,3 +27,5 @@
 | 23 | 19 | Fait : les galons (expérience gagnée en campagne, arbre de compétences à trois branches entre les missions). |
 | 24 | 20 | Corrigé : sur iPhone, le plateau restait étiré après une rotation de l’écran ; le rendu recale maintenant sa taille à chaque image. |
 | 25 | 30 | Corrigé : en fin de partie, « Retour au salon » ramène tout de suite au salon (plus d’attente sur la table figée) et l’hôte peut « Rejouer » le même mode d’un clic. |
+| 26 | 38 | Corrigé : sur la glace, les tanks gravent maintenant des rayures de patins (les traces de chenilles restaient cachées sous la glace), et le blanc invisible se suit à la trace. |
+| 27 | 38 | Fait : « La boîte à jouets », menus et tableau de bord refaits en bois, ruban adhésif et papier ; la suite est retenue dans `DESIGN.md`. |

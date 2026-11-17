@@ -1018,3 +1018,205 @@ body.replaying #toast { bottom: calc(11vh + 16px); }
 .sb-row.hunt.mine { box-shadow: inset 0 0 0 2px rgba(255, 212, 90, 0.6); }
 #banner.hunt .b-kicker::before { content: '▣ '; color: #ffc93a; }
 #banner.hunt .b-title { color: #ffd45a; text-shadow: 0 0 24px rgba(255, 190, 40, 0.55); }
+
+/* ------------------------------------------------------------------ « La boîte à jouets » (iteration 38)
+   The menus and the HUD are made of the same stuff as the table: walnut planks with a light wooden frame and four brass screws,
+   masking-tape labels with stencilled letters, paper tabs, wooden buttons, a notebook of lined paper for the journal. */
+:root {
+  --bg: #1b1510;
+  --text: #f6ead4;
+  --muted: #c9b391;
+  --line: rgba(255, 222, 175, 0.16);
+  --panel: rgba(46, 30, 18, 0.9);
+  --panel-solid: #3a2617;
+  --frame: #a8743f;
+  --frame-dark: #24160c;
+  --paper: #f3e3c2;
+  --ink: #3b2414;
+  --stencil: 'Saira Stencil One', 'Rubik', system-ui, sans-serif;
+  /* wood: fine grain (fractal noise stretched along the planks), a few plank seams, a warm walnut base */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.09' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12 0 0 0 0 0.06 0 0 0 0 0.02 0 0 0 1.6 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --wood: var(--grain), repeating-linear-gradient(180deg, transparent 0 63px, rgba(0, 0, 0, 0.22) 63px 64px, rgba(255, 220, 170, 0.05) 64px 65px), linear-gradient(180deg, #4d3220, #3b2617 60%, #33200f);
+  --wood-light: var(--grain), linear-gradient(180deg, #8a5d36, #6f4727);
+  /* four brass screws in the corners */
+  --screws: radial-gradient(circle at 15px 15px, #f3d9a0 0 2px, #9c7a45 2.5px 4px, rgba(0, 0, 0, 0.45) 4.5px 5.5px, transparent 6px),
+    radial-gradient(circle at calc(100% - 15px) 15px, #f3d9a0 0 2px, #9c7a45 2.5px 4px, rgba(0, 0, 0, 0.45) 4.5px 5.5px, transparent 6px),
+    radial-gradient(circle at 15px calc(100% - 15px), #f3d9a0 0 2px, #9c7a45 2.5px 4px, rgba(0, 0, 0, 0.45) 4.5px 5.5px, transparent 6px),
+    radial-gradient(circle at calc(100% - 15px) calc(100% - 15px), #f3d9a0 0 2px, #9c7a45 2.5px 4px, rgba(0, 0, 0, 0.45) 4.5px 5.5px, transparent 6px);
+}
+html, body { background: radial-gradient(ellipse at 50% 30%, #3a2c20 0%, var(--bg) 70%); }
+
+/* the big panels: a framed walnut board */
+.card, #banner, #council, #skills {
+  background: var(--screws), var(--wood);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 4px solid var(--frame);
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 2px 0 rgba(255, 228, 185, 0.18), inset 0 -10px 24px rgba(0, 0, 0, 0.25),
+    0 7px 0 var(--frame-dark), 0 30px 70px rgba(0, 0, 0, 0.55);
+}
+#rush-card { border-color: #b8553e; }
+#council { border-color: #8d5fc0; }
+#skills { border-color: #c7973b; }
+#banner { border-radius: 22px; }
+@media (max-width: 640px) { .card { border-radius: 18px; } }
+
+/* labels: a strip of masking tape with stencilled letters */
+.kicker {
+  display: inline-block;
+  width: fit-content;
+  align-self: flex-start;
+  font-family: var(--stencil);
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  padding: 3px 12px 2px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.06), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.06)), #e9d6ae;
+  clip-path: polygon(0 8%, 3% 0, 97% 4%, 100% 0, 99% 92%, 100% 100%, 2% 96%, 0 100%);
+  transform: rotate(-1.5deg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+.from .kicker { align-self: center; }
+.c-kicker, .s-kicker, .b-kicker { font-family: var(--stencil); font-weight: 400; letter-spacing: 0.18em; }
+.code { font-family: var(--stencil); font-weight: 400; letter-spacing: 0.14em; text-shadow: 0 3px 0 #6b3a06; }
+
+/* wooden buttons; the orange ones are painted wood */
+.btn {
+  background: var(--wood-light);
+  border: 1px solid rgba(255, 220, 170, 0.25);
+  color: #fff3df;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.3), 0 3px 0 var(--frame-dark), 0 6px 14px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+.btn:hover:not(:disabled) { background: var(--grain), linear-gradient(180deg, #9a6a40, #7c5130); }
+.btn:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.3), 0 1px 0 var(--frame-dark); }
+.btn.primary { text-shadow: none; border: 1px solid #ffd27f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 4px 0 #9a560a, 0 10px 24px rgba(255, 160, 30, 0.22); }
+.btn.primary:active:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 0 #9a560a; }
+.btn.ghost { background: transparent; box-shadow: none; border-color: transparent; color: var(--muted); text-shadow: none; }
+.btn.ghost:hover:not(:disabled) { background: rgba(255, 220, 170, 0.08); }
+
+/* fields are carved into the board */
+input, textarea, .at-tpl {
+  background: rgba(20, 11, 5, 0.55);
+  border-color: rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 225, 180, 0.12);
+}
+
+/* tabs: a carved groove, the chosen one is a tab of cream paper */
+.segmented { background: rgba(20, 11, 5, 0.5); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 225, 180, 0.12); }
+.segmented button:hover:not(:disabled):not(.on) { color: var(--text); background: rgba(255, 220, 170, 0.07); }
+.segmented button.on { background: var(--paper); color: var(--ink); box-shadow: 0 2px 0 #b89d6e, 0 3px 8px rgba(0, 0, 0, 0.35); }
+.weapons button, .at-brushes button, .from .chips button { background: rgba(20, 11, 5, 0.45); }
+.weapons button.on, .at-brushes button.on { background: var(--paper); color: var(--ink); border-color: var(--accent); }
+.weapons button.on small { opacity: 1; }
+
+/* lists: lighter planks */
+#lobby-players li, .board li, .rush-splits li { background: rgba(255, 222, 175, 0.07); border-color: rgba(255, 222, 175, 0.13); }
+#lobby-players li:not(.empty) { box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.1), 0 2px 0 rgba(0, 0, 0, 0.3); }
+#lobby-players li.empty, .board li.empty { background: none; }
+
+/* the journal: a notebook of lined paper */
+#journal-list article {
+  background: repeating-linear-gradient(180deg, transparent 0 20px, rgba(80, 120, 170, 0.18) 20px 21px), linear-gradient(90deg, transparent 26px, rgba(200, 70, 60, 0.35) 26px 27px, transparent 27px), var(--paper);
+  background-position: 0 9px, 0 0, 0 0;
+  color: var(--ink);
+  border: 0;
+  border-radius: 4px;
+  padding: 12px 14px 12px 36px;
+  box-shadow: 0 3px 0 #b89d6e, 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+#journal-list article:nth-child(odd) { transform: rotate(-0.4deg); }
+#journal-list article:nth-child(even) { transform: rotate(0.35deg); }
+#journal-list ul { color: #4a321e; line-height: 21px; }
+#journal-list header time { color: #8a6a48; }
+#journal-list .stamp.small { color: #c9372d; border-color: #c9372d; background: rgba(226, 69, 60, 0.07); box-shadow: none; }
+#journal-list { padding: 4px 6px 8px 2px; }
+kbd { background: rgba(255, 225, 180, 0.12); border-color: rgba(255, 225, 180, 0.2); border-bottom-color: rgba(0, 0, 0, 0.5); }
+
+/* the HUD: little wooden plaques; the mission is a paper ticket pinned to the table */
+#hud-lives, #hud-enemies, .sb-row, #hud-wind, #hud-clock, .icon-btn, .galons-btn, #btn-feedback, #toast, #demo-caption, #boss-bar, #hud-role:not(.mole) {
+  background: var(--wood);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 2px solid var(--frame);
+  box-shadow: inset 0 1px 0 rgba(255, 228, 185, 0.2), 0 3px 0 var(--frame-dark), 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+#hud-mission {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 40%), var(--paper);
+  color: var(--ink);
+  border: 0;
+  border-radius: 4px;
+  padding: 8px 14px 7px;
+  transform: rotate(-1.5deg);
+  box-shadow: 0 3px 0 #b89d6e, 0 6px 14px rgba(0, 0, 0, 0.4);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+#hud-mission::before {
+  /* a red drawing pin */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ff9c8c, #d8392f 60%, #8e1c15);
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.4);
+}
+#hud-mission b { font-family: var(--stencil); font-weight: 400; font-size: 19px; letter-spacing: 0.04em; }
+#hud-mission span { color: #7a5a3a; font-weight: 600; }
+.icon-btn { color: #fff3df; }
+.icon-btn:hover { filter: brightness(1.15); }
+.icon-btn.off { color: var(--muted); }
+#btn-feedback:hover { background: var(--grain), linear-gradient(180deg, #6b4527, #503219); }
+#toast { color: var(--text); }
+#demo-caption { border-width: 3px; padding: 12px 26px; }
+#demo-caption b { font-family: var(--stencil); font-weight: 400; letter-spacing: 0.04em; font-size: 26px; }
+.boss-track, #council .c-timer, #skills .s-timer, #skills .xp { background: rgba(20, 11, 5, 0.6); }
+.tag { background: rgba(43, 27, 15, 0.82); }
+.b-tanks span { background: rgba(255, 222, 175, 0.1); }
+
+/* « Nouveau au bestiaire ! » (iteration 38): a paper card pinned beside the table */
+#newcomers {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  top: max(96px, calc(env(safe-area-inset-top) + 96px));
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+.newcomer {
+  width: min(250px, calc(100vw - 32px));
+  display: grid;
+  gap: 1px;
+  padding: 10px 14px 10px;
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 30%), var(--paper);
+  border-left: 6px solid var(--c);
+  border-radius: 3px 8px 8px 3px;
+  box-shadow: 0 3px 0 #b89d6e, 0 10px 24px rgba(0, 0, 0, 0.45);
+  transform: rotate(1.5deg);
+  animation: newcomer-in 0.5s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+.newcomer small { font-family: var(--stencil); font-size: 12px; letter-spacing: 0.14em; color: #c9372d; text-transform: uppercase; }
+.newcomer b { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 900; }
+.newcomer b i { width: 26px; height: 16px; border-radius: 4px; background: var(--c); position: relative; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25), 0 0 0 1.5px rgba(0, 0, 0, 0.35); }
+.newcomer b i::after { content: ''; position: absolute; left: 7px; top: -6px; width: 12px; height: 9px; border-radius: 6px 6px 2px 2px; background: var(--c); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35); filter: brightness(1.15); }
+.newcomer span { font-size: 13px; line-height: 1.35; color: #5a3f27; }
+.newcomer.out { animation: newcomer-out 0.5s ease-in forwards; }
+@keyframes newcomer-in { from { transform: translateX(120%) rotate(8deg); } }
+@keyframes newcomer-out { to { transform: translateX(120%) rotate(8deg); opacity: 0; } }
+body.replaying #newcomers { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .newcomer, .newcomer.out { animation-duration: 0.01s; } }
+/* narrow screens (iteration 38): the cards of the home screen (460 px) used to push the grid wider than a phone and get cut on the right */
+@media (max-width: 979px) { .screen { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 420px) { #mode-select button { font-size: 12.5px; padding: 8px 2px; } }
+/* in the videos, the caption stays above the menus (home, lobby, journal) as well as the table (iteration 38) */
+body.demo #demo-caption { z-index: 30; }

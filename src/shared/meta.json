@@ -1,7 +1,7 @@
 {
-  "iteration": 37,
-  "date": "2026-11-16",
-  "title": "La chasse aux caisses",
+  "iteration": 38,
+  "date": "2026-11-17",
+  "title": "La boîte à jouets",
   "journal": [
     {
       "iteration": 1,
@@ -449,6 +449,19 @@
         "À 18 secondes de la fin, une caisse dorée tombe au milieu de la table : elle vaut 3 points d’un coup. Tout le monde fonce dessus !",
         "Le tableau des scores compte les caisses de chacun en direct, le chrono rougit dans les dix dernières secondes, et le plus gros tas gagne la manche. Premier à 3 manches.",
         "Les rivaux pilotés par l’ordinateur adorent les caisses : ils traversent toute la table pour les chiper. La chasse s’invite aussi de temps en temps en fond d’écran de l’accueil."
+      ]
+    },
+    {
+      "iteration": 38,
+      "date": "2026-11-17",
+      "title": "La boîte à jouets",
+      "notes": [
+        "Les menus changent d’habit : des planches de noyer dans un cadre en bois clair, quatre vis en laiton, des étiquettes en ruban adhésif aux lettres pochées et des onglets en papier crème. Le jeu a enfin l’air de sortir de la même boîte que ses tanks.",
+        "Le tableau de bord en partie suit le mouvement : la mission s’affiche sur un ticket punaisé, les vies, les ennemis et les boutons sur de petites plaquettes en bois.",
+        "Le carnet de bord devient un vrai carnet : chaque itération sur sa feuille de papier ligné, avec sa marge rouge.",
+        "Sur la glace, chaque tank grave maintenant deux rayures de patins qui s’effacent doucement. Les chars blancs invisibles ne passent plus inaperçus : suivez leurs traces !",
+        "« Nouveau au bestiaire ! » : la première fois que vous croisez un ennemi, sa fiche s’épingle au bord de la table avec un petit air de xylophone.",
+        "Sur les téléphones étroits, l’accueil et le salon ne débordent plus sur la droite de l’écran."
       ]
     }
   ]

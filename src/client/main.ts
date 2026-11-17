@@ -2425,7 +2425,7 @@ const BESTIARY: [TankKind, string][] = [
   ['pink', 'tire en rafale et vise les ricochets'],
   ['green', 'immobile, fusées à deux rebonds : un tireur d’élite'],
   ['violet', 'rapide, mines et rafales'],
-  ['white', 'invisible ! seules ses traces le trahissent'],
+  ['white', 'invisible ! seules ses traces le trahissent, même sur la glace'],
   ['black', 'le plus rapide de tous, fusées sans rebond'],
   ['steel', 'son blindage encaisse un coup, puis il s’énerve'],
   ['mason', 'bâtit des murs de liège entre toi et lui'],
@@ -2454,11 +2454,29 @@ $('#crates-list').innerHTML = CRATES.map(([k, line]) => `<li style="--c:${hex(BO
 const MET_KEY = 'tanks.vus';
 const metKinds = new Set<string>((() => { try { const v = JSON.parse(localStorage.getItem(MET_KEY) ?? '[]'); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })());
 function meetEnemies(kinds: string[]) {
-  let fresh = false;
-  for (const k of kinds) if (BESTIARY.some(([b]) => b === k) && !metKinds.has(k)) { metKinds.add(k); fresh = true; }
-  if (!fresh) return;
+  const fresh: string[] = [];
+  for (const k of kinds) if (BESTIARY.some(([b]) => b === k) && !metKinds.has(k)) { metKinds.add(k); fresh.push(k); }
+  if (!fresh.length) return;
   try { localStorage.setItem(MET_KEY, JSON.stringify([...metKinds])); } catch {}
   renderBestiary();
+  // the first ever met (an empty notebook) needs no fanfare: everybody is new on the first mission
+  if (metKinds.size > fresh.length) newcomerCards(fresh);
+}
+/** « Nouveau au bestiaire ! » (iteration 38): a paper card pinned on the side of the table for each enemy met for the first time. */
+function newcomerCards(kinds: string[], delay = 1800) {
+  kinds.slice(0, 3).forEach((k, i) => setTimeout(() => {
+    const line = BESTIARY.find(([b]) => b === k)?.[1] ?? '';
+    const el = document.createElement('div');
+    el.className = 'newcomer';
+    el.style.setProperty('--c', hex(enemyColor(k)));
+    el.innerHTML = `<small>Nouveau au bestiaire !</small><b><i></i>${escapeHtml(specOf(k).label)}</b><span>${escapeHtml(line)}</span>`;
+    let box = document.getElementById('newcomers');
+    if (!box) { box = document.createElement('div'); box.id = 'newcomers'; document.body.appendChild(box); }
+    box.appendChild(el);
+    if (i === 0) sfx.newcomer();
+    setTimeout(() => el.classList.add('out'), 5200);
+    setTimeout(() => el.remove(), 5800);
+  }, delay + i * 450));
 }
 function renderBestiary() {
   const met = (k: string) => demoMode || metKinds.has(k);
@@ -2809,6 +2827,10 @@ if (params.has('demo')) {
       setTimeout(hideBanner, 2600);
       return a.name;
     },
+    /** « Nouveau au bestiaire ! » (iteration 38): pin the cards of these enemies on the side of the table. */
+    newcomer(kinds: TankKind[] = ['white']) {
+      newcomerCards(kinds, 0);
+    },
     /** Show the home screen with its bestiary open for a moment (iteration 25). */
     bestiary(ms = 5000) {
       const d = $('#bestiary') as HTMLDetailsElement;
@@ -2841,6 +2863,12 @@ if (params.has('demo')) {
     home(ms = 4000) {
       show('home');
       setTimeout(() => { show('game'); $('#hud').hidden = true; }, ms);
+    },
+    /** « La boîte à jouets » (iteration 38): the home screen, then the journal opened on it, for a moment. */
+    journal(ms = 6000) {
+      show('home');
+      setTimeout(() => { renderJournal(); $('#journal').hidden = false; }, Math.min(2500, ms / 2));
+      setTimeout(() => { $('#journal').hidden = true; show('game'); $('#hud').hidden = true; }, ms);
     },
     /** Land a hit on the boss (to show its health bar and its anger on camera). */
     hitBoss() {
