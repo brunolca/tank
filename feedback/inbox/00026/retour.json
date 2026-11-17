@@ -1,0 +1,417 @@
+{
+  "id": 26,
+  "created": "2026-11-16T17:05:00.107Z",
+  "category": "equilibrage",
+  "text": "Sur la glace, on ne voit pas bouger les chars invisibles (blancs)",
+  "context": {
+    "game": {
+      "iteration": 36,
+      "iterationTitle": "Les dunes",
+      "screen": "lobby",
+      "online": false,
+      "room": "AAMRF",
+      "mode": "démo",
+      "players": [
+        {
+          "name": "Bruno",
+          "host": true,
+          "connected": true
+        },
+        {
+          "name": "JozuhaKimmisch",
+          "host": false,
+          "connected": true,
+          "me": true
+        }
+      ],
+      "me": {
+        "x": 10.89,
+        "y": 0.36,
+        "alive": false,
+        "pendingInputs": 0
+      },
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "player",
+          "label": "Bruno",
+          "team": 0,
+          "x": 7.55,
+          "y": 5.15,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "player",
+          "label": "JozuhaKimmisch",
+          "team": 0,
+          "me": true,
+          "x": 10.89,
+          "y": 0.36,
+          "alive": false
+        },
+        {
+          "id": 3,
+          "kind": "sower",
+          "label": "Semeur",
+          "team": 99,
+          "x": 13.92,
+          "y": 5.99,
+          "alive": false
+        },
+        {
+          "id": 4,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 99,
+          "x": 12.79,
+          "y": 1.26,
+          "alive": false
+        },
+        {
+          "id": 5,
+          "kind": "black",
+          "label": "Noir",
+          "team": 99,
+          "x": 3.65,
+          "y": 7.96,
+          "alive": true
+        },
+        {
+          "id": 6,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 2,
+          "x": 10.07,
+          "y": 3.04,
+          "alive": false
+        },
+        {
+          "id": 7,
+          "kind": "thief",
+          "label": "Pilleur",
+          "team": 2,
+          "x": 4.81,
+          "y": 12.5,
+          "alive": true
+        }
+      ],
+      "bullets": 3,
+      "mines": 5,
+      "recentEvents": [
+        [
+          553,
+          "boom",
+          6.29,
+          14.92,
+          1
+        ],
+        [
+          553,
+          "ko",
+          1,
+          3,
+          0,
+          0
+        ],
+        [
+          554,
+          "pop",
+          11.66,
+          2.83
+        ],
+        [
+          556,
+          "shot",
+          17.25,
+          8.56,
+          1.24,
+          1,
+          5
+        ],
+        [
+          559,
+          "block",
+          19,
+          8
+        ],
+        [
+          559,
+          "pop",
+          18.9,
+          8.41
+        ],
+        [
+          561,
+          "bounce",
+          11.42,
+          0.11
+        ],
+        [
+          563,
+          "shot",
+          18.78,
+          14.79,
+          -1.96,
+          1,
+          2
+        ],
+        [
+          567,
+          "hurt",
+          9.3,
+          9.63,
+          3,
+          8,
+          11
+        ],
+        [
+          572,
+          "mboom",
+          0.73,
+          14.28,
+          2.2,
+          3
+        ],
+        [
+          572,
+          "mboom",
+          5.36,
+          7.63,
+          2.2,
+          3
+        ],
+        [
+          573,
+          "bounce",
+          10.21,
+          0.11
+        ],
+        [
+          575,
+          "bounce",
+          17.12,
+          10.58
+        ],
+        [
+          578,
+          "bounce",
+          21.85,
+          16.88
+        ],
+        [
+          578,
+          "block",
+          15,
+          14
+        ],
+        [
+          578,
+          "pop",
+          14.9,
+          14.36
+        ],
+        [
+          579,
+          "pop",
+          21.9,
+          16.36
+        ],
+        [
+          581,
+          "pop",
+          20.14,
+          16.84
+        ],
+        [
+          591,
+          "mboom",
+          6.51,
+          0.44
+        ],
+        [
+          593,
+          "bounce",
+          6.18,
+          5.54
+        ],
+        [
+          594,
+          "bounce",
+          5.43,
+          9.83
+        ],
+        [
+          606,
+          "hurt",
+          9.53,
+          9.49,
+          3,
+          7,
+          11
+        ],
+        [
+          608,
+          "bounce",
+          21.43,
+          0.21
+        ],
+        [
+          612,
+          "pop",
+          21.9,
+          1.51
+        ],
+        [
+          615,
+          "sow",
+          9.53,
+          9.49,
+          3,
+          4
+        ],
+        [
+          623,
+          "pop",
+          0.17,
+          1.01
+        ],
+        [
+          630,
+          "shot",
+          17.06,
+          15.06,
+          -0.59,
+          1,
+          2
+        ],
+        [
+          638,
+          "shot",
+          19,
+          11.99,
+          2.2,
+          1,
+          5
+        ],
+        [
+          640,
+          "shot",
+          16.18,
+          15.34,
+          -0.6,
+          1,
+          2
+        ],
+        [
+          642,
+          "shot",
+          11.04,
+          10.1,
+          0.82,
+          0,
+          3
+        ],
+        [
+          646,
+          "bounce",
+          21.86,
+          11.75
+        ],
+        [
+          651,
+          "shot",
+          15.53,
+          16.16,
+          -0.62,
+          1,
+          2
+        ],
+        [
+          652,
+          "pop",
+          15.98,
+          15.97
+        ],
+        [
+          658,
+          "mineSet",
+          18.66,
+          12.06
+        ],
+        [
+          659,
+          "bounce",
+          21.81,
+          11.39
+        ],
+        [
+          678,
+          "shot",
+          19.93,
+          11,
+          2.09,
+          1,
+          5
+        ],
+        [
+          686,
+          "bounce",
+          10.37,
+          4.15
+        ],
+        [
+          686,
+          "bounce",
+          17.37,
+          16.84
+        ],
+        [
+          689,
+          "boom",
+          18.19,
+          16.57,
+          2
+        ],
+        [
+          689,
+          "ko",
+          2,
+          3,
+          0,
+          1
+        ]
+      ]
+    },
+    "network": {
+      "pingMs": 52,
+      "snapshotsBuffered": 40,
+      "socket": "ouvert"
+    },
+    "perf": {
+      "fps": 121
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+      "language": "en-GB",
+      "viewport": "1728x962",
+      "screen": "1728x1117",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/r/AAMRF",
+    "time": "2026-11-16T17:04:42.594Z",
+    "regions": []
+  },
+  "hasScreenshot": true
+}
