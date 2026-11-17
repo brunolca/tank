@@ -1,0 +1,87 @@
+{
+  "id": 28,
+  "created": "2026-11-17T14:34:20.867Z",
+  "category": "idee",
+  "text": "On peut faire mieux pour l'UX des menus\r\npar exemple éviter les disclosures",
+  "context": {
+    "game": {
+      "iteration": 38,
+      "iterationTitle": "La boîte à jouets",
+      "screen": "home",
+      "online": false,
+      "mode": "démo",
+      "players": [],
+      "tanks": [
+        {
+          "id": 1,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 1,
+          "x": 8.33,
+          "y": 2.5,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "kind": "violet",
+          "label": "Violet",
+          "team": 1,
+          "x": 10.36,
+          "y": 5.26,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 2,
+          "x": 14.31,
+          "y": 4.36,
+          "alive": true
+        },
+        {
+          "id": 4,
+          "kind": "pink",
+          "label": "Rose",
+          "team": 2,
+          "x": 13.33,
+          "y": 11.5,
+          "alive": true
+        }
+      ],
+      "bullets": 0,
+      "mines": 0,
+      "recentEvents": []
+    },
+    "network": {
+      "pingMs": 0,
+      "snapshotsBuffered": 0,
+      "socket": "aucun"
+    },
+    "perf": {
+      "fps": 121
+    },
+    "device": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "viewport": "1512x828",
+      "screen": "1512x982",
+      "dpr": 2,
+      "touch": false,
+      "gamepads": [],
+      "memoryGb": 32,
+      "cores": 12,
+      "gl": {
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "webgl2": true,
+        "pixelRatio": 2
+      }
+    },
+    "errors": [],
+    "url": "https://tanks.brunofashionblog.workers.dev/",
+    "time": "2026-11-17T14:33:51.081Z",
+    "regions": []
+  },
+  "hasScreenshot": false
+}
