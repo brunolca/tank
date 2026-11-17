@@ -1220,3 +1220,177 @@ body.replaying #newcomers { opacity: 0; }
 @media (max-width: 420px) { #mode-select button { font-size: 12.5px; padding: 8px 2px; } }
 /* in the videos, the caption stays above the menus (home, lobby, journal) as well as the table (iteration 38) */
 body.demo #demo-caption { z-index: 30; }
+
+/* ------------------------------------------------------------------ « Le manuel » (iteration 39)
+   A player asked for menus without drop-down panels: four paper tags on the home screen open a ring binder with coloured tabs. */
+.shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
+.shelf button {
+  --tilt: -1.2deg;
+  position: relative;
+  appearance: none;
+  font: inherit;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 10px 4px 8px;
+  border: 0;
+  border-radius: 4px 4px 8px 8px;
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 40%), var(--tag, var(--paper));
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), 0 6px 12px rgba(0, 0, 0, 0.3);
+  transform: rotate(var(--tilt));
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.shelf button:nth-child(1) { --tag: #f3e3c2; }
+.shelf button:nth-child(2) { --tag: #cfe3f2; --tilt: 1deg; }
+.shelf button:nth-child(3) { --tag: #f6d3a8; --tilt: -0.6deg; }
+.shelf button:nth-child(4) { --tag: #d9ecc8; --tilt: 1.4deg; }
+.shelf button::before {
+  /* the hole of the tag, with its string */
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: #2b1a0e;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+.shelf button:hover, .shelf button:focus-visible { transform: rotate(0) translateY(-3px); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 12px 18px rgba(0, 0, 0, 0.35); }
+.shelf button:active { transform: translateY(1px); }
+.shelf i { font-style: normal; font-size: 24px; line-height: 1.2; margin-top: 6px; }
+.shelf b { font-family: var(--stencil); font-weight: 400; font-size: 13px; letter-spacing: 0.04em; }
+.shelf small { position: absolute; top: -8px; right: -6px; font-size: 10.5px; font-weight: 800; color: #c9372d; background: #fff5e2; border: 2px solid #c9372d; border-radius: 6px; padding: 0 4px; transform: rotate(8deg); }
+.shelf small:empty { display: none; }
+@media (max-width: 420px) { .shelf { gap: 6px; } .shelf b { font-size: 11.5px; } .shelf i { font-size: 21px; } }
+
+.manual { width: min(780px, 100%); max-height: calc(100dvh - 32px); gap: 0; padding: 22px 24px 16px; }
+.manual-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex: none; }
+.manual-tabs, .manual-foot { flex: none; }
+.manual-head h2 { font-size: 22px; flex: 1; min-width: 0; }
+.manual-head .icon-btn { flex: none; width: 40px; height: 40px; border-radius: 12px; font: inherit; font-size: 18px; cursor: pointer; }
+.manual-tabs { display: flex; gap: 4px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; }
+.manual-tabs button {
+  appearance: none;
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  padding: 9px 14px 8px;
+  border: 0;
+  border-radius: 10px 10px 0 0;
+  color: var(--ink);
+  background: var(--tab);
+  opacity: 0.72;
+  transform: translateY(4px);
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+  box-shadow: inset 0 -6px 8px -6px rgba(0, 0, 0, 0.35);
+}
+.manual-tabs i { font-style: normal; }
+.manual-tabs button:nth-child(1) { --tab: #f6e7a6; }
+.manual-tabs button:nth-child(2) { --tab: #cfe3f2; }
+.manual-tabs button:nth-child(3) { --tab: #f6d3a8; }
+.manual-tabs button:nth-child(4) { --tab: #d9ecc8; }
+.manual-tabs button:hover { opacity: 0.9; }
+.manual-tabs button.on { opacity: 1; transform: none; box-shadow: none; position: relative; z-index: 1; }
+.manual-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--ink);
+  padding: 18px 18px 18px 46px;
+  border-radius: 6px;
+  /* lined paper, a red margin and the holes of a ring binder */
+  background: radial-gradient(circle at 20px 40px, #2b1a0e 0 6px, transparent 7px) 0 0 / 100% 120px repeat-y,
+    linear-gradient(90deg, transparent 36px, rgba(200, 70, 60, 0.35) 36px 37px, transparent 37px),
+    repeating-linear-gradient(180deg, transparent 0 23px, rgba(80, 120, 170, 0.14) 23px 24px),
+    var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15), 0 4px 0 #b89d6e, 0 10px 22px rgba(0, 0, 0, 0.4);
+  scrollbar-color: #b89d6e transparent;
+}
+.manual-page.turn > * { animation: page-turn 0.32s ease-out; }
+@keyframes page-turn { from { opacity: 0.35; transform: translateX(14px); } }
+.manual-foot { text-align: center; margin-top: 10px; font-size: 12px; }
+body.touch .manual-foot { display: none; }
+@media (pointer: coarse) { .manual-foot { display: none; } }
+.manual-page kbd { background: #fff8ea; color: var(--ink); border-color: #c9b391; border-bottom-color: #8a6a48; }
+.manual-page .tip { margin: 14px 0 0; font-size: 14px; font-style: italic; color: #6b4a2c; }
+.manual-page .tip::before { content: '✎ '; font-style: normal; }
+
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px 22px; }
+.keys h3 { margin: 0 0 6px; font-family: var(--stencil); font-weight: 400; font-size: 16px; letter-spacing: 0.04em; color: #8e2a20; }
+.keys ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.keys ul { gap: 3px; }
+.keys li { display: grid; grid-template-columns: minmax(0, 48%) 1fr; gap: 10px; align-items: baseline; font-size: 13.5px; line-height: 1.5; padding: 1px 0; }
+.keys li span { font-weight: 600; color: #5a3f27; text-align: right; }
+.keys li b { font-weight: 400; }
+
+.modes, .crates { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 18px; }
+.modes li, .crates li { display: flex; gap: 10px; align-items: flex-start; }
+.modes li > i { font-style: normal; font-size: 24px; line-height: 1; flex: none; width: 32px; text-align: center; padding-top: 2px; }
+.modes li div, .crates li div { display: grid; gap: 1px; font-size: 13.5px; line-height: 1.4; }
+.modes b, .crates b { font-size: 15.5px; font-weight: 800; }
+.modes small { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a6a48; }
+.crates li > i { flex: none; width: 30px; height: 30px; border-radius: 6px; margin-top: 2px; background: linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent 50%), var(--c);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25), inset 0 0 0 7px rgba(255, 255, 255, 0.18), 0 2px 0 rgba(0, 0, 0, 0.3); }
+.crates b { color: color-mix(in srgb, var(--c) 55%, #3b2414); }
+
+.manual-page .count { margin: 0 0 10px; font-size: 14px; }
+.manual-page .count b { color: #c9372d; }
+.fiches { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.fiches li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 10px 10px 8px;
+  background: #fffaf0;
+  border-left: 5px solid var(--c);
+  border-radius: 3px 8px 8px 3px;
+  box-shadow: 0 2px 0 #cdb68a, 0 4px 10px rgba(80, 50, 20, 0.15);
+}
+.fiches li:nth-child(odd) { transform: rotate(-0.4deg); }
+.fiches li:nth-child(even) { transform: rotate(0.35deg); }
+.fiches li.boss { background: linear-gradient(135deg, #fff3cf, #fffaf0 60%); border-left-color: var(--c); box-shadow: 0 2px 0 #d8b55c, 0 4px 10px rgba(120, 80, 10, 0.2); }
+.fiches svg { width: 58px; height: 58px; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.25)); }
+.fiches li:not(.unmet):hover svg { animation: fiche-spin 2.4s linear infinite; }
+@keyframes fiche-spin { to { transform: rotate(360deg); } }
+.fiches .num { position: absolute; right: 8px; top: 6px; font-size: 10px; font-weight: 700; color: #a88a66; letter-spacing: 0.06em; }
+.fiches li div { display: grid; gap: 2px; min-width: 0; font-size: 12.5px; line-height: 1.35; }
+.fiches li div > b { font-size: 16px; font-weight: 900; color: color-mix(in srgb, var(--c) 45%, #3b2414); }
+.fiches li.unmet { background: #efe2c8; box-shadow: 0 2px 0 #cdb68a; border-left-color: #a88a66; }
+.fiches li.unmet div > b { color: #8a6a48; letter-spacing: 0.2em; }
+.fiches li.unmet span { color: #8a6a48; font-style: italic; }
+.fiches dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin: 4px 0 0; align-items: center; }
+.fiches dt { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #8a6a48; }
+.fiches dd { margin: 0; font-size: 11px; color: #6b4a2c; }
+.pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+.pips i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #a88a66; }
+.pips i.on { background: var(--c); border-color: color-mix(in srgb, var(--c) 60%, #000); }
+.fiches .tags { display: flex; flex-wrap: wrap; gap: 3px; margin: 5px 0 0; }
+.fiches .tags span { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgba(120, 80, 40, 0.1); color: #5a3f27; }
+@media (max-width: 640px) {
+  .manual { padding: 16px 12px 12px; }
+  .manual-page { padding: 14px 12px 14px 38px; background-position: -6px 0, -6px 0, 0 0, 0 0; }
+  .manual-tabs { padding: 0 2px; gap: 3px; }
+  .manual-tabs button { flex: 1; display: grid; justify-items: center; gap: 0; font-size: 11px; padding: 6px 2px 5px; min-width: 0; }
+  .manual-tabs i { font-size: 17px; }
+  .keys li { grid-template-columns: minmax(0, 52%) 1fr; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .manual-page.turn > * { animation: none; } .fiches li:hover svg { animation: none; } }
+
+/* the feedback data, always in sight instead of a drop-down panel (iteration 39) */
+.fb-data { display: grid; gap: 4px; }
+.fb-data span { font-size: 12px; }
+.fb-data #fb-context { max-height: 72px; margin: 0; }
+
+/* « Les menus à la manette » (iteration 39): a wooden frame around the chosen button */
+body.pad-nav :focus { outline: 3px solid #ffd27f; outline-offset: 3px; box-shadow: 0 0 0 7px rgba(255, 180, 61, 0.25); }
+body.pad-nav .shelf button:focus { transform: rotate(0) translateY(-3px); }
+body.demo.caption-side #demo-caption { left: auto; right: 24px; transform: none; }

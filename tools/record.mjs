@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { journal: 9, seconds: 9, caption: 'Nouveau : la boîte à jouets', sub: 'Menus en bois, étiquettes en ruban adhésif, carnet de bord sur papier ligné' },
-  { rivals: 6, lobby: 'caisses', seconds: 6, caption: 'Un salon taillé dans le bois', sub: 'Onglets en papier, boutons en bois peint' },
-  { mission: 28, arms: ['canon', 'sapeur'], seconds: 15, caption: 'Sur la glace, chaque tank laisse ses rayures', sub: 'Même le blanc invisible se trahit : suivez ses traces !' },
-  { still: true, seconds: 8, newcomers: [[0.3, ['white', 'frost']]], caption: 'Nouveau au bestiaire !', sub: 'Une fiche épinglée pour chaque ennemi croisé la première fois' },
-  { mission: 41, arms: ['ricochet', 'fusee'], seconds: 11, caption: 'Verglas : les Givrés givrent le sol', sub: 'Leurs rayures et les vôtres restent un moment sur la glace' },
-  { caisses: [2, [2, 2, 1, 2], 40], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 12, caption: 'Et toujours la chasse aux caisses', sub: 'Chaque caisse ramassée vaut un point' },
+  { manual: [13, ['commandes', 'modes', 'caisses', 'bestiaire']], seconds: 13, caption: 'Nouveau : le manuel', sub: 'Plus de menus qui se déplient : un classeur à intercalaires de couleur' },
+  { mission: 31, arms: ['canon', 'ricochet'], seconds: 12, caption: 'Rempart, Vert, Jaune : qui est qui ?', sub: 'Chaque couleur dit un comportement, le manuel le raconte' },
+  { bestiary: 9, seconds: 9, caption: 'Le bestiaire en fiches', sub: 'Vitesse, cadence, obus, rebonds et mines de chaque ennemi' },
+  { padTour: 9, seconds: 9, caption: 'Les menus à la manette', sub: 'La croix choisit, A valide, B revient, LB et RB tournent les pages' },
+  { mission: 41, arms: ['ricochet', 'fusee'], seconds: 12, caption: 'Et la partie continue', sub: 'Verglas : les Givrés givrent le sol' },
+  { caisses: [2, [2, 2, 1, 2], 40], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 11, caption: 'La chasse aux caisses', sub: 'Chaque caisse ramassée vaut un point' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -55,6 +55,8 @@ try {
       const d = window.__demo;
       if (shot.still) { /* the table of the previous shot goes on */ }
       else if (shot.home) d.home(shot.home * 1000);
+      else if (shot.manual) d.manual(shot.manual[0] * 1000, shot.manual[1]); // « Le manuel » (iteration 39): the pages one after the other
+      else if (shot.padTour) d.padTour(shot.padTour * 1000); // « Les menus à la manette » (iteration 39)
       else if (shot.journal) d.journal(shot.journal * 1000); // « La boîte à jouets » (iteration 38): the home screen and the journal
       else if (shot.cratesHelp) d.crates(shot.cratesHelp * 1000); // the list of crates on the home screen (iteration 29)
       else if (shot.bestiary) d.bestiary(shot.bestiary * 1000); // the bestiary on the home screen (iteration 25)

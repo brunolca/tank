@@ -21,6 +21,7 @@ import { Controls } from './input';
 import { Workshop, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RFlag, type RLob, type RMine, type RTank } from './render';
 import { Film, REPLAYED, koCaption, type Reel } from './replay';
+import { padNav } from './padnav';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -2287,6 +2288,8 @@ function frame(now: number) {
     updateNameTags([]);
   }
   placeBubbles();
+  controls.padMenu = screen === 'game' && !$('#menu').hidden;
+  if (!demoMode) navStep(now);
   renderer.render(rdt);
   requestAnimationFrame(frame);
 }
@@ -2449,7 +2452,6 @@ const CRATES: [BonusKind, string][] = [
   ['freeze', 'tous tes adversaires gèlent sur place, pris dans un cube de glace'],
   ['heavy', 'de gros obus qui traversent le liège et brisent les obus d’en face'],
 ];
-$('#crates-list').innerHTML = CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><span><b>${escapeHtml(BONUS_INFO[k].label)}</b> : ${escapeHtml(line)}</span></li>`).join('');
 // enemies met in the campaign, the challenges, the boss rush… (iteration 35): the others are greyed out in the bestiary
 const MET_KEY = 'tanks.vus';
 const metKinds = new Set<string>((() => { try { const v = JSON.parse(localStorage.getItem(MET_KEY) ?? '[]'); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })());
@@ -2478,17 +2480,193 @@ function newcomerCards(kinds: string[], delay = 1800) {
     setTimeout(() => el.remove(), 5800);
   }, delay + i * 450));
 }
+// ------------------------------------------------------------------ « Le manuel » (iteration 39)
+// A player asked for menus without drop-down panels: the controls, the modes, the crates and the bestiary now live in a ring binder
+// with paper tabs, opened on the right page straight from the home screen. Keyboard: ← → to turn the pages, Échap to close;
+// gamepad: LB / RB, and B to close (see padnav.ts).
+type ManualTab = 'commandes' | 'modes' | 'caisses' | 'bestiaire';
+const MANUAL_TABS: ManualTab[] = ['commandes', 'modes', 'caisses', 'bestiaire'];
+const MANUAL_TITLES: Record<ManualTab, string> = { commandes: 'Prendre les commandes', modes: 'Les modes de jeu', caisses: 'Les caisses bonus', bestiaire: 'Le bestiaire' };
+let manualTab: ManualTab = 'commandes';
+const metOrDemo = (k: string) => demoMode || metKinds.has(k);
+
+/** Top view of a wooden tank in the colour of its kind, for the bestiary cards (a dark silhouette when not met yet). */
+function tankSvg(kind: string, known: boolean) {
+  const boss = isBossKind(kind);
+  const c = known ? hex(enemyColor(kind)) : '#2a1d12';
+  const dark = known ? '#2a1d12' : '#1a120b';
+  const ring = boss && known ? '<circle cx="24" cy="24" r="21" fill="none" stroke="#f2c14e" stroke-width="2" stroke-dasharray="4 3"/>' : '';
+  const s = specOf(kind);
+  const barrel = s.maxBullets === 0
+    ? `<circle cx="24" cy="24" r="5" fill="${dark}"/><circle cx="24" cy="24" r="3" fill="${c}" opacity=".6"/>` // a mortar: a wide round mouth
+    : `<rect x="24" y="${s.rocket ? 21 : 22}" width="${s.rocket ? 19 : 17}" height="${s.rocket ? 6 : 4}" rx="2" fill="${dark}"/>`;
+  const extra = !known ? '<text x="24" y="29" text-anchor="middle" font-size="15" font-weight="900" fill="#c9b391">?</text>'
+    : kind === 'rampart' ? '<path d="M37 13 q6 11 0 22" fill="none" stroke="#e8b04a" stroke-width="3" stroke-linecap="round"/>'
+    : kind === 'magnet' ? '<path d="M36 17 v-4 h4 v4 m0 14 v4 h-4 v-4" fill="none" stroke="#d8392f" stroke-width="2.4"/>'
+    : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
+    : '';
+  return `<svg viewBox="0 0 48 48" aria-hidden="true">${ring}
+    <rect x="9" y="9" width="30" height="5" rx="2.5" fill="${dark}"/><rect x="9" y="34" width="30" height="5" rx="2.5" fill="${dark}"/>
+    <rect x="10" y="12" width="28" height="24" rx="5" fill="${c}" stroke="${dark}" stroke-width="1.4"${s.invisible && known ? ' opacity=".55" stroke-dasharray="3 2"' : ''}/>
+    ${known ? barrel : ''}<circle cx="24" cy="24" r="${known ? 7.5 : 8}" fill="${c}" stroke="${dark}" stroke-width="1.4" style="filter:brightness(1.12)"/>${extra}</svg>`;
+}
+const pips = (n: number, of = 5) => `<span class="pips" aria-label="${n} sur ${of}">${'<i class="on"></i>'.repeat(n)}${'<i></i>'.repeat(Math.max(0, of - n))}</span>`;
+/** The sheet of an enemy: what its colour says, in a few pips and labels. */
+function enemySheet(kind: string) {
+  const s = specOf(kind);
+  const speed = s.speed <= 0 ? 0 : Math.max(1, Math.min(5, Math.round((s.speed / 3.3) * 5)));
+  const rate = Math.max(1, Math.min(5, Math.round(5 - (s.fireCd - 0.65) / 0.6)));
+  const tags: string[] = [];
+  if (s.maxBullets === 0) tags.push('Tirs en cloche');
+  else tags.push(`${s.maxBullets} obus à la fois`, s.rocket ? `Fusées${s.bounces ? ` · ${s.bounces} rebond${s.bounces > 1 ? 's' : ''}` : ' sans rebond'}` : `${s.bounces} rebond${s.bounces > 1 ? 's' : ''}`);
+  if (s.mines) tags.push(`${s.mines} mine${s.mines > 1 ? 's' : ''}`);
+  if (isBossKind(kind)) tags.push(`Boss : ${s.hp ?? 1} coups`);
+  else if ((s.hp ?? 1) > 1) tags.push(`Blindé : ${s.hp} coups`);
+  if (s.invisible) tags.push('Invisible');
+  return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
+}
+const MODES: [string, string, string, string][] = [
+  ['🪖', 'Campagne coop', '1 à 4', 'Des missions faites main puis générées à l’infini, un boss toutes les 10 missions, des vies partagées. Des coéquipiers pilotés par l’ordinateur complètent l’équipe.'],
+  ['📅', 'Défi du jour', '1 à 4', `${DAILY_STAGES} missions, les mêmes pour tout le monde aujourd’hui, avec une consigne qui change chaque jour. Le chrono fait le classement.`],
+  ['👑', 'Ronde des boss', '1 à 4', 'Les boss l’un après l’autre, puis deux à la fois. L’ordre change chaque lundi : le meilleur chrono de la semaine gagne.'],
+  ['⚔️', 'Versus', '2 à 4', 'Chacun pour soi : le dernier tank debout marque un point, premier à 5 manches. Seul ? Ajoute des rivaux pilotés par l’ordinateur.'],
+  ['🚩', 'Drapeaux', '2 à 4', `Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi. Première équipe à ${CTF_TARGET} manches.`],
+  ['🎁', 'La chasse aux caisses', '2 à 4', `Les caisses pleuvent, chacune vaut un point, et la caisse dorée en vaut ${HUNT_GOLD}. Premier à ${HUNT_TARGET} manches.`],
+  ['🕵️', 'La taupe', `${TAUPE_MIN_PLAYERS} ou 4`, 'Une campagne coop… avec un traître tiré au sort en secret. Après chaque mission, le conseil vote pour le démasquer.'],
+  ['🛠️', 'L’atelier', '1 à 4', 'Dessine ta mission case par case (murs, liège, tunnels, portails, ennemis, météo), puis jouez-la ensemble.'],
+];
+const KEYS: [string, [string, string][]][] = [
+  ['Clavier et souris', [
+    ['<kbd>ZQSD</kbd> <kbd>WASD</kbd> <kbd>↑←↓→</kbd>', 'rouler'],
+    ['Souris', 'viser'],
+    ['<kbd>Clic</kbd> <kbd>E</kbd> <kbd>Maj</kbd> <kbd>Entrée</kbd>', 'tirer'],
+    ['<kbd>Espace</kbd> clic droit', 'poser une mine'],
+    ['<kbd>K</kbd> puis <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>', 'l’arbre des galons (campagne)'],
+    ['<kbd>T</kbd>', '« Suis-moi ! » aux coéquipiers'],
+    ['<kbd>1</kbd> à <kbd>6</kbd>', 'une bulle au-dessus de ton tank'],
+    ['<kbd>M</kbd> · <kbd>F</kbd> · <kbd>Échap</kbd>', 'musique · ton avis · menu'],
+  ]],
+  ['Manette', [
+    ['Stick gauche', 'rouler'],
+    ['Stick droit', 'viser'],
+    ['<kbd>RT</kbd> ou <kbd>X</kbd>', 'tirer'],
+    ['<kbd>LT</kbd> ou <kbd>A</kbd>', 'poser une mine'],
+    ['<kbd>Y</kbd> · croix', '« Suis-moi ! » · les bulles'],
+    ['Dans les menus', 'croix ou stick pour choisir, A pour valider, B pour revenir, LB et RB pour les onglets'],
+  ]],
+  ['Écran tactile', [
+    ['Pouce gauche', 'le joystick pour rouler'],
+    ['Pouce droit', 'touche pour viser et tirer'],
+    ['Bouton MINE', 'poser une mine'],
+  ]],
+];
+function manualPage(tab: ManualTab) {
+  if (tab === 'commandes') return `<div class="keys">${KEYS.map(([h, rows]) => `<section><h3>${escapeHtml(h)}</h3><ul>${rows.map(([k, v]) => `<li><span>${k}</span><b>${escapeHtml(v)}</b></li>`).join('')}</ul></section>`).join('')}</div>
+    <p class="tip">Les obus rebondissent une fois sur les murs : attention à tes propres ricochets !</p>`;
+  if (tab === 'modes') return `<ul class="modes">${MODES.map(([i, n, p, d]) => `<li><i>${i}</i><div><b>${escapeHtml(n)}</b><small>${escapeHtml(p)} joueurs</small><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
+    <p class="tip">Crée une salle, choisis le mode dans le salon et partage le code : tes amis n’ont qu’à le taper.</p>`;
+  if (tab === 'caisses') return `<ul class="crates">${CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><i></i><div><b>${escapeHtml(BONUS_INFO[k].label)}</b><span>${escapeHtml(line)}</span></div></li>`).join('')}</ul>
+    <p class="tip">Les caisses tombent du ciel pendant les missions : roule dessus pour les ouvrir. Le Pilleur, lui aussi, les convoite.</p>`;
+  const n = BESTIARY.filter(([k]) => metOrDemo(k)).length;
+  return `<p class="count">${n >= BESTIARY.length ? 'Collection complète' : 'Rencontrés'} : <b>${n} / ${BESTIARY.length}</b></p>
+    <ul class="fiches">${BESTIARY.map(([k, line], i) => {
+      const known = metOrDemo(k);
+      return `<li class="${isBossKind(k) ? 'boss' : ''}${known ? '' : ' unmet'}" style="--c:${hex(enemyColor(k))}"><small class="num">N° ${String(i + 1).padStart(2, '0')}</small>${tankSvg(k, known)}
+        <div><b>${known ? escapeHtml(specOf(k).label) : '???'}</b><span>${known ? escapeHtml(line) : 'Pas encore croisé : il t’attend plus loin.'}</span>${known ? enemySheet(k) : ''}</div></li>`;
+    }).join('')}</ul>`;
+}
+function renderManual(tab = manualTab) {
+  manualTab = tab;
+  $('#manual-title').textContent = MANUAL_TITLES[tab];
+  document.querySelectorAll<HTMLButtonElement>('#manual-tabs button').forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  const page = $('#manual-page');
+  page.innerHTML = manualPage(tab);
+  page.scrollTop = 0;
+  page.classList.remove('turn');
+  void page.offsetWidth;
+  page.classList.add('turn');
+}
+function openManual(tab: ManualTab = manualTab) {
+  renderManual(tab);
+  $('#manual').hidden = false;
+  // with a gamepad, the frame jumps onto the open tab (the shelf behind no longer has the gamepad)
+  if (document.body.classList.contains('pad-nav')) $<HTMLButtonElement>(`#manual-tabs button[data-tab="${tab}"]`).focus({ preventScroll: true });
+}
+function closeManual() {
+  if ($('#manual').hidden) return false;
+  $('#manual').hidden = true;
+  ($(`.shelf button[data-tab="${manualTab}"]`) as HTMLButtonElement | null)?.focus({ preventScroll: true });
+  return true;
+}
+function turnManual(dir: number) {
+  if ($('#manual').hidden) return;
+  renderManual(MANUAL_TABS[(MANUAL_TABS.indexOf(manualTab) + dir + MANUAL_TABS.length) % MANUAL_TABS.length]);
+  if ((document.activeElement as HTMLElement | null)?.closest('#manual-tabs')) $<HTMLButtonElement>(`#manual-tabs button[data-tab="${manualTab}"]`).focus({ preventScroll: true });
+  sfx.click();
+}
+document.querySelectorAll<HTMLButtonElement>('.shelf button').forEach((b) => b.addEventListener('click', () => { sfx.click(); openManual(b.dataset.tab as ManualTab); }));
+document.querySelectorAll<HTMLButtonElement>('#manual-tabs button').forEach((b) => b.addEventListener('click', () => { sfx.click(); renderManual(b.dataset.tab as ManualTab); }));
+$('#btn-manual-close').addEventListener('click', () => { sfx.click(); closeManual(); });
+$('#manual').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeManual(); }); // a tap beside the binder closes it
+addEventListener('keydown', (e) => {
+  if ($('#manual').hidden) return;
+  if (e.code === 'Escape') { closeManual(); e.stopImmediatePropagation(); }
+  else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { turnManual(e.code === 'ArrowRight' ? 1 : -1); e.preventDefault(); }
+}, { capture: true });
+// the scenes of the videos on the home screen (iteration 39): a new scene cancels the timers of the one before,
+// so a late « back to the table » of the previous scene never hides the next one on a slow machine
+let sceneTimers: ReturnType<typeof setTimeout>[] = [];
+let sceneRoll = () => {};
+const later = (f: () => void, ms: number) => { sceneTimers.push(setTimeout(f, ms)); };
+function clearScene() {
+  sceneTimers.forEach(clearTimeout);
+  sceneTimers = [];
+  sceneRoll();
+  $('#manual').hidden = true;
+  document.body.classList.remove('pad-nav', 'caption-side');
+}
+// « Les menus à la manette » (iteration 39): which panel the gamepad drives, and what B does there
+const navStep = padNav({
+  root() {
+    if (!$('#feedback').hidden) return $('#feedback');
+    if (!$('#manual').hidden) return $('#manual');
+    if (!$('#journal').hidden) return $('#journal');
+    if (treeOpen || reel) return null; // the skill tree and the replay have their own buttons
+    if (screen === 'game') return $('#menu').hidden ? null : $('#menu');
+    return $(`#${screen}`);
+  },
+  back() {
+    if (!$('#feedback').hidden) { $<HTMLButtonElement>('#fb-cancel').click(); return true; }
+    if (closeManual()) return true;
+    if (!$('#journal').hidden) { $('#journal').hidden = true; return true; }
+    if (screen === 'game' && !$('#menu').hidden) { toggleMenu(false); return true; }
+    return false;
+  },
+  tab(dir) {
+    if (!$('#manual').hidden) turnManual(dir);
+  },
+  start() {
+    if (screen === 'game' && !reel && !treeOpen) toggleMenu(true);
+  },
+});
 function renderBestiary() {
-  const met = (k: string) => demoMode || metKinds.has(k);
-  const n = BESTIARY.filter(([k]) => met(k)).length;
-  $('#bestiary-count').textContent = n >= BESTIARY.length ? `Tous rencontrés : ${n} / ${BESTIARY.length}` : `Rencontrés : ${n} / ${BESTIARY.length}`;
-  $('#bestiary-list').innerHTML = BESTIARY.map(([k, line]) => `<li class="${isBossKind(k) ? 'boss' : ''}${met(k) ? '' : ' unmet'}" style="--c:${hex(enemyColor(k))}"><span><b>${escapeHtml(specOf(k).label)}</b> : ${escapeHtml(line)}${met(k) ? '' : ' <i>(pas encore croisé)</i>'}</span></li>`).join('');
+  const n = BESTIARY.filter(([k]) => metOrDemo(k)).length;
+  $('#bestiary-count').textContent = `${n} / ${BESTIARY.length}`;
+  if (!$('#manual').hidden && manualTab === 'bestiaire') renderManual('bestiaire');
 }
 renderBestiary();
 $('#iteration-stamp').textContent = `Itération ${META.iteration}`;
 $('#iteration-stamp').title = META.title;
 $('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; sfx.click(); });
 $('#btn-journal-close').addEventListener('click', () => ($('#journal').hidden = true));
+// Échap closes the journal too (iteration 39)
+addEventListener('keydown', (e) => {
+  if (e.code === 'Escape' && !$('#journal').hidden) { $('#journal').hidden = true; e.stopImmediatePropagation(); }
+}, { capture: true });
 
 // ------------------------------------------------------------------ feedback
 
@@ -2831,26 +3009,45 @@ if (params.has('demo')) {
     newcomer(kinds: TankKind[] = ['white']) {
       newcomerCards(kinds, 0);
     },
-    /** Show the home screen with its bestiary open for a moment (iteration 25). */
-    bestiary(ms = 5000) {
-      const d = $('#bestiary') as HTMLDetailsElement;
-      d.open = true;
+    /** « Le manuel » (iteration 39): the home screen, then the manual opened on `tabs` one after the other (the bestiary page scrolls slowly). */
+    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire']) {
+      clearScene();
       show('home');
-      const list = $('#bestiary-list');
-      list.scrollTop = 0;
-      const home = $('#home');
-      requestAnimationFrame(() => (home.scrollTop = home.scrollHeight)); // the bestiary sits at the bottom of the card
-      const roll = setInterval(() => (list.scrollTop += 1), 30);
-      setTimeout(() => { clearInterval(roll); d.open = false; home.scrollTop = 0; show('game'); $('#hud').hidden = true; }, ms);
+      const lead = Math.min(1500, ms / 4), each = (ms - lead - 400) / tabs.length;
+      let roll: ReturnType<typeof setInterval> | undefined;
+      tabs.forEach((t, i) => later(() => {
+        clearInterval(roll);
+        openManual(t);
+        const page = $('#manual-page');
+        if (t === 'bestiaire') later(() => (roll = setInterval(() => (page.scrollTop += 1), 24)), 1200);
+      }, lead + i * each));
+      sceneRoll = () => clearInterval(roll);
+      later(() => { clearInterval(roll); $('#manual').hidden = true; show('game'); $('#hud').hidden = true; }, ms - 200);
     },
-    /** Show the home screen with its list of crates open for a moment (iteration 29). */
-    crates(ms = 5000) {
-      const d = $('#crates-help') as HTMLDetailsElement;
-      d.open = true;
+    /** « Les menus à la manette » (iteration 39): the golden frame hops along the home screen as with a gamepad, opens the bestiary and turns the pages back. */
+    padTour(ms = 9000) {
+      clearScene();
       show('home');
-      const home = $('#home');
-      requestAnimationFrame(() => (home.scrollTop = home.scrollHeight));
-      setTimeout(() => { d.open = false; home.scrollTop = 0; show('game'); $('#hud').hidden = true; }, ms);
+      document.body.classList.add('pad-nav', 'caption-side'); // the caption moves aside: the shelf of the home screen stays in sight
+      const steps: (() => void)[] = [
+        () => $('#btn-create').focus(),
+        () => $('#btn-atelier').focus(),
+        ...(['commandes', 'modes', 'caisses', 'bestiaire'] as const).map((t) => () => $(`.shelf button[data-tab="${t}"]`).focus()),
+        () => { sfx.click(); openManual('bestiaire'); },
+        () => turnManual(-1),
+        () => turnManual(-1),
+      ];
+      const gap = (ms - 1200) / steps.length;
+      steps.forEach((f, i) => later(f, 600 + i * gap));
+      later(() => { $('#manual').hidden = true; document.body.classList.remove('pad-nav', 'caption-side'); (document.activeElement as HTMLElement | null)?.blur(); show('game'); $('#hud').hidden = true; }, ms - 200);
+    },
+    /** The bestiary of the manual for a moment (iteration 25, a page of the manual since iteration 39). */
+    bestiary(ms = 5000) {
+      this.manual(ms, ['bestiaire']);
+    },
+    /** The crates page of the manual for a moment (iteration 29). */
+    crates(ms = 5000) {
+      this.manual(ms, ['caisses']);
     },
     /** « Gel » (iteration 29): the first hero grabs the frost, every enemy freezes on camera. */
     freeze() {

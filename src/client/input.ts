@@ -25,6 +25,7 @@ export class Controls {
   private lastPadAim: number | null = null;
   usingPad = false;
   suspended = false; // a modal (feedback) is open
+  padMenu = false; // the pause menu is open: the gamepad picks its entries (iteration 39)
   // touch
   private moveTouch: { id: number; ox: number; oy: number; x: number; y: number } | null = null;
   private aimTouch: { id: number; x: number; y: number } | null = null;
@@ -141,6 +142,8 @@ export class Controls {
       const dz = (v: number) => (Math.abs(v) < 0.18 ? 0 : v);
       const lx = dz(p.axes[0] ?? 0), ly = dz(p.axes[1] ?? 0);
       const rx = p.axes[2] ?? 0, ry = p.axes[3] ?? 0;
+      // the pause menu has the gamepad (iteration 39): its buttons pick menu entries, they don't drive the tank
+      if (this.padMenu) { this.padFireHeld = this.padMineHeld = this.padRallyHeld = true; this.padDpad = 0; break; }
       if (lx || ly) { mx = lx; my = ly; this.usingPad = true; }
       if (Math.hypot(rx, ry) > 0.35) { this.lastPadAim = Math.atan2(ry, rx); this.usingPad = true; }
       const fireBtn = !!(p.buttons[7]?.pressed || p.buttons[5]?.pressed || p.buttons[2]?.pressed);

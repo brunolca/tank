@@ -91,28 +91,13 @@
       </div>
       <button id="btn-atelier" class="btn">🛠️ L’atelier : dessine ta mission</button>
       <button id="btn-journal" class="btn ghost">Carnet de bord : le jeu s’améliore tout seul</button>
-      <details class="help">
-        <summary>Commandes</summary>
-        <ul>
-          <li><kbd>ZQSD</kbd>/<kbd>WASD</kbd>/flèches : déplacer</li>
-          <li>Souris : viser · <kbd>Clic</kbd>, <kbd>E</kbd>, <kbd>Maj</kbd> ou <kbd>Entrée</kbd> : tirer</li>
-          <li><kbd>Espace</kbd> / clic droit : poser une mine</li>
-          <li>Manette : stick gauche pour rouler, stick droit pour viser, gâchette droite ou <kbd>X</kbd> pour tirer, gâchette gauche ou <kbd>A</kbd> pour une mine</li>
-          <li>Mobile : joystick à gauche, touche à droite pour viser et tirer</li>
-          <li><kbd>K</kbd> ou bouton ★ : l’arbre des galons (campagne), <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> pour acheter</li>
-          <li><kbd>T</kbd>, <kbd>Y</kbd> à la manette ou bouton 📣 : « Suis-moi ! » à tes coéquipiers pilotés par l’ordinateur (campagne)</li>
-          <li><kbd>1</kbd> à <kbd>6</kbd>, croix de la manette ou bouton 💬 : une bulle au-dessus de ton tank (« Bravo ! », « Merci ! », « Oups ! », « Par ici ! », « Attention ! », « Hé hé ! »)</li>
-          <li>Les obus rebondissent une fois. Attention à tes propres ricochets !</li>
-        </ul>
-      </details>
-      <details id="crates-help" class="help">
-        <summary>Les caisses bonus : que contiennent-elles ?</summary>
-        <ul id="crates-list" class="bestiary"></ul>
-      </details>
-      <details id="bestiary" class="help">
-        <summary>Le bestiaire : qui est qui ? <small id="bestiary-count"></small></summary>
-        <ul id="bestiary-list" class="bestiary"></ul>
-      </details>
+      <!-- « Le manuel » (iteration 39, a player's idea: no more drop-down menus): four paper tabs open the manual on the right page -->
+      <nav class="shelf" aria-label="Le manuel">
+        <button data-tab="commandes"><i>🎮</i><b>Commandes</b></button>
+        <button data-tab="modes"><i>🗺️</i><b>Modes</b></button>
+        <button data-tab="caisses"><i>🎁</i><b>Caisses</b></button>
+        <button data-tab="bestiaire"><i>📖</i><b>Bestiaire</b><small id="bestiary-count"></small></button>
+      </nav>
     </div>
     <div class="side-cards">
     <div id="daily-card" class="card daily">
@@ -212,8 +197,27 @@
       <div class="kicker">Carnet de bord</div>
       <h2>Le jeu s’écrit tout seul</h2>
       <p class="muted">Toutes les 12 heures, Claude reprend le code, invente une nouveauté et publie une nouvelle itération.</p>
-      <div id="journal-list"></div>
+      <div id="journal-list" data-pad-scroll></div>
       <button id="btn-journal-close" class="btn primary">Fermer</button>
+    </div>
+  </section>
+
+  <!-- LE MANUEL (iteration 39): a ring binder with paper tabs, filled in by main.ts -->
+  <section id="manual" class="screen" hidden>
+    <div class="card manual" role="dialog" aria-labelledby="manual-title">
+      <div class="manual-head">
+        <div class="kicker">Le manuel</div>
+        <h2 id="manual-title"></h2>
+        <button id="btn-manual-close" class="icon-btn" title="Fermer (Échap, B à la manette)" aria-label="Fermer">✕</button>
+      </div>
+      <div id="manual-tabs" class="manual-tabs" role="tablist">
+        <button role="tab" data-tab="commandes"><i>🎮</i> <span>Commandes</span></button>
+        <button role="tab" data-tab="modes"><i>🗺️</i> <span>Modes</span></button>
+        <button role="tab" data-tab="caisses"><i>🎁</i> <span>Caisses</span></button>
+        <button role="tab" data-tab="bestiaire"><i>📖</i> <span>Bestiaire</span></button>
+      </div>
+      <div id="manual-page" class="manual-page" role="tabpanel" data-pad-scroll></div>
+      <p class="manual-foot muted">‹ › ou <kbd>LB</kbd> <kbd>RB</kbd> pour tourner les pages · <kbd>Échap</kbd> pour refermer</p>
     </div>
   </section>
 
@@ -240,7 +244,7 @@
       <label class="check"><input type="checkbox" id="fb-include" checked /> Joindre la capture d’écran</label>
       <textarea id="fb-text" maxlength="4000" rows="4" placeholder="Que s’est-il passé ? Qu’est-ce qui te plairait ?"></textarea>
       <label class="file"><input type="file" id="fb-file" accept="image/*,.txt,.json,.pdf" /><span>📎</span><span id="fb-file-name">Ajouter une pièce jointe</span></label>
-      <details class="help"><summary>Données envoyées avec ton retour</summary><pre id="fb-context"></pre></details>
+      <div class="fb-data"><span class="muted">Données envoyées avec ton retour :</span><pre id="fb-context"></pre></div>
       <div class="fb-actions">
         <button id="fb-cancel" class="btn ghost">Annuler</button>
         <button id="fb-send" class="btn primary">Envoyer</button>

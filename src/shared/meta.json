@@ -1,7 +1,7 @@
 {
-  "iteration": 38,
+  "iteration": 39,
   "date": "2026-11-17",
-  "title": "La boîte à jouets",
+  "title": "Le manuel",
   "journal": [
     {
       "iteration": 1,
@@ -462,6 +462,18 @@
         "Sur la glace, chaque tank grave maintenant deux rayures de patins qui s’effacent doucement. Les chars blancs invisibles ne passent plus inaperçus : suivez leurs traces !",
         "« Nouveau au bestiaire ! » : la première fois que vous croisez un ennemi, sa fiche s’épingle au bord de la table avec un petit air de xylophone.",
         "Sur les téléphones étroits, l’accueil et le salon ne débordent plus sur la droite de l’écran."
+      ]
+    },
+    {
+      "iteration": 39,
+      "date": "2026-11-17",
+      "title": "Le manuel",
+      "notes": [
+        "Fini les menus qui se déplient : quatre étiquettes en papier sur l’accueil ouvrent le manuel, un classeur à anneaux avec ses intercalaires de couleur (Commandes, Modes, Caisses, Bestiaire).",
+        "Le bestiaire devient une collection de fiches : chaque ennemi a son portrait vu de dessus, sa vitesse, sa cadence, ses obus, ses rebonds et ses mines. Ceux qu’on n’a pas encore croisés restent des silhouettes mystère.",
+        "Une nouvelle page présente tous les modes de jeu d’un coup d’œil, avec le nombre de joueurs.",
+        "Les menus se pilotent à la manette : la croix ou le stick choisit un bouton, A valide, B revient, LB et RB tournent les pages du manuel, Start ouvre le menu en pleine partie.",
+        "Au clavier, les flèches tournent les pages du manuel et Échap referme le manuel comme le carnet de bord."
       ]
     }
   ]
