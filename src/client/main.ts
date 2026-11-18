@@ -426,6 +426,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'hopper')) setTimeout(() => toast('La Sauterelle se tasse sur ses ressorts… puis bondit par-dessus les murs pour te prendre à revers. Un anneau vert montre où elle va retomber : vise-le ! En l’air, rien ne la touche.', 5200), 2200);
   else if (enemies.some((e) => e.kind === 'mortar')) setTimeout(() => toast('Le Mortier tire en cloche, par-dessus les murs : quand un cercle rouge se resserre sous toi, file ! De près, il ne peut plus rien contre toi.', 5000), 2200);
   else if (enemies.some((e) => e.kind === 'frost')) setTimeout(() => toast('Le Givré patine sans jamais glisser et laisse du givre partout où il passe : là, ton tank dérape ! Une mine fait fondre le givre, et il fond tout seul une fois le Givré détruit.', 5000), 2200);
   else if (enemies.some((e) => e.kind === 'magnet')) setTimeout(() => toast('L’Aimant : quand son champ bleu brille, il attire et avale tes obus… puis te les renvoie tous d’un coup. Tire quand le champ s’éteint, ou pose une mine !', 4800), 2200);
@@ -836,6 +837,15 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.lobLand(e[1], e[2]);
       floater(e[1], e[2], 'Badaboum !', enemyColor('mortar'));
       if (audible) sfx.lobLand();
+      break;
+    case 'hop': // « La Sauterelle » (iteration 41): it leaps, a ring shows where it will land
+      renderer.hopShot(e[6], e[1], e[2], e[3], e[4]);
+      if (audible) sfx.hop();
+      break;
+    case 'hopLand':
+      renderer.hopLand(e[3], e[1], e[2]);
+      floater(e[1], e[2], 'Boing !', enemyColor('hopper'));
+      if (audible) sfx.hopLand();
       break;
     case 'flip': // « Les interrupteurs » (iteration 40): a shell hit a switch, every gate flips
       renderer.flipSwitches(e[1], e[2], e[3]);
@@ -2449,6 +2459,7 @@ const BESTIARY: [TankKind, string][] = [
   ['magnet', 'son champ avale les obus et te les renvoie : tire quand il s’éteint'],
   ['frost', 'patine et givre le sol derrière lui : là, tout le monde dérape'],
   ['mortar', 'tire en cloche par-dessus les murs : fuis le cercle rouge, fonce-lui dessus'],
+  ['hopper', 'saute par-dessus les murs pour te prendre à revers : vise l’anneau vert où elle va retomber'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -2515,6 +2526,7 @@ function tankSvg(kind: string, known: boolean) {
   const extra = !known ? '<text x="24" y="29" text-anchor="middle" font-size="15" font-weight="900" fill="#c9b391">?</text>'
     : kind === 'rampart' ? '<path d="M37 13 q6 11 0 22" fill="none" stroke="#e8b04a" stroke-width="3" stroke-linecap="round"/>'
     : kind === 'magnet' ? '<path d="M36 17 v-4 h4 v4 m0 14 v4 h-4 v-4" fill="none" stroke="#d8392f" stroke-width="2.4"/>'
+    : kind === 'hopper' ? '<path d="M14 9 l-7 -5 l-4 7 M14 39 l-7 5 l-4 -7" fill="none" stroke="#2a1d12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="20" r="2.6" fill="#fff"/><circle cx="29" cy="28" r="2.6" fill="#fff"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
     : '';
   return `<svg viewBox="0 0 48 48" aria-hidden="true">${ring}
@@ -2535,6 +2547,7 @@ function enemySheet(kind: string) {
   if (isBossKind(kind)) tags.push(`Boss : ${s.hp ?? 1} coups`);
   else if ((s.hp ?? 1) > 1) tags.push(`Blindé : ${s.hp} coups`);
   if (s.invisible) tags.push('Invisible');
+  if (kind === 'hopper') tags.push('Saute les murs');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
 }
 const MODES: [string, string, string, string][] = [
@@ -2587,6 +2600,13 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…', true],
   ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.', true],
 ];
+/** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
+const WEATHER: [string, string, string][] = [
+  ['🌙', 'Nuit', 'Les ennemis ne te voient que de près… ou quand tu tires. Tes phares éclairent devant toi.'],
+  ['⚡', 'Orage', 'Quand le sol crépite, la foudre va tomber : écarte-toi ! Chaque éclair montre tout le monde.'],
+  ['🌬️', 'Vent', 'Il courbe les obus en vol : vise en amont, ou tire quand la manche à air retombe.'],
+  ['🌫️', 'Brouillard', 'Des bancs de brume dérivent sur la table : on n’y voit que ses voisins proches.'],
+];
 function manualPage(tab: ManualTab) {
   if (tab === 'commandes') return `<div class="keys">${KEYS.map(([h, rows]) => `<section><h3>${escapeHtml(h)}</h3><ul>${rows.map(([k, v]) => `<li><span>${k}</span><b>${escapeHtml(v)}</b></li>`).join('')}</ul></section>`).join('')}</div>
     <p class="tip">Les obus rebondissent une fois sur les murs : attention à tes propres ricochets !</p>`;
@@ -2595,12 +2615,14 @@ function manualPage(tab: ManualTab) {
   if (tab === 'caisses') return `<ul class="crates">${CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><i></i><div><b>${escapeHtml(BONUS_INFO[k].label)}</b><span>${escapeHtml(line)}</span></div></li>`).join('')}</ul>
     <p class="tip">Les caisses tombent du ciel pendant les missions : roule dessus pour les ouvrir. Le Pilleur, lui aussi, les convoite.</p>`;
   if (tab === 'terrain') return `<ul class="terrain">${TERRAIN.map(([chs, n, d, fresh]) => `<li class="${fresh ? 'new' : ''}">${[...chs].map((c) => `<img src="${cellImage(c)}" alt="">`).join('')}<div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
-    <p class="tip">Tous ces terrains t’attendent aussi dans l’atelier, pour dessiner tes propres missions.</p>`;
+    <h3 class="weather-h">Le temps qu’il fait</h3>
+    <ul class="terrain weather">${WEATHER.map(([i, n, d]) => `<li><i>${i}</i><div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
+    <p class="tip">Tous ces terrains t’attendent aussi dans l’atelier, pour dessiner tes propres missions, avec la météo de ton choix.</p>`;
   const n = BESTIARY.filter(([k]) => metOrDemo(k)).length;
   return `<p class="count">${n >= BESTIARY.length ? 'Collection complète' : 'Rencontrés'} : <b>${n} / ${BESTIARY.length}</b></p>
     <ul class="fiches">${BESTIARY.map(([k, line], i) => {
       const known = metOrDemo(k);
-      return `<li class="${isBossKind(k) ? 'boss' : ''}${known ? '' : ' unmet'}" style="--c:${hex(enemyColor(k))}"><small class="num">N° ${String(i + 1).padStart(2, '0')}</small>${tankSvg(k, known)}
+      return `<li data-k="${k}" class="${isBossKind(k) ? 'boss' : ''}${known ? '' : ' unmet'}" style="--c:${hex(enemyColor(k))}"><small class="num">N° ${String(i + 1).padStart(2, '0')}</small>${tankSvg(k, known)}
         <div><b>${known ? escapeHtml(specOf(k).label) : '???'}</b><span>${known ? escapeHtml(line) : 'Pas encore croisé : il t’attend plus loin.'}</span>${known ? enemySheet(k) : ''}</div></li>`;
     }).join('')}</ul>`;
 }
@@ -3039,7 +3061,7 @@ if (params.has('demo')) {
       newcomerCards(kinds, 0);
     },
     /** « Le manuel » (iteration 39): the home screen, then the manual opened on `tabs` one after the other (the bestiary page scrolls slowly). */
-    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire']) {
+    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'hopper') {
       clearScene();
       show('home');
       const lead = Math.min(1500, ms / 4), each = (ms - lead - 400) / tabs.length;
@@ -3048,7 +3070,9 @@ if (params.has('demo')) {
         clearInterval(roll);
         openManual(t);
         const page = $('#manual-page');
-        if (t === 'bestiaire') later(() => (roll = setInterval(() => (page.scrollTop += 1), 24)), 1200);
+        // the bestiary jumps to the newest card (« La Sauterelle », iteration 41), the terrain page rolls down to the weather
+        if (t === 'bestiaire') later(() => page.querySelector(`[data-k="${focusKind}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 900);
+        else if (t === 'terrain') later(() => (roll = setInterval(() => (page.scrollTop += 2), 24)), 1200);
       }, lead + i * each));
       sceneRoll = () => clearInterval(roll);
       later(() => { clearInterval(roll); $('#manual').hidden = true; show('game'); $('#hud').hidden = true; }, ms - 200);
@@ -3231,6 +3255,23 @@ if (params.has('demo')) {
         m.mortar.x = Math.max(0.6, Math.min(W - 0.6, best.x + Math.cos(best.body) * 0.6));
         m.mortar.y = Math.max(0.6, Math.min(H - 0.6, best.y + Math.sin(best.body) * 0.6));
         m.mortar.warn = MORTAR_WARN;
+        n++;
+      }
+      return n;
+    },
+    /**
+     * « La Sauterelle » (iteration 41): every Sauterelle on the table on the ground crouches at once for a leap at the
+     * nearest hero it can find a spot for (so the crouch, the ring and the flight show on camera). Returns how many.
+     */
+    hop() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const h of g.tanks) {
+        if (!h.alive || !h.hop || h.hop.air >= 0 || h.hop.warn > 0 || h.chill !== undefined) continue;
+        const spot = g.hopSpot(h, true);
+        if (!spot) continue;
+        g.crouch(h, spot.x, spot.y, spot.foe);
         n++;
       }
       return n;

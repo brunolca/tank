@@ -15,7 +15,7 @@ const BEFORE = 1.5;
 const AFTER = 0.75;
 
 /** Events played again in the replay: only what is drawn (no map change, no crate drop, no bubble, no toast). */
-export const REPLAYED = new Set(['shot', 'bounce', 'pop', 'boom', 'mboom', 'shield', 'hurt', 'deflect', 'catch', 'unload', 'volley', 'warp', 'bolt', 'erupt', 'bridge', 'land', 'mineSet', 'bonus', 'freeze', 'flag']);
+export const REPLAYED = new Set(['shot', 'bounce', 'pop', 'boom', 'mboom', 'shield', 'hurt', 'deflect', 'catch', 'unload', 'volley', 'warp', 'bolt', 'erupt', 'bridge', 'land', 'hop', 'hopLand', 'mineSet', 'bonus', 'freeze', 'flag']);
 
 export class Film {
   private frames: FilmFrame[] = [];

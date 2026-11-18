@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 45, arms: ['canon', 'ricochet'], seconds: 15, switchShots: [3.5, 10], caption: 'Nouveau : les interrupteurs', sub: 'Un obus sur l’interrupteur, et toutes les barrières basculent' },
-  { mission: 51, arms: ['ricochet', 'fusee'], seconds: 15, switchShots: [4, 10.5], caption: 'Rouge ou bleu', sub: 'Qui touche l’interrupteur en dernier a les abris' },
-  { versus: [50, [2, 2, 1, 2]], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 12, switchShots: [5], caption: 'Les interrupteurs en versus', sub: 'Ferme la porte au nez de tes rivaux' },
-  { manual: [9, ['terrain']], seconds: 9, caption: 'Le terrain, dans le manuel', sub: 'Murs, ponts, glace, sable, interrupteurs : chaque case expliquée' },
-  { mission: 41, arms: ['ricochet', 'fusee'], seconds: 10, caption: 'Et la partie continue', sub: 'Verglas : les Givrés givrent le sol' },
+  { mission: 52, arms: ['canon', 'ricochet'], seconds: 17, hops: [2.5, 7, 11.5], newcomers: [[1.5, ['hopper']]], caption: 'Nouveau : la Sauterelle', sub: 'Elle se tasse sur ses ressorts… et bondit par-dessus les murs' },
+  { mission: 53, arms: ['ricochet', 'sapeur'], seconds: 16, hops: [3, 8.5, 13], caption: 'Les ruisseaux', sub: 'Tu passes par les ponts, elle saute par-dessus les ravins' },
+  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Au bestiaire', sub: 'L’anneau vert montre où elle va retomber : vise-le !' },
+  { manual: [8, ['terrain']], seconds: 8, caption: 'Le manuel parle météo', sub: 'Nuit, orage, vent, brouillard : le temps qu’il fait, expliqué' },
+  { mission: 45, arms: ['canon', 'fusee'], seconds: 11, switchShots: [3.5], caption: 'Et toujours les interrupteurs', sub: 'Un obus, « Clac ! », et les barrières basculent' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -88,6 +88,7 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.hops ?? []) setTimeout(() => d.hop?.(), s * 1000); // « La Sauterelle » (iteration 41): every Sauterelle leaps at once
       for (const s of shot.lobs ?? []) setTimeout(() => d.lob?.(), s * 1000); // « Le Mortier » (iteration 34): every Mortier fires at once
       for (const s of shot.frostMines ?? []) setTimeout(() => d.frostMine?.(), s * 1000); // a blast melts the Givré's frost (iteration 31)
       for (const s of shot.gusts ?? []) setTimeout(() => d.gustShot?.(), s * 1000); // shells across the wind (iteration 23)

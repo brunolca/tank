@@ -11,9 +11,9 @@ import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H,
 //         % [ ] « Les interrupteurs » (iteration 40): a switch block (a shell on it flips every gate), a red gate (raised at the
 //           start) and a blue gate (lowered at the start); a raised gate stops tanks and shells, a lowered one is floor
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper',
 };
 
 export interface LevelDef {
@@ -1029,6 +1029,54 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 41: « La Sauterelle ». Two tall fences cut the table: the Sauterelles leap over them to take the
+  // players from behind, a pink and a grey tank hold the far side
+  52: {
+    name: 'Les sauterelles',
+    map: [
+      '......................',
+      '.......H......H.......',
+      '.......H......H...h...',
+      '..1....H......H.......',
+      '.......H..o...H.......',
+      '.......H..o.......p...',
+      '..2....H..o...H.......',
+      '..............H.......',
+      '....####......H....h..',
+      '..............H.......',
+      '.......H..o...H.......',
+      '.......H..o.......a...',
+      '.......H..o...H.......',
+      '.......H......H.......',
+      '.......H......H...h...',
+      '.......H......H.......',
+      '......................',
+    ],
+  },
+  // iteration 41: streams (rows of pits) with a few bridges. The players go round by the bridges, the Sauterelles leap
+  // straight over the water (and a bridge blown up under their landing spot sends them into the pit)
+  53: {
+    name: 'Les ruisseaux',
+    map: [
+      '......................',
+      '.....__.....__.....h..',
+      '..1..__..h..__........',
+      '.....::.....::........',
+      '.....__.....__...p....',
+      '.....__.....__........',
+      '..2..__.....__....h...',
+      '.....__..o..__........',
+      '.....::..o..::....a...',
+      '.....__..o..__........',
+      '.....__.....__....h...',
+      '.....__.....__........',
+      '.....__.....__...p....',
+      '.....::.....::........',
+      '.....__..h..__........',
+      '.....__.....__.....h..',
+      '......................',
+    ],
+  },
   // iteration 40: « Les interrupteurs ». A wall splits the table, its doors are red gates; a shell on a switch block
   // sinks the red gates and raises the blue ones in front of the players (and a stray enemy shell flips them back)
   45: {
@@ -1342,6 +1390,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 44) {
       const ro = rng(mission * 5413 + 79);
       for (const e of enemies) if ((e.kind === 'brown' || e.kind === 'ash' || e.kind === 'marine' || e.kind === 'green') && ro() < 0.22) { e.kind = 'mortar'; break; }
+    }
+    // the Sauterelle (iteration 41) leaps in from the 52nd: one more stream, at most one of them, in place of a mobile tank
+    if (opt.seed === undefined && mission > 51) {
+      const rh = rng(mission * 6271 + 89);
+      for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'violet') && rh() < 0.2) { e.kind = 'hopper'; break; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

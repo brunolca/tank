@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateUp, isGate } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
@@ -206,9 +206,16 @@ interface TankView {
   flake?: THREE.Group; // the Givré (iteration 31): the snowflake of ice crystals spinning on its turret
   tube?: THREE.Group; // the Mortier (iteration 34): its stubby barrel raised toward the sky
   under?: boolean;
+  legs?: HopperLeg[]; // « La Sauterelle » (iteration 41): its two big folded hind legs
+  leap?: { x0: number; y0: number; x1: number; y1: number }; // the leap it is in (from its « hop » event)
+  leapRing?: THREE.Mesh; // and the ring on the floor where it will land
+  squash?: number; // the bounce of its landing, fading out
   ice?: THREE.Group; // « Gel » (iteration 29): the ice cube it is frozen in (in the scene, not the tank: it gives away invisible tanks)
   iceT?: number; // seconds since it froze
 }
+
+/** « La Sauterelle » (iteration 41): a hind leg, a thigh rising behind the hull and a shin folded back down to the floor. */
+interface HopperLeg { thigh: THREE.Group; knee: THREE.Group }
 
 /** The Aimant (iteration 27): its field on the floor, a ripple running inward, and the shells it holds above its turret. */
 interface MagnetView {
@@ -533,6 +540,23 @@ const mortarGeo = {
   flight: new THREE.SphereGeometry(0.17, 18, 12),
 };
 const cannonballMat = new THREE.MeshStandardMaterial({ color: 0x3b2f27, roughness: 0.55, metalness: 0.25 });
+// « La Sauterelle » (iteration 41): two big spring legs folded along its hull, feelers and bulging eyes on its turret
+const HOP_THIGH = 0.44, HOP_SHIN = 0.54;
+const HOP_POSE = { rest: [2.48, 1.85], crouch: [2.78, 1.35], air: [2.05, 2.75] };
+const hopperGeo = {
+  thigh: new THREE.BoxGeometry(HOP_THIGH, 0.1, 0.075),
+  shin: new THREE.BoxGeometry(HOP_SHIN, 0.055, 0.05),
+  joint: new THREE.SphereGeometry(0.055, 10, 8),
+  foot: new THREE.BoxGeometry(0.12, 0.035, 0.08),
+  feeler: new THREE.CylinderGeometry(0.012, 0.016, 0.42, 6),
+  tip: new THREE.SphereGeometry(0.03, 8, 6),
+  eye: new THREE.SphereGeometry(0.065, 12, 10),
+  pupil: new THREE.SphereGeometry(0.032, 8, 6),
+};
+const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+const pupilMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1f, roughness: 0.2 });
+const hopRingMat = new THREE.MeshBasicMaterial({ color: 0x4a8a0e, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+const hopRingGeo = new THREE.RingGeometry(0.66, 1, 48);
 const lobShadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
 const skateMat = new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.15, metalness: 0.95, emissive: 0x16222c, emissiveIntensity: 0.4 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
@@ -570,6 +594,11 @@ const rivalBeadMat = new THREE.MeshStandardMaterial({ color: 0xff4d3d, roughness
 // the stripes of the coop campaign (iteration 19): gold chevrons on the front deck, one per three skills bought
 const chevronGeo = new THREE.BoxGeometry(0.15, 0.03, 0.045);
 const chevronMat = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.3, metalness: 0.4, emissive: 0xc08a00, emissiveIntensity: 0.9 });
+
+/** Fold the Sauterelle's legs: [thigh angle, knee angle] (radians, around the hull's side axis). */
+function poseLegs(v: TankView, pose: number[]) {
+  for (const l of v.legs ?? []) { l.thigh.rotation.z = pose[0]; l.knee.rotation.z = pose[1]; }
+}
 
 function buildTank(info: TankInfo): TankView {
   const color = info.kind === 'player' ? info.color : enemyColor(info.kind);
@@ -1036,6 +1065,46 @@ function buildTank(info: TankInfo): TankView {
       hull.add(b);
     }
     view.tube = tube;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'hopper') {
+    const legMat = new THREE.MeshStandardMaterial({ color: shade(enemyColor('hopper'), -0.28), roughness: 0.5, metalness: 0.1 });
+    view.legs = [];
+    for (const s of [-1, 1]) {
+      const hip = new THREE.Group();
+      hip.position.set(0.08, 0.3, s * 0.43);
+      const thigh = new THREE.Group();
+      const tm = new THREE.Mesh(hopperGeo.thigh, legMat);
+      tm.position.x = HOP_THIGH / 2;
+      const knee = new THREE.Group();
+      knee.position.x = HOP_THIGH;
+      const kj = new THREE.Mesh(hopperGeo.joint, brassMat);
+      const sm = new THREE.Mesh(hopperGeo.shin, legMat);
+      sm.position.x = HOP_SHIN / 2;
+      const foot = new THREE.Mesh(hopperGeo.foot, barrelMat);
+      foot.position.x = HOP_SHIN;
+      knee.add(kj, sm, foot);
+      thigh.add(tm, knee);
+      hip.add(new THREE.Mesh(hopperGeo.joint, brassMat), thigh);
+      hull.add(hip);
+      view.legs.push({ thigh, knee });
+    }
+    for (const s of [-1, 1]) {
+      const fl = new THREE.Group();
+      fl.position.set(0.1, 0.14, s * 0.06);
+      fl.rotation.set(s * 0.35, 0, -0.75);
+      const stalk = new THREE.Mesh(hopperGeo.feeler, barrelMat);
+      stalk.position.y = 0.21;
+      const tip = new THREE.Mesh(hopperGeo.tip, brassMat);
+      tip.position.y = 0.43;
+      fl.add(stalk, tip);
+      const eye = new THREE.Mesh(hopperGeo.eye, eyeMat);
+      eye.position.set(0.12, 0.1, s * 0.1);
+      const pupil = new THREE.Mesh(hopperGeo.pupil, pupilMat);
+      pupil.position.set(0.17, 0.11, s * 0.1);
+      turret.add(fl, eye, pupil);
+    }
+    poseLegs(view, HOP_POSE.rest);
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (info.kind === 'bombard') {
@@ -1612,7 +1681,7 @@ export class Renderer {
     this.switches = [];
     for (const f of this.falling) this.levelGroup.remove(f.obj);
     this.falling = [];
-    for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); }
+    for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); }
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
     this.bullets.clear();
@@ -2679,6 +2748,7 @@ export class Renderer {
       this.tankAlert(v, t, dt);
       if (v.armor) this.tankArmor(v, t, visible, dt);
       if (v.mound && this.tankDrill(v, t, dt)) continue;
+      if (v.legs && this.tankHopper(v, t, dt)) continue;
       // tread marks
       if (Number.isNaN(v.lastMarkX)) { v.lastMarkX = t.x; v.lastMarkY = t.y; }
       const d = Math.hypot(t.x - v.lastMarkX, t.y - v.lastMarkY);
@@ -2719,6 +2789,83 @@ export class Renderer {
       }
     }
     this.headlights(list);
+  }
+
+  /**
+   * « La Sauterelle » (iteration 41): it crouches on its springs (FLAG_CHARGING), then flies along an arc to the ring
+   * that marks its landing (the height comes from how far along its leap it is), legs stretched out, nose up then down.
+   * Returns true in the air (no tread marks).
+   */
+  private tankHopper(v: TankView, t: RTank, dt: number): boolean {
+    const fx = t.fx ?? 0, air = !!(fx & FLAG_AIR), crouch = !!(fx & FLAG_CHARGING);
+    let z = 0, p = 0;
+    const L = v.leap;
+    if (air && L) {
+      const dx = L.x1 - L.x0, dy = L.y1 - L.y0, l2 = dx * dx + dy * dy;
+      p = l2 > 0.01 ? Math.max(0, Math.min(1, ((t.x - L.x0) * dx + (t.y - L.y0) * dy) / l2)) : 0.5;
+      z = Math.sin(Math.PI * p) * HOP_HEIGHT * (0.6 + 0.4 * Math.min(1, Math.sqrt(l2) / HOP_MAX));
+    } else if (air) z = 0.5;
+    v.root.position.y = z;
+    v.squash = Math.max(0, (v.squash ?? 0) - dt * 4);
+    const sy = crouch ? 0.8 + Math.sin(this.time * 34) * 0.025 : air ? 1.1 : 1 - Math.sin(v.squash * Math.PI) * 0.22;
+    const sx = 1 + (1 - sy) * 0.6;
+    v.root.scale.set(sx, sy, sx);
+    poseLegs(v, air ? HOP_POSE.air : crouch ? HOP_POSE.crouch : HOP_POSE.rest);
+    const pitch = air ? (0.5 - p) * 0.6 : 0;
+    v.hull.rotation.z = pitch;
+    v.turret.rotation.z = pitch;
+    if (v.leapRing) {
+      v.leapRing.visible = air;
+      if (air) {
+        const k = 0.85 - p * 0.35;
+        v.leapRing.scale.set(k, k, k);
+        (v.leapRing.material as THREE.MeshBasicMaterial).opacity = 0.7 + Math.sin(this.time * 18) * 0.2;
+      }
+    }
+    if (crouch && Math.random() < 14 * dt) {
+      const a = Math.random() * Math.PI * 2;
+      this.smoke.emit({ x: t.x + Math.cos(a) * 0.4, y: 0.06, z: t.y + Math.sin(a) * 0.4, vx: Math.cos(a) * 0.5, vy: 0.3, vz: Math.sin(a) * 0.5, life: 0.4, s0: 0.05, s1: 0.13, c0: 0xd9c4a0, c1: 0xe8dcc8, drag: 2 });
+    }
+    if (!air) return false;
+    v.lastMarkX = t.x; v.lastMarkY = t.y;
+    if (v.alert) v.alert.visible = false;
+    return true;
+  }
+
+  /** « La Sauterelle » (iteration 41) leaps: a puff of dust where it took off, and a ring where it will land. */
+  hopShot(id: number, x0: number, y0: number, x1: number, y1: number) {
+    const v = this.tanks.get(id);
+    if (v) {
+      v.leap = { x0, y0, x1, y1 };
+      if (!v.leapRing) {
+        v.leapRing = new THREE.Mesh(hopRingGeo, hopRingMat.clone());
+        v.leapRing.rotation.x = -Math.PI / 2;
+        v.leapRing.renderOrder = 2;
+        this.scene.add(v.leapRing);
+      }
+      v.leapRing.position.set(x1, 0.05, y1);
+      v.leapRing.visible = true;
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.2;
+      this.smoke.emit({ x: x0 + Math.cos(a) * 0.3, y: 0.08, z: y0 + Math.sin(a) * 0.3, vx: Math.cos(a) * sp, vy: 0.4 + Math.random() * 0.4, vz: Math.sin(a) * sp, life: 0.6, s0: 0.08, s1: 0.24, c0: 0xd9c4a0, c1: 0xefe4cf, drag: 2.5 });
+    }
+  }
+
+  /** It lands: a bounce, a ring of dust and a little shake. */
+  hopLand(id: number, x: number, y: number) {
+    const v = this.tanks.get(id);
+    if (v) { v.squash = 1; v.leap = undefined; if (v.leapRing) v.leapRing.visible = false; }
+    const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: 0xe8d6b0, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.05, y);
+    this.scene.add(ring);
+    this.shocks.push({ mesh: ring, t: 0, max: 0.35, size: 0.9 });
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      this.smoke.emit({ x: x + Math.cos(a) * 0.35, y: 0.06, z: y + Math.sin(a) * 0.35, vx: Math.cos(a) * 1.6, vy: 0.25 + Math.random() * 0.3, vz: Math.sin(a) * 1.6, life: 0.55, s0: 0.08, s1: 0.22, c0: 0xd9c4a0, c1: 0xefe4cf, drag: 3 });
+    }
+    this.shake = Math.max(this.shake, 0.12);
   }
 
   /** The Grondeur: its cloud bobs and drifts; antenna up (charging), the cloud darkens, the rod ball blazes and sparks fly. */
@@ -2909,8 +3056,8 @@ export class Renderer {
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
       glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
-      col = v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : v.tube ? 0xffa040 : 0xff5a20;
-      if (Math.random() < 60 * dt) {
+      col = v.legs ? 0xb8e840 : v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : v.tube ? 0xffa040 : 0xff5a20;
+      if (!v.legs && Math.random() < 60 * dt) {
         // sparks sucked into the hull
         const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
         this.glow.emit({ x: t.x + Math.cos(a) * d, y: 0.5, z: t.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.2, vz: -Math.sin(a) * d * 2.2, life: 0.4, s0: 0.03, s1: 0.1, c0: v.cloud ? 0xdcebff : 0xffd060, c1: v.cloud ? 0x3f7dff : 0xff4010 });

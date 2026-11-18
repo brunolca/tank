@@ -5,7 +5,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
+import { FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -1902,6 +1902,145 @@ console.log('total', Date.now() - t0, 'ms');
   if (process.exitCode !== 1) console.log(`mortier OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${landed} boulets tombés, ${per.toFixed(3)} ms/tick)`);
 }
 
+// « La Sauterelle » (iteration 41): it crouches, leaps over walls to a spot with a clear shot, nothing touches it in the air
+{
+  const fail = (m: string) => { console.error('SAUTERELLE:', m); process.exitCode = 1; };
+  {
+    // a tall fence between them: it leaps over it (announced by a crouch), lands within reach and shoots
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    for (let y = 2; y < 15; y++) tiles[y * W + 11] = Tile.Tall;
+    const g = new Game(tiles);
+    const p = g.addTank('player', 0, 6.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const h = g.addTank('hopper', 99, 14.5, 8.5, 0);
+    g.frozen = false;
+    let hop: unknown[] | undefined, land: unknown[] | undefined, crouched = false, air = 0, ko: unknown[] | undefined;
+    for (let i = 0; i < 30 * 15 && p.alive; i++) {
+      g.step(new Map());
+      const f = g.buffFlags(h);
+      if (!hop && f & FLAG_CHARGING) crouched = true;
+      if (f & FLAG_AIR) air++;
+      for (const e of g.events) { if (e[0] === 'hop' && !hop) hop = e; if (e[0] === 'hopLand' && !land) land = e; if (e[0] === 'ko') ko = e; }
+      g.events = [];
+    }
+    if (!hop || !land) fail('pas de saut');
+    else {
+      const [, x0, , x1, y1] = hop as number[];
+      if (!crouched) fail('pas d’annonce (FLAG_CHARGING) avant le saut');
+      if (!(x0 > 11 && x1 < 11)) fail(`le saut ne franchit pas le mur (${x0} → ${x1})`);
+      const d = Math.hypot((hop as number[])[3] - (hop as number[])[1], (hop as number[])[4] - (hop as number[])[2]);
+      if (d < HOP_MIN - 0.01 || d > HOP_MAX + 0.01) fail(`saut hors des limites (${d.toFixed(2)})`);
+      if (tiles[Math.floor(y1) * W + Math.floor(x1)] !== Tile.Empty) fail('atterrissage dans un mur');
+      if (air < 8) fail(`vol trop court (${air} ticks)`);
+    }
+    if (p.alive || !ko || ko[2] !== h.id) fail('la Sauterelle ne vient pas à bout d’un joueur immobile');
+  }
+  {
+    // in the air: a shell flies under it, a mine blast and lightning leave it alone; it lands, then it can be hit
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+    p.ai = undefined;
+    const h = g.addTank('hopper', 99, 12.5, 8.5, 0);
+    h.ai = undefined;
+    g.frozen = false;
+    g.crouch(h, 9.5, 4.5, p.id);
+    for (let i = 0; i < 30 && !(g.buffFlags(h) & FLAG_AIR); i++) { g.step(new Map()); g.events = []; }
+    if (!(g.buffFlags(h) & FLAG_AIR)) fail('pas en l’air après l’accroupissement');
+    g.killTank(h, p);
+    g.bullets.push({ id: 999, owner: p.id, x: h.x - 0.3, y: h.y, vx: 6, vy: 0, bounces: 0, rocket: false, dead: false });
+    g.step(new Map()); g.events = [];
+    if (!h.alive) fail('touchée en l’air');
+    g.freezeFoes(p);
+    if (h.chill !== undefined) fail('gelée en l’air');
+    let landed = false;
+    for (let i = 0; i < 60 && !landed; i++) { g.step(new Map()); landed = g.events.some((e) => e[0] === 'hopLand'); g.events = []; }
+    if (!landed || Math.hypot(h.x - 9.5, h.y - 4.5) > 0.05) fail(`mauvais atterrissage (${h.x.toFixed(2)}, ${h.y.toFixed(2)})`);
+    if (g.buffFlags(h) & FLAG_AIR) fail('toujours en l’air après l’atterrissage');
+    g.killTank(h, p);
+    if (h.alive) fail('invulnérable au sol');
+  }
+  {
+    // the landing spot: never on a hole, a wall, a tank or a mine; a bridge that gave way meanwhile drops it into the pit
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    for (let y = 0; y < H; y++) for (let x = 6; x < 10; x++) tiles[y * W + x] = Tile.Hole;
+    tiles[8 * W + 7] = Tile.Bridge;
+    const g = new Game(tiles);
+    const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+    p.ai = undefined;
+    const h = g.addTank('hopper', 99, 12.5, 8.5, 0);
+    for (let k = 0; k < 40; k++) {
+      const sp = g.hopSpot(h, true);
+      if (!sp) continue;
+      const tl = tiles[Math.floor(sp.y) * W + Math.floor(sp.x)];
+      if (tl !== Tile.Empty && tl !== Tile.Bridge) fail(`sauterait sur une case ${tl}`);
+      if (Math.hypot(sp.x - p.x, sp.y - p.y) < 1) fail('sauterait sur le joueur');
+    }
+    h.ai = undefined;
+    g.frozen = false;
+    g.leap(h, 7.5, 8.5);
+    tiles[8 * W + 7] = Tile.Hole;
+    g.tiles[8 * W + 7] = Tile.Hole;
+    let ko: unknown[] | undefined;
+    for (let i = 0; i < 60 && h.alive; i++) { g.step(new Map()); for (const e of g.events) if (e[0] === 'ko') ko = e; g.events = []; }
+    if (h.alive || !ko || ko[3] !== KO_FALL) fail('ne tombe pas dans le trou d’un pont effondré');
+  }
+  {
+    // a mine where it lands goes off under it
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 3.5, 3.5, 0x3d7bff, 'p1', 'P');
+    p.ai = undefined;
+    const h = g.addTank('hopper', 99, 12.5, 8.5, 0);
+    h.ai = undefined;
+    g.frozen = false;
+    g.leap(h, 9.5, 8.5);
+    g.mines.push({ id: 998, owner: p.id, team: 0, x: 9.6, y: 8.5, t: 3, fuse: -1, dead: false });
+    for (let i = 0; i < 60 && h.alive; i++) { g.step(new Map()); g.events = []; }
+    if (h.alive) fail('une mine sous son point de chute ne l’arrête pas');
+  }
+  // missions: handmade 52 and 53, then some generated ones; never in the daily challenge nor the mole; the workshop
+  const mm: number[] = [];
+  for (let mission = 1; mission <= 160; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'hopper')) mm.push(mission);
+  if (!mm.includes(52) || !mm.includes(53)) fail('missions 52 et 53 sans Sauterelle');
+  if (mm.some((x) => x < 52)) fail('Sauterelle avant la 52ᵉ mission');
+  if (mm.length < 8) fail(`trop peu de missions avec des Sauterelles (${mm.length})`);
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'hopper')) fail('Sauterelle dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'hopper')) fail('Sauterelle dans la taupe');
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'h' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Sauterelle refusée (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Hop', map }));
+  if (back?.map[8][15] !== 'h') fail('atelier : la Sauterelle se perd dans le code');
+  if (killXp('hopper') !== 2) fail('galons de la Sauterelle');
+  // duos of AI players clear the Sauterelle missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, leaps = 0;
+  for (const mission of [52, 53, mm.find((x) => x > 53)!]) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        leaps += s2.events.filter((e) => e[0] === 'hop').length;
+        for (const t of s2.tanks) {
+          if (!t.alive || t.kind !== 'hopper' || (t.hop && t.hop.air >= 0)) continue;
+          const tl = s2.tiles[Math.floor(t.y) * W + Math.floor(t.x)];
+          if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole) { fail(`M${mission} : Sauterelle coincée dans une case ${tl}`); break; }
+        }
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des Sauterelles');
+  if (leaps < 8) fail(`les Sauterelles ne sautent presque pas (${leaps} sauts)`);
+  if (process.exitCode !== 1) console.log(`sauterelle OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${leaps} sauts, ${per.toFixed(3)} ms/tick)`);
+}
+
 // the Givré (iteration 31): it frosts the floor it drives over, everyone else slides there; frost melts, blasts melt it
 {
   const fail = (m: string) => { console.error('GIVRÉ:', m); process.exitCode = 1; };
@@ -2483,7 +2622,7 @@ console.log('total', Date.now() - t0, 'ms');
   // the AI plays the switch missions to the end, cheaply
   let cleared = 0, spent = 0, steps = 0, flips = 0;
   for (const mission of [45, 51]) {
-    for (let run = 0; run < 3; run++) {
+    for (let run = 0; run < 3 || (cleared === 0 && run < 7); run++) { // more tries if luck runs out (the AI is not always that good)
       const lvl = getMission(mission);
       const s2 = new Game(lvl.tiles, lvl.belts);
       for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }

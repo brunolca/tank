@@ -382,6 +382,22 @@ export const sfx = {
     noise(t, 0.12, 500, 1.2, 0.35, 'bandpass', 220);
     tone(t + 0.08, 0.7, 900, 1500, 0.05, 'sine');
   },
+  /** « La Sauterelle » (iteration 41) leaps: a toy spring going « boing », rising. */
+  hop() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.28, 180, 620, 0.22, 'triangle');
+    tone(t + 0.02, 0.24, 360, 1240, 0.06, 'square');
+    noise(t, 0.05, 1200, 1, 0.12, 'bandpass', 900);
+  },
+  /** It lands: a soft wooden « toc » and a short spring wobble. */
+  hopLand() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.1, 260, 120, 0.3, 'sine');
+    noise(t, 0.08, 900, 0.8, 0.22, 'lowpass', 300);
+    tone(t + 0.05, 0.18, 520, 440, 0.06, 'triangle');
+  },
   /** It lands: a whistle falling, then a wooden thud and a burst. */
   lobLand() {
     if (!ctx) return;

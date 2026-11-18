@@ -1,7 +1,7 @@
 {
-  "iteration": 40,
+  "iteration": 41,
   "date": "2026-11-18",
-  "title": "Les interrupteurs",
+  "title": "La Sauterelle",
   "journal": [
     {
       "iteration": 1,
@@ -487,6 +487,18 @@
         "Le versus gagne deux arènes à interrupteurs, et chaque partie commence maintenant sur une arène tirée au sort : fini de toujours démarrer sur la même table.",
         "Le manuel s’enrichit d’une page « Terrain » : murs, liège, ponts, tunnels, portails, tapis, glace, sable et interrupteurs, chaque case expliquée en une phrase.",
         "L’atelier propose l’interrupteur et les deux barrières : à toi les portes secrètes et les labyrinthes qui changent de forme."
+      ]
+    },
+    {
+      "iteration": 41,
+      "date": "2026-11-18",
+      "title": "La Sauterelle",
+      "notes": [
+        "Nouvel ennemi : la Sauterelle, un tank vert pomme monté sur deux grandes pattes à ressort. Elle se tasse, puis bondit par-dessus les murs, les trous et les barrières pour te prendre à revers.",
+        "Un anneau vert se dessine sur la table là où elle va retomber : vise-le ! En l’air, rien ne la touche, ni les obus qui passent dessous, ni les mines, ni la foudre.",
+        "Une mine posée sous son point de chute l’attend de pied ferme, et si un pont s’effondre pendant son saut… plouf, dans le ravin.",
+        "Deux nouvelles missions : « Les sauterelles » (la 52ᵉ), où deux hautes palissades coupent la table, et « Les ruisseaux » (la 53ᵉ), où tu passes par les ponts pendant qu’elle saute par-dessus les ravins. Ensuite, elle se glisse dans les missions générées.",
+        "Le bestiaire accueille sa fiche, l’atelier la propose dans sa palette, et la page « Terrain » du manuel explique aussi le temps qu’il fait : nuit, orage, vent et brouillard."
       ]
     }
   ]

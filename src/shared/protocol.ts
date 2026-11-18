@@ -67,6 +67,8 @@ export type GameEvent =
   | ['block', number, number]
   | ['lob', number, number, number, number, number, number] // x0 y0 x1 y1 flightSeconds tankId: « Le Mortier » (iteration 34) lobs a cannonball (older tabs are told to reload)
   | ['land', number, number, number] // x y tankId: it lands and bursts there (radius MORTAR_BLAST)
+  | ['hop', number, number, number, number, number, number] // x0 y0 x1 y1 flightSeconds tankId: « La Sauterelle » (iteration 41) leaps (older tabs ignore it)
+  | ['hopLand', number, number, number] // x y tankId: it lands there
   | ['flip', number, number, number, number] // cx cy state shooterTankId: « Les interrupteurs » (iteration 40), a shell hit that switch block; state 0: the red gates stand, 1: the blue ones (older tabs are told to reload)
   | ['gate', number, number, number] // cx cy tile: that gate cell rises or sinks, its new tile (Tile.RedUp…Tile.BlueDown)
   | ['bridge', number, number] // cx cy: « Les ponts » (iteration 33), that bridge cell gives way and becomes a hole (older tabs are told to reload)

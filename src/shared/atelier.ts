@@ -68,6 +68,8 @@ export const BRUSHES: Brush[] = [
   { ch: '%', label: 'Interrupteur', group: 'sol' },
   { ch: '[', label: 'Barrière rouge', group: 'sol' },
   { ch: ']', label: 'Barrière bleue', group: 'sol' },
+  // iteration 41: « La Sauterelle » (share-code letter p)
+  { ch: 'h', label: 'Sauterelle', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

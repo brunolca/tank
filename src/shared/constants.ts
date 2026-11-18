@@ -59,7 +59,8 @@ export type TankKind =
   | 'magnet'
   | 'frost'
   | 'mortar'
-  | 'bombard';
+  | 'bombard'
+  | 'hopper';
 
 export interface TankSpec {
   speed: number;
@@ -112,6 +113,8 @@ export const SPECS: Record<TankKind, TankSpec> = {
   mortar: { speed: 0.95, maxBullets: 0, bounces: 0, rocket: false, fireCd: 9, turretSpeed: 2.6, mines: 0, skill: 0, reaction: 0.6, aimError: 0.1, label: 'Mortier' },
   // iteration 35: the fifth boss, a giant mortar that walks rows of cannonballs across the table (see BOMBARD_*); up close, a little straight gun
   bombard: { speed: 0.9, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.5, aimError: 0.07, hp: 8, size: BOMBARD_R, label: 'Bombardier' },
+  // iteration 41: it crouches, then leaps over walls, holes and shells to land where it has a clear shot at its prey (see HOP_*)
+  hopper: { speed: 1.5, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.3, turretSpeed: 3, mines: 0, skill: 1, reaction: 0.35, aimError: 0.07, label: 'Sauterelle' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -149,6 +152,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   frost: 0x9fd4ee,
   mortar: 0xc9a66b,
   bombard: 0x5e3f7f,
+  hopper: 0xa8d02c,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -384,6 +388,23 @@ export const FREEZE_TIME = 3.5;
 export const FREEZE_BOSS = 1.6;
 /** Tank flag: frozen in an ice cube (no driving, no aiming, no shooting). */
 export const FLAG_FROZEN = 32768;
+
+// ------------------------------------------------------------------ « La Sauterelle » (iteration 41): the tank that leaps
+/** Seconds between two leaps (min, max); the first one comes HOP_FIRST seconds into the mission. */
+export const HOP_EVERY: [number, number] = [3.2, 5];
+export const HOP_FIRST = 2.4;
+/** Seconds it crouches on its springs before it leaps (flag FLAG_CHARGING meanwhile): time to read where it is going. */
+export const HOP_WARN = 0.5;
+/** Shortest and longest leap (tiles, centre to centre). */
+export const HOP_MIN = 2.2;
+export const HOP_MAX = 5.6;
+/** Time in the air: a base plus a bit per tile. In the air nothing touches it, shells fly under it, mines ignore it. */
+export const HOP_FLIGHT = 0.42;
+export const HOP_FLIGHT_PER = 0.07;
+/** How high it flies at the top of the leap (for the drawing only). */
+export const HOP_HEIGHT = 1.5;
+/** Tank flag: in the air (a leap of the Sauterelle). */
+export const FLAG_AIR = 65536;
 /** Bullet field 5 (rocket) gets this bit for a « Gros calibre » shell (old tabs just see a rocket). */
 export const SHELL_HEAVY = 2;
 export const TURBO_MULT = 1.45;

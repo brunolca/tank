@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -50,6 +50,23 @@ export interface Tank {
   mag?: MagnetState; // the Aimant (iteration 27)
   chill?: number; // « Gel » (iteration 29): seconds left frozen in an ice cube
   mortar?: MortarState; // the Mortier (iteration 34)
+  hop?: HopState; // « La Sauterelle » (iteration 41)
+}
+
+/**
+ * The Sauterelle: seconds until it looks for its next leap, the crouch before it (warn > 0), and the leap itself:
+ * `air` seconds into a `dur`-second flight from (x0, y0) to (x1, y1), or -1 on the ground. `foe`: who it leaps at.
+ */
+export interface HopState {
+  t: number;
+  warn: number;
+  air: number;
+  dur: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  foe: number;
 }
 
 /** The Mortier: seconds until its next cannonball, the aiming moment before it fires, and where it will land. */
@@ -191,7 +208,7 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -199,7 +216,8 @@ export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 /** The Foreur under the table: out of reach of shells, mines, lightning and other tanks. */
-export const under = (t: Tank) => !!t.boss && t.boss.dig >= 2;
+/** Out of reach: the Foreur under the table, or the Sauterelle in the air (iteration 41). Nothing touches it, it touches nothing. */
+export const under = (t: Tank) => (!!t.boss && t.boss.dig >= 2) || (!!t.hop && t.hop.air >= 0);
 /** « Suis-moi ! » (iteration 20): how long AI teammates stick to the player who called them, and how close they come. */
 export const RALLY_SECONDS = 9;
 export const RALLY_NEAR = 2.6;
@@ -355,6 +373,7 @@ export class Game {
     if (kind === 'mason') t.build = { t: MASON_FIRST + Math.random(), cells: [] };
     if (kind === 'magnet') t.mag = { on: false, t: 1.2 + Math.random() * 1.6, held: 0 };
     if (kind === 'mortar') t.mortar = { t: MORTAR_FIRST + Math.random() * 1.2, warn: 0, x: x, y: y };
+    if (kind === 'hopper') t.hop = { t: HOP_FIRST + Math.random() * 1.5, warn: 0, air: -1, dur: 1, x0: x, y0: y, x1: x, y1: y, foe: 0 };
     if (kind === 'frost') {
       // its frost turns any table into an ice table: momentum for everyone (and their speed in the snapshots)
       this.ice = true;
@@ -437,6 +456,7 @@ export class Game {
           this.events.push(['bonus', r2(t.x), r2(t.y), BONUS_KINDS.indexOf('shield'), t.id]);
         }
       }
+      if (t.hop && t.hop.air >= 0) { this.flyHop(t); continue; } // in the air: no ice cube, no driving, no shooting (iteration 41)
       if (t.chill !== undefined) {
         // « Gel »: stuck in its ice cube, no driving, no aiming, no shooting (a belt still carries the cube along)
         t.chill -= DT;
@@ -449,6 +469,7 @@ export class Game {
       if (t.build) this.updateMason(t);
       if (t.mag) this.updateMagnet(t);
       if (t.mortar) this.updateMortar(t);
+      if (t.hop && this.updateHop(t)) continue; // crouching on its springs, or just leapt (iteration 41)
       t.slid = false;
       if (t.ai) {
         this.updateAI(t);
@@ -509,6 +530,8 @@ export class Game {
       return (px - x) ** 2 + (py - y) ** 2 < r * r;
     };
     if (this.tanks.some((t) => t.alive && !under(t) && near(t.x, t.y, t.r + 0.02))) return false;
+    // nor where a Sauterelle in the air is about to land (iteration 41)
+    if (this.tanks.some((t) => t.alive && t.hop && t.hop.air >= 0 && near(t.hop.x1, t.hop.y1, t.r + 0.02))) return false;
     if (this.mines.some((m) => !m.dead && near(m.x, m.y, MINE_R))) return false;
     if (this.bonuses.some((c) => near(c.x, c.y, 0.3))) return false;
     if (this.flags?.some((f) => near(f.x, f.y, 0.3))) return false;
@@ -1183,6 +1206,143 @@ export class Game {
     const [a, b] = MORTAR_EVERY;
     st.t = a + Math.random() * (b - a);
     if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; }
+  }
+
+  // -------------------------------------------------------------- « La Sauterelle » (iteration 41)
+
+  /**
+   * Every few seconds the Sauterelle looks for a spot HOP_MIN to HOP_MAX away, over walls, holes and gates if need be,
+   * from where it has a straight shot at the foe it makes out (best: at a fair distance, behind that foe's turret).
+   * It crouches HOP_WARN seconds on its springs (turned toward the spot), then leaps. Returns true while it crouches
+   * or takes off: no driving, no shooting then.
+   */
+  updateHop(t: Tank): boolean {
+    const st = t.hop!;
+    if (st.warn > 0) {
+      st.warn -= DT;
+      t.body = rotateToward(t.body, Math.atan2(st.y1 - t.y, st.x1 - t.x), 9 * DT);
+      const f = this.tankById(st.foe);
+      if (f?.alive) t.turret = rotateToward(t.turret, Math.atan2(f.y - st.y1, f.x - st.x1), 6 * DT);
+      if (st.warn > 0) return true;
+      if (!this.hopOk(t, st.x1, st.y1)) { st.t = 0.6; return false; } // the spot was taken meanwhile: it stays put
+      this.leap(t, st.x1, st.y1);
+      return true;
+    }
+    st.t -= DT;
+    if (st.t > 0) return false;
+    st.t = 0.5; // nowhere worth it right now: look again shortly
+    const spot = this.hopSpot(t);
+    if (!spot) return false;
+    this.crouch(t, spot.x, spot.y, spot.foe);
+    return true;
+  }
+
+  /** The Sauterelle crouches, about to leap to (x, y) at foe `foe`. */
+  crouch(t: Tank, x: number, y: number, foe: number) {
+    const st = t.hop!;
+    st.x1 = x; st.y1 = y; st.foe = foe;
+    st.warn = HOP_WARN;
+    st.t = HOP_EVERY[0] + Math.random() * (HOP_EVERY[1] - HOP_EVERY[0]);
+    if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; }
+  }
+
+  /** It leaps: shells fly under it, mines and lightning ignore it until it lands. */
+  leap(t: Tank, x: number, y: number) {
+    const st = t.hop!;
+    st.x0 = r2(t.x); st.y0 = r2(t.y); st.x1 = x; st.y1 = y;
+    st.air = 0;
+    st.warn = 0;
+    st.dur = r2(HOP_FLIGHT + HOP_FLIGHT_PER * Math.hypot(x - t.x, y - t.y));
+    t.vx = t.vy = 0;
+    t.body = Math.atan2(y - t.y, x - t.x);
+    this.events.push(['hop', st.x0, st.y0, x, y, st.dur, t.id]);
+  }
+
+  /** In the air: straight to the landing spot, turret on its prey. */
+  flyHop(t: Tank) {
+    const st = t.hop!;
+    st.air += DT;
+    const p = Math.min(1, st.air / st.dur);
+    t.x = st.x0 + (st.x1 - st.x0) * p;
+    t.y = st.y0 + (st.y1 - st.y0) * p;
+    t.vx = t.vy = 0;
+    const f = this.tankById(st.foe);
+    if (f?.alive) t.turret = rotateToward(t.turret, Math.atan2(f.y - t.y, f.x - t.x), 8 * DT);
+    if (p >= 1) this.hopLand(t);
+  }
+
+  /** Touchdown: into the pit if a bridge gave way meanwhile, a mine under it goes off, and it is ready to shoot at once. */
+  hopLand(t: Tank) {
+    const st = t.hop!;
+    st.air = -1;
+    t.x = st.x1; t.y = st.y1;
+    if (tileAt(this.tiles, Math.floor(t.x), Math.floor(t.y)) === Tile.Hole) {
+      this.events.push(['hopLand', r2(t.x), r2(t.y), t.id]);
+      this.killTank(t, undefined, KO_FALL);
+      return;
+    }
+    [t.x, t.y] = resolveCircle(this.tiles, t.x, t.y, t.r); // a cork block built (or a gate risen) under it meanwhile
+    this.events.push(['hopLand', r2(t.x), r2(t.y), t.id]);
+    for (const m of this.mines) {
+      if (!m.dead && m.seed === undefined && Math.hypot(m.x - t.x, m.y - t.y) < MINE_R + t.r && (m.fuse < 0 || m.fuse > 0.12)) m.fuse = 0.12;
+    }
+    t.fireCd = Math.min(t.fireCd, 0.2);
+    if (t.ai) { t.ai.think = 0; t.ai.hesitate = 0; t.ai.path = []; t.ai.lastX = t.x; t.ai.lastY = t.y; }
+  }
+
+  /** Can the Sauterelle land at (x, y)? Floor or bridge, the hull fits, no tank, mine or other landing right there. */
+  hopOk(t: Tank, x: number, y: number): boolean {
+    const cx = Math.floor(x), cy = Math.floor(y);
+    if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
+    const tl = this.tiles[cy * W + cx];
+    if (tl !== Tile.Empty && tl !== Tile.Bridge && tl !== Tile.RedDown && tl !== Tile.BlueDown) return false;
+    if (this.gateWait.has(cy * W + cx)) return false; // a lowered gate about to rise
+    const [rx, ry] = resolveCircle(this.tiles, x, y, t.r);
+    if (Math.abs(rx - x) + Math.abs(ry - y) > 0.04) return false;
+    for (const o of this.tanks) {
+      if (o === t || !o.alive) continue;
+      const ox = o.hop && o.hop.air >= 0 ? o.hop.x1 : o.x, oy = o.hop && o.hop.air >= 0 ? o.hop.y1 : o.y;
+      if (Math.hypot(ox - x, oy - y) < o.r + t.r + 0.35) return false;
+    }
+    for (const m of this.mines) if (!m.dead && Math.hypot(m.x - x, m.y - y) < MINE_R + t.r + 0.5) return false;
+    return true;
+  }
+
+  /** A straight, wall-free line from (x0, y0) to (x1, y1) (what a shell would follow without bouncing). */
+  lineClear(x0: number, y0: number, x1: number, y1: number): boolean {
+    const d = Math.hypot(x1 - x0, y1 - y0);
+    if (d < 0.3) return true;
+    const segs = castRicochet(this.tiles, x0, y0, Math.atan2(y1 - y0, x1 - x0), 0, d);
+    if (segs.length !== 1) return false;
+    const s = segs[0];
+    return Math.hypot(s.x1 - s.x0, s.y1 - s.y0) >= d - 0.35;
+  }
+
+  /** Where the Sauterelle would leap next (undefined: nobody in sight, or it already has a clear shot and stays). */
+  hopSpot(t: Tank, force = false): { x: number; y: number; foe: number } | undefined {
+    let f: Tank | undefined, bd = Infinity;
+    for (const o of this.tanks) {
+      if (!o.alive || o.team === t.team || under(o) || !this.canSee(t, o)) continue;
+      const d = Math.hypot(o.x - t.x, o.y - t.y);
+      if (d < bd && d < 12) { bd = d; f = o; }
+    }
+    if (!f) return undefined;
+    // with a clear shot already, it mostly stays and fights (a leap now and then keeps it unpredictable)
+    if (!force && bd > 2.4 && bd < 8 && this.lineClear(t.x, t.y, f.x, f.y) && Math.random() < 0.65) return undefined;
+    const fx = Math.floor(t.x), fy = Math.floor(t.y), R = Math.ceil(HOP_MAX);
+    let best: { x: number; y: number; foe: number } | undefined, bs = -Infinity;
+    for (let cy = fy - R; cy <= fy + R; cy++) for (let cx = fx - R; cx <= fx + R; cx++) {
+      const x = cx + 0.5, y = cy + 0.5, d = Math.hypot(x - t.x, y - t.y);
+      if (d < HOP_MIN || d > HOP_MAX) continue;
+      const df = Math.hypot(x - f.x, y - f.y);
+      if (df < 2.4 || df > 8.5) continue;
+      if (!this.hopOk(t, x, y) || !this.lineClear(x, y, f.x, f.y)) continue;
+      // a fair distance, behind the foe's turret if it can, over an obstacle for the surprise, and a pinch of chance
+      let score = -Math.abs(df - 4.2) * 0.7 + Math.abs(angDiff(Math.atan2(y - f.y, x - f.x), f.turret)) * 0.8 + Math.random() * 1.2;
+      if (!this.lineClear(t.x, t.y, x, y)) score += 0.8;
+      if (score > bs) { bs = score; best = { x, y, foe: f.id }; }
+    }
+    return best;
   }
 
   /** Where the Mortier would land its next cannonball (undefined: no foe in range, or only next to its friends). */
@@ -1938,7 +2098,7 @@ export class Game {
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
       | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
-      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) ? FLAG_BURROW : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
   /**
