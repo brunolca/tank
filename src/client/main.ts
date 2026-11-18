@@ -1,4 +1,4 @@
-import { type TankKind, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, BULLET_SPEED, GATE_COLORS, gateUp, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -6,7 +6,7 @@ import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_
 import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROUND, HUNT_TARGET, huntArena, newHunt, HUNT_CRATES } from '../shared/caisses';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
-import { angDiff, beltStep, floorSpeed } from '../shared/physics';
+import { angDiff, beltStep, castRicochet, floorSpeed } from '../shared/physics';
 import { BOSS_NAMES, RUSH_DUO_HP, RUSH_LIVES, RUSH_STAGES, rushLevel, rushOrder, rushDuo, weekLabel, weekNumber } from '../shared/rush';
 import type { BossKind } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, RushState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
@@ -18,7 +18,7 @@ import { initAudio, isMusicOn, setMusicIntensity, setRain, setWind, sfx, startMu
 import { gustAt, windAngle, windWords } from '../shared/wind';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
-import { Workshop, drawMap } from './atelier';
+import { Workshop, cellImage, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RFlag, type RLob, type RMine, type RTank } from './render';
 import { Film, REPLAYED, koCaption, type Reel } from './replay';
 import { padNav } from './padnav';
@@ -550,6 +550,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
     if (e[0] === 'block') tiles[e[2] * W + e[1]] = Tile.Empty; // prediction sees the freshest map
     else if (e[0] === 'build') tiles[e[2] * W + e[1]] = Tile.Cork; // the Maçon's new block stops my tank right away
     else if (e[0] === 'bridge') tiles[e[2] * W + e[1]] = Tile.Hole; // a bridge gave way (iteration 33): no driving over it any more
+    else if (e[0] === 'gate') tiles[e[2] * W + e[1]] = e[3]; // « Les interrupteurs » (iteration 40): a gate rose or sank
   }
   // reconcile own tank
   const me = s.T.get(myTankId);
@@ -836,6 +837,16 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1], e[2], 'Badaboum !', enemyColor('mortar'));
       if (audible) sfx.lobLand();
       break;
+    case 'flip': // « Les interrupteurs » (iteration 40): a shell hit a switch, every gate flips
+      renderer.flipSwitches(e[1], e[2], e[3]);
+      floater(e[1] + 0.5, e[2] + 0.5, 'Clac !', GATE_COLORS[e[3] ? 1 : 0]);
+      if (audible) sfx.flip(e[3]);
+      break;
+    case 'gate':
+      renderer.setGate(e[1], e[2], e[3]);
+      // a whole row moves at once: one sound is enough
+      if (audible && performance.now() - lastGateSound > 150) { lastGateSound = performance.now(); sfx.gate(gateUp(e[3])); }
+      break;
     case 'bridge': // « Les ponts » (iteration 33): the planks fall into the pit
       if (renderer.collapseBridge(e[1], e[2])) floater(e[1] + 0.5, e[2] + 0.5, 'Crac !', 0xc98f55);
       if (audible) sfx.bridge();
@@ -1057,6 +1068,7 @@ function renderBuffs(flags: number) {
 let bossFight = false;
 let bossKey = '';
 let lastLobSound = 0;
+let lastGateSound = 0; // « Les interrupteurs » (iteration 40)
 const charging = new Set<number>();
 const alerted = new Set<number>();
 let lastAlert = 0;
@@ -2484,9 +2496,9 @@ function newcomerCards(kinds: string[], delay = 1800) {
 // A player asked for menus without drop-down panels: the controls, the modes, the crates and the bestiary now live in a ring binder
 // with paper tabs, opened on the right page straight from the home screen. Keyboard: ← → to turn the pages, Échap to close;
 // gamepad: LB / RB, and B to close (see padnav.ts).
-type ManualTab = 'commandes' | 'modes' | 'caisses' | 'bestiaire';
-const MANUAL_TABS: ManualTab[] = ['commandes', 'modes', 'caisses', 'bestiaire'];
-const MANUAL_TITLES: Record<ManualTab, string> = { commandes: 'Prendre les commandes', modes: 'Les modes de jeu', caisses: 'Les caisses bonus', bestiaire: 'Le bestiaire' };
+type ManualTab = 'commandes' | 'modes' | 'caisses' | 'bestiaire' | 'terrain';
+const MANUAL_TABS: ManualTab[] = ['commandes', 'modes', 'caisses', 'bestiaire', 'terrain'];
+const MANUAL_TITLES: Record<ManualTab, string> = { commandes: 'Prendre les commandes', modes: 'Les modes de jeu', caisses: 'Les caisses bonus', bestiaire: 'Le bestiaire', terrain: 'Le terrain' };
 let manualTab: ManualTab = 'commandes';
 const metOrDemo = (k: string) => demoMode || metKinds.has(k);
 
@@ -2560,6 +2572,21 @@ const KEYS: [string, [string, string][]][] = [
     ['Bouton MINE', 'poser une mine'],
   ]],
 ];
+/** « Le terrain » (iteration 40): every kind of cell of the table, drawn as in the workshop. */
+const TERRAIN: [string, string, string, boolean?][] = [
+  ['#', 'Mur', 'Arrête les tanks, et les obus y ricochent.'],
+  ['H', 'Mur haut', 'Comme un mur, en plus haut : il cache ce qu’il y a derrière.'],
+  ['o', 'Liège', 'Un bloc tendre : une mine le fait voler en éclats, et certains obus aussi.'],
+  ['_', 'Trou', 'Les tanks n’y passent pas, mais les obus volent au-dessus.'],
+  [':', 'Pont', 'On roule dessus pour franchir un trou. Une mine tout près le fait tomber… avec ceux qui sont dessus !'],
+  ['=', 'Tunnel', 'Un passage couvert : on s’y cache, les obus rebondissent sur son toit.'],
+  ['*+', 'Portails', 'Entre dans l’un, ressors par l’autre de la même couleur. Les obus aussi.'],
+  ['>', 'Tapis roulant', 'Il emporte les tanks, les mines et les caisses dans le sens de la flèche.'],
+  ['~', 'Glace', 'On y glisse : pour tourner, il faut s’y prendre tôt.'],
+  [',', 'Sable', 'On y roule moins vite, et une mine posée dans le sable s’y enfouit.'],
+  ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…', true],
+  ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.', true],
+];
 function manualPage(tab: ManualTab) {
   if (tab === 'commandes') return `<div class="keys">${KEYS.map(([h, rows]) => `<section><h3>${escapeHtml(h)}</h3><ul>${rows.map(([k, v]) => `<li><span>${k}</span><b>${escapeHtml(v)}</b></li>`).join('')}</ul></section>`).join('')}</div>
     <p class="tip">Les obus rebondissent une fois sur les murs : attention à tes propres ricochets !</p>`;
@@ -2567,6 +2594,8 @@ function manualPage(tab: ManualTab) {
     <p class="tip">Crée une salle, choisis le mode dans le salon et partage le code : tes amis n’ont qu’à le taper.</p>`;
   if (tab === 'caisses') return `<ul class="crates">${CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><i></i><div><b>${escapeHtml(BONUS_INFO[k].label)}</b><span>${escapeHtml(line)}</span></div></li>`).join('')}</ul>
     <p class="tip">Les caisses tombent du ciel pendant les missions : roule dessus pour les ouvrir. Le Pilleur, lui aussi, les convoite.</p>`;
+  if (tab === 'terrain') return `<ul class="terrain">${TERRAIN.map(([chs, n, d, fresh]) => `<li class="${fresh ? 'new' : ''}">${[...chs].map((c) => `<img src="${cellImage(c)}" alt="">`).join('')}<div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
+    <p class="tip">Tous ces terrains t’attendent aussi dans l’atelier, pour dessiner tes propres missions.</p>`;
   const n = BESTIARY.filter(([k]) => metOrDemo(k)).length;
   return `<p class="count">${n >= BESTIARY.length ? 'Collection complète' : 'Rencontrés'} : <b>${n} / ${BESTIARY.length}</b></p>
     <ul class="fiches">${BESTIARY.map(([k, line], i) => {
@@ -3207,6 +3236,43 @@ if (params.has('demo')) {
       return n;
     },
     /** A hero fires straight into each Rempart's shield (to catch the shell bouncing back on camera). */
+    /**
+     * « Les interrupteurs » (iteration 40): the hero nearest to a switch with a clear line fires at it; when no hero has
+     * one, a hero's shell is sent in from the side of the switch facing the heroes. Returns 1 when a shell is on its way.
+     */
+    switchShot() {
+      const g = attract;
+      if (!g || !g.gates) return 0;
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      if (!heroes.length) return 0;
+      const sws: [number, number][] = [];
+      g.tiles.forEach((t, i) => { if (t === Tile.Switch) sws.push([(i % W) + 0.5, Math.floor(i / W) + 0.5]); });
+      let best: { h: (typeof heroes)[number]; x: number; y: number; d: number } | undefined;
+      for (const h of heroes) for (const [x, y] of sws) {
+        const ang = Math.atan2(y - h.y, x - h.x);
+        const seg = castRicochet(g.tiles, h.x, h.y, ang, 0)[0];
+        const d = Math.hypot(x - h.x, y - h.y);
+        if (seg && Math.hypot(seg.x1 - x, seg.y1 - y) < 0.75 && (!best || d < best.d)) best = { h, x, y, d };
+      }
+      if (best) {
+        const { h } = best;
+        const keep = h.turret;
+        h.turret = Math.atan2(best.y - h.y, best.x - h.x);
+        h.fireCd = 0;
+        const ok = g.tryFire(h);
+        h.turret = keep;
+        if (ok) return 1;
+      }
+      // no clear line: a shell of the nearest hero comes in from the side of the switch facing it
+      const h = heroes[0];
+      const [x, y] = sws.reduce((a, b) => (Math.hypot(a[0] - h.x, a[1] - h.y) <= Math.hypot(b[0] - h.x, b[1] - h.y) ? a : b));
+      const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      const free = dirs.filter(([dx, dy]) => !isSolidBullet(g.tiles[(Math.floor(y) + dy) * W + Math.floor(x) + dx] ?? Tile.Wall));
+      if (!free.length) return 0;
+      const [dx, dy] = free.reduce((a, b) => ((h.x - x) * b[0] + (h.y - y) * b[1] > (h.x - x) * a[0] + (h.y - y) * a[1] ? b : a));
+      g.bullets.push({ id: 900000 + g.tick, owner: h.id, x: x + dx * 1.3, y: y + dy * 1.3, vx: -dx * BULLET_SPEED, vy: -dy * BULLET_SPEED, bounces: 0, rocket: false, dead: false });
+      return 1;
+    },
     shieldShot() {
       const g = attract;
       if (!g) return 0;

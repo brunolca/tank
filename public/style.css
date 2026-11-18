@@ -1223,7 +1223,7 @@ body.demo #demo-caption { z-index: 30; }
 
 /* ------------------------------------------------------------------ « Le manuel » (iteration 39)
    A player asked for menus without drop-down panels: four paper tags on the home screen open a ring binder with coloured tabs. */
-.shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
+.shelf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
 .shelf button {
   --tilt: -1.2deg;
   position: relative;
@@ -1246,6 +1246,7 @@ body.demo #demo-caption { z-index: 30; }
 .shelf button:nth-child(2) { --tag: #cfe3f2; --tilt: 1deg; }
 .shelf button:nth-child(3) { --tag: #f6d3a8; --tilt: -0.6deg; }
 .shelf button:nth-child(4) { --tag: #d9ecc8; --tilt: 1.4deg; }
+.shelf button:nth-child(5) { --tag: #f2cfd0; --tilt: -1deg; }
 .shelf button::before {
   /* the hole of the tag, with its string */
   content: '';
@@ -1265,7 +1266,7 @@ body.demo #demo-caption { z-index: 30; }
 .shelf b { font-family: var(--stencil); font-weight: 400; font-size: 13px; letter-spacing: 0.04em; }
 .shelf small { position: absolute; top: -8px; right: -6px; font-size: 10.5px; font-weight: 800; color: #c9372d; background: #fff5e2; border: 2px solid #c9372d; border-radius: 6px; padding: 0 4px; transform: rotate(8deg); }
 .shelf small:empty { display: none; }
-@media (max-width: 420px) { .shelf { gap: 6px; } .shelf b { font-size: 11.5px; } .shelf i { font-size: 21px; } }
+@media (max-width: 420px) { .shelf { gap: 5px; } .shelf b { font-size: 10.5px; letter-spacing: 0; } .shelf i { font-size: 20px; } }
 
 .manual { width: min(780px, 100%); max-height: calc(100dvh - 32px); gap: 0; padding: 22px 24px 16px; }
 .manual-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex: none; }
@@ -1295,6 +1296,7 @@ body.demo #demo-caption { z-index: 30; }
 .manual-tabs button:nth-child(2) { --tab: #cfe3f2; }
 .manual-tabs button:nth-child(3) { --tab: #f6d3a8; }
 .manual-tabs button:nth-child(4) { --tab: #d9ecc8; }
+.manual-tabs button:nth-child(5) { --tab: #f2cfd0; }
 .manual-tabs button:hover { opacity: 0.9; }
 .manual-tabs button.on { opacity: 1; transform: none; box-shadow: none; position: relative; z-index: 1; }
 .manual-page {
@@ -1330,11 +1332,13 @@ body.touch .manual-foot { display: none; }
 .keys li span { font-weight: 600; color: #5a3f27; text-align: right; }
 .keys li b { font-weight: 400; }
 
-.modes, .crates { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 18px; }
-.modes li, .crates li { display: flex; gap: 10px; align-items: flex-start; }
+.terrain li > img { flex: none; width: 34px; height: 34px; border-radius: 4px; margin-top: 2px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3); image-rendering: auto; }
+.terrain li.new b::after { content: 'Nouveau'; margin-left: 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #c9372d; border: 2px solid #c9372d; border-radius: 5px; padding: 0 4px; vertical-align: 2px; }
+.modes, .crates, .terrain { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 18px; }
+.modes li, .crates li, .terrain li { display: flex; gap: 10px; align-items: flex-start; }
 .modes li > i { font-style: normal; font-size: 24px; line-height: 1; flex: none; width: 32px; text-align: center; padding-top: 2px; }
-.modes li div, .crates li div { display: grid; gap: 1px; font-size: 13.5px; line-height: 1.4; }
-.modes b, .crates b { font-size: 15.5px; font-weight: 800; }
+.modes li div, .crates li div, .terrain li div { display: grid; gap: 1px; font-size: 13.5px; line-height: 1.4; }
+.modes b, .crates b, .terrain b { font-size: 15.5px; font-weight: 800; }
 .modes small { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a6a48; }
 .crates li > i { flex: none; width: 30px; height: 30px; border-radius: 6px; margin-top: 2px; background: linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent 50%), var(--c);
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25), inset 0 0 0 7px rgba(255, 255, 255, 0.18), 0 2px 0 rgba(0, 0, 0, 0.3); }

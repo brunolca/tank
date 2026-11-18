@@ -1,13 +1,13 @@
 // The workshop (iteration 14): a mission editor drawn on a 2D canvas. Paint walls, cork, holes, tunnels and portals,
 // drop the starting spots and the enemy tanks, then play the mission online or share it by link.
-import { H, PLAYER_COLORS, PORTAL_COLORS, W, enemyColor, isBossKind } from '../shared/constants';
+import { GATE_COLORS, H, PLAYER_COLORS, PORTAL_COLORS, W, enemyColor, isBossKind } from '../shared/constants';
 import { BRUSHES, blankMap, checkAtelier, cleanName, type Brush } from '../shared/atelier';
 import { ENEMY_CHARS, EXTRA_LEVELS, LEVELS, parseLevel } from '../shared/levels';
 import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const GROUND = '.#Ho_=*+><^V~,'; // then four conveyor belts (iteration 16), the ice (iteration 21) and the sand (iteration 36)
+const GROUND = '.#Ho_=*+><^V~,%[]'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
 
 /** Draw a map onto a 2D canvas (the editor, the lobby preview). `hot`: a cell to highlight (the brush under the cursor). */
 export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number; y: number; ch: string }) {
@@ -43,6 +43,16 @@ export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number;
   }
 }
 
+/** A picture of one map cell on paper (the manual's terrain page, iteration 40), as an image URL. */
+export function cellImage(ch: string, size = 48): string {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#efdcb8'; g.fillRect(0, 0, size, size);
+  if (ch !== '.') drawCell(g, 0, 0, size, ch, 0);
+  return cv.toDataURL();
+}
+
 /** One cell of the map, `axis` for tunnels (0 across, 1 up and down, -1 not between two walls). */
 function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number, c: string, axis: number) {
   const rr = (x: number, y: number, ww: number, hh: number, r: number) => { g.beginPath(); g.roundRect(x, y, ww, hh, r); };
@@ -61,6 +71,26 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
   } else if (c === '_') {
     g.fillStyle = '#3a2a1e'; rr(px + 1.5, py + 1.5, s - 3, s - 3, s * 0.25); g.fill();
     g.fillStyle = '#1b130d'; rr(px + s * 0.2, py + s * 0.25, s * 0.6, s * 0.55, s * 0.2); g.fill();
+  } else if (c === '%') {
+    // a switch (iteration 40): a wooden block with a big red button
+    g.fillStyle = '#c8955a'; g.fillRect(px, py, s, s);
+    g.strokeStyle = 'rgba(80,45,15,0.45)'; g.strokeRect(px + 0.5, py + 0.5, s - 1, s - 1);
+    g.fillStyle = '#3a2a1e'; g.beginPath(); g.arc(px + s / 2, py + s / 2, s * 0.34, 0, 7); g.fill();
+    g.fillStyle = hex(GATE_COLORS[0]); g.beginPath(); g.arc(px + s / 2, py + s / 2, s * 0.25, 0, 7); g.fill();
+  } else if (c === '[' || c === ']') {
+    // a gate (iteration 40): red ones start raised (a solid block), blue ones lowered (a striped slot)
+    const col = hex(GATE_COLORS[c === '[' ? 0 : 1]);
+    if (c === '[') {
+      g.fillStyle = col; rr(px + 1, py + 1, s - 2, s - 2, s * 0.12); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(px + 2, py + 2, s - 4, s * 0.18);
+    } else {
+      g.save(); g.beginPath(); g.rect(px + 1, py + 1, s - 2, s - 2); g.clip();
+      g.fillStyle = col + '33'; g.fillRect(px, py, s, s);
+      g.strokeStyle = col; g.lineWidth = Math.max(1.5, s * 0.12);
+      for (let k = -s; k < s * 2; k += s * 0.4) { g.beginPath(); g.moveTo(px + k, py); g.lineTo(px + k - s, py + s); g.stroke(); }
+      g.restore(); g.lineWidth = 1;
+      g.strokeStyle = col; g.strokeRect(px + 1.5, py + 1.5, s - 3, s - 3);
+    }
   } else if (c === ':') {
     // a bridge (iteration 33): the pit under it, planks across the way (axis 1: the way runs up and down)
     g.fillStyle = '#3a2a1e'; g.fillRect(px, py, s, s);

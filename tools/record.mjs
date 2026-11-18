@@ -7,12 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { manual: [13, ['commandes', 'modes', 'caisses', 'bestiaire']], seconds: 13, caption: 'Nouveau : le manuel', sub: 'Plus de menus qui se déplient : un classeur à intercalaires de couleur' },
-  { mission: 31, arms: ['canon', 'ricochet'], seconds: 12, caption: 'Rempart, Vert, Jaune : qui est qui ?', sub: 'Chaque couleur dit un comportement, le manuel le raconte' },
-  { bestiary: 9, seconds: 9, caption: 'Le bestiaire en fiches', sub: 'Vitesse, cadence, obus, rebonds et mines de chaque ennemi' },
-  { padTour: 9, seconds: 9, caption: 'Les menus à la manette', sub: 'La croix choisit, A valide, B revient, LB et RB tournent les pages' },
-  { mission: 41, arms: ['ricochet', 'fusee'], seconds: 12, caption: 'Et la partie continue', sub: 'Verglas : les Givrés givrent le sol' },
-  { caisses: [2, [2, 2, 1, 2], 40], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 11, caption: 'La chasse aux caisses', sub: 'Chaque caisse ramassée vaut un point' },
+  { mission: 45, arms: ['canon', 'ricochet'], seconds: 15, switchShots: [3.5, 10], caption: 'Nouveau : les interrupteurs', sub: 'Un obus sur l’interrupteur, et toutes les barrières basculent' },
+  { mission: 51, arms: ['ricochet', 'fusee'], seconds: 15, switchShots: [4, 10.5], caption: 'Rouge ou bleu', sub: 'Qui touche l’interrupteur en dernier a les abris' },
+  { versus: [50, [2, 2, 1, 2]], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 12, switchShots: [5], caption: 'Les interrupteurs en versus', sub: 'Ferme la porte au nez de tes rivaux' },
+  { manual: [9, ['terrain']], seconds: 9, caption: 'Le terrain, dans le manuel', sub: 'Murs, ponts, glace, sable, interrupteurs : chaque case expliquée' },
+  { mission: 41, arms: ['ricochet', 'fusee'], seconds: 10, caption: 'Et la partie continue', sub: 'Verglas : les Givrés givrent le sol' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -102,6 +101,7 @@ try {
       for (const s of shot.bridgeTraps ?? []) setTimeout(() => d.bridgeTrap?.(8), s * 1000); // « Les ponts » (iteration 33): the next enemy on a bridge falls
       for (const s of shot.bridgeMines ?? []) setTimeout(() => d.bridgeMine?.(), s * 1000); // a mine beside the bridge nearest to an enemy // « Le ralenti » (iteration 32): a ricochet, then its replay
       for (const s of shot.replays ?? []) setTimeout(() => d.replay?.(), s * 1000);
+      for (const s of shot.switchShots ?? []) setTimeout(() => d.switchShot?.(), s * 1000); // « Les interrupteurs » (iteration 40): a shell on a switch
       for (const s of shot.seedShots ?? []) setTimeout(() => d.seedShot?.(), s * 1000); // and a hero shoots a seed next to it
       d.caption(shot.caption, shot.sub);
       for (const k of shot.crates ?? []) d.crate?.(k);

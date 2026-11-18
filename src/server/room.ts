@@ -4,7 +4,7 @@ import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, is
 import { ATELIER_LIVES, atelierLevel, checkAtelier, cleanName } from '../shared/atelier';
 import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
 import { RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_LIVES, RUSH_STAGES, rushLevel, rushStageBosses, weekNumber } from '../shared/rush';
-import { getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
+import { VERSUS_ARENAS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, RushState, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon, rivalMode } from '../shared/rivals';
@@ -71,6 +71,8 @@ export class Room extends DurableObject<Env> {
   private settle = -1; // seconds spent waiting for the last shells once a mission/round is decided (-1: not decided)
   private lives = 3;
   private round = 0;
+  /** Versus (iteration 40): each game starts on a random arena of the pool, so the later ones (the switches…) come up too. */
+  private arenaBase = 0;
   private killedEnemies = new Set<number>(); // enemy indices destroyed in current mission (persist across retries)
   private enemyIndexByTank = new Map<number, number>();
   private enemyHp = new Map<number, number>(); // damage dealt to tough enemies (the boss) sticks across retries
@@ -415,6 +417,7 @@ export class Room extends DurableObject<Env> {
     this.council = undefined;
     this.taupeEnd = undefined;
     this.round = 0;
+    this.arenaBase = Math.floor(Math.random() * VERSUS_ARENAS);
     this.teams = [0, 0];
     this.caps.clear();
     this.crates.clear();
@@ -447,7 +450,7 @@ export class Room extends DurableObject<Env> {
       : this.mode === 'atelier' && this.atelier ? atelierLevel(this.atelier)
       : this.mode === 'drapeau' ? ctfArena(this.round)
       : this.mode === 'caisses' ? huntArena(this.round)
-      : versusArena(this.round);
+      : versusArena(this.arenaBase + this.round);
     this.bases = this.mode === 'drapeau' ? (this.level as ReturnType<typeof ctfArena>).bases : undefined;
     this.council = undefined;
     const game = new Game(this.level.tiles, this.level.belts);

@@ -1,4 +1,4 @@
-import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, W, Tile, TankKind } from './constants';
+import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -8,6 +8,8 @@ import { BELT_CHARS, BRIDGE_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, W, Tile, Ta
 //         ~ ice (iteration 21): tanks slide on it, keeping their momentum (the cell stays floor, like a belt)
 //         , sand (iteration 36): tanks drive slower on it, a mine laid there is buried (hidden from the foes' AI); the cell stays floor
 //         : bridge (iteration 33): a wooden bridge over a pit, tanks drive over it, shells fly over, a mine blast brings it down
+//         % [ ] « Les interrupteurs » (iteration 40): a switch block (a shell on it flips every gate), a red gate (raised at the
+//           start) and a blue gate (lowered at the start); a raised gate stops tanks and shells, a lowered one is floor
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)
 export const ENEMY_CHARS: Record<string, TankKind> = {
@@ -1027,6 +1029,53 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 40: « Les interrupteurs ». A wall splits the table, its doors are red gates; a shell on a switch block
+  // sinks the red gates and raises the blue ones in front of the players (and a stray enemy shell flips them back)
+  45: {
+    name: 'Les interrupteurs',
+    map: [
+      '......................',
+      '..........##.......a..',
+      '....]]....##..........',
+      '..........[[...###....',
+      '..........[[.....#..p.',
+      '...%......##.....#....',
+      '..1.......##..........',
+      '....]]....##..........',
+      '..........##.....y.g..',
+      '....]]....##..........',
+      '..2.......##..........',
+      '...%......##.....#....',
+      '..........[[.....#..p.',
+      '..........[[...###....',
+      '....]]....##..........',
+      '..........##.......a..',
+      '......................',
+    ],
+  },
+  // iteration 40: a tug of war. Red gates shelter the enemies, blue ones the players: whoever hits a switch last has cover
+  51: {
+    name: 'Rouge ou bleu',
+    map: [
+      '......................',
+      '...]]].........[[[.g..',
+      '......................',
+      '...[[[...####...]]]...',
+      '..........%%......v...',
+      '......]]......[[......',
+      '..1...]]......[[...m..',
+      '......]]......[[......',
+      '....HH..........HH....',
+      '......]]......[[......',
+      '..2...]]......[[...m..',
+      '......]]......[[......',
+      '..........%%......v...',
+      '...[[[...####...]]]...',
+      '......................',
+      '...]]].........[[[.g..',
+      '......................',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -1104,6 +1153,9 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '+') tiles[i] = Tile.PortalB;
       else if (c === '=') tiles[i] = Tile.Tunnel;
       else if (c === BRIDGE_CHAR) tiles[i] = Tile.Bridge;
+      else if (c === SWITCH_CHAR) tiles[i] = Tile.Switch;
+      else if (c === RED_GATE_CHAR) tiles[i] = Tile.RedUp;
+      else if (c === BLUE_GATE_CHAR) tiles[i] = Tile.BlueDown;
       else if ((BELT_CHARS as readonly string[]).includes(c)) (belts ??= new Array(W * H).fill(0))[i] = (BELT_CHARS as readonly string[]).indexOf(c) + 1;
       else if (c === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[i] = ICE;
       else if (c === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SAND;
@@ -1621,9 +1673,11 @@ export function getMission(mission: number): ParsedLevel {
 }
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
+/** How many arenas the versus pool holds (a game starts on a random one of them, iteration 40). */
+export const VERSUS_ARENAS = 17;
 export function versusArena(round: number): ParsedLevel {
   // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21), the ravine of mission 32 (iteration 33) and the dunes of mission 46 (iteration 36)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[46]); // and the dunes of mission 46 (iteration 36)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[46], EXTRA_LEVELS[45], EXTRA_LEVELS[51]); // and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

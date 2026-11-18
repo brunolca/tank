@@ -2,10 +2,10 @@ import { RUSH_BOSSES, RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_DUOS, RUSH_STAGE
 import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
-import { EXTRA_LEVELS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
+import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, playerSpec } from '../src/shared/constants';
+import { KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -2427,4 +2427,81 @@ console.log('total', Date.now() - t0, 'ms');
   if (total < 8 * 6) fail(`les rivaux ne ramassent presque rien (${total} caisses en 8 manches)`);
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`chasse aux caisses OK (${total} caisses en 8 manches, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
+}
+
+// « Les interrupteurs » (iteration 40): a shell on a switch flips every gate, gates never rise onto a tank, the AI copes
+{
+  const fail = (m: string) => { console.error('INTERRUPTEURS :', m); process.exitCode = 1; };
+  for (const mission of [45, 51]) {
+    const lvl = getMission(mission);
+    if (!lvl.tiles.includes(Tile.Switch) || !lvl.tiles.includes(Tile.RedUp) || !lvl.tiles.includes(Tile.BlueDown)) fail(`la mission ${mission} n’a pas d’interrupteur ou de barrières`);
+    if (checkAtelier(EXTRA_LEVELS[mission].map)) fail(`l’atelier refuse la mission ${mission} : ${checkAtelier(EXTRA_LEVELS[mission].map)}`);
+  }
+  const code = encodeAtelier({ name: 'Bascule', map: EXTRA_LEVELS[51].map });
+  if (decodeAtelier(code)?.map.join('') !== EXTRA_LEVELS[51].map.join('')) fail('le lien de l’atelier perd les interrupteurs');
+  if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).tiles.includes(Tile.Switch)).some(Boolean)) fail('aucune arène de versus à interrupteurs');
+  for (let r = 0; r < VERSUS_ARENAS; r++) if (versusArena(r + VERSUS_ARENAS).tiles.join('') !== versusArena(r).tiles.join('')) fail(`VERSUS_ARENAS (${VERSUS_ARENAS}) ne correspond pas au nombre d’arènes`);
+  if (versusArena(VERSUS_ARENAS - 1).tiles.join('') === versusArena(0).tiles.join('')) fail('VERSUS_ARENAS est trop grand');
+  if (!versusArena(50).tiles.includes(Tile.Switch) || versusArena(50).night || versusArena(50).fog !== undefined || versusArena(50).wind !== undefined) fail('la manche 50 du film n’est plus « Rouge ou bleu » par temps clair');
+  // a switch at (15, 8), a red gate across the way at x = 10, a blue one at x = 6
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  tiles[8 * W + 15] = Tile.Switch;
+  for (let y = 0; y < H; y++) { tiles[y * W + 10] = Tile.RedUp; tiles[y * W + 6] = Tile.BlueDown; }
+  const g = new Game(tiles);
+  if (!g.gates) fail('la table ne sait pas qu’elle a des interrupteurs');
+  const p = g.addTank('player', 0, 8.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  const go = new Map([['p1', { s: 1, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+  for (let i = 0; i < 40; i++) g.step(go);
+  if (p.x > 10) fail('le tank traverse une barrière levée');
+  // a shell that flies through the switch's column hits it: red gates sink, the blue ones rise (not under the tank)
+  p.x = 6.5; p.y = 3.5;
+  g.bullets.push({ id: 9997, owner: p.id, x: 13, y: 8.5, vx: BULLET_SPEED, vy: 0, bounces: 1, rocket: false, dead: false });
+  g.events = [];
+  for (let i = 0; i < 20; i++) g.step(new Map());
+  if (!g.events.some((e) => e[0] === 'flip')) fail('l’obus n’a pas actionné l’interrupteur');
+  if (g.tiles[8 * W + 10] !== Tile.RedDown) fail('la barrière rouge n’est pas descendue');
+  if (g.tiles[8 * W + 6] !== Tile.BlueUp) fail('la barrière bleue n’est pas montée');
+  if (g.tiles[3 * W + 6] !== Tile.BlueDown || !g.gateWait.has(3 * W + 6)) fail('la barrière est montée sous le tank');
+  if (!g.events.some((e) => e[0] === 'gate' && e[1] === 10 && e[2] === 8 && e[3] === Tile.RedDown)) fail('pas d’événement « gate »');
+  // the tank drives off: the gate under it rises behind it
+  p.x = 7.5;
+  for (let i = 0; i < 3; i++) g.step(new Map());
+  if (g.tiles[3 * W + 6] !== Tile.BlueUp || g.gateWait.size) fail('la barrière ne monte pas une fois la case libre');
+  // and now the way through x = 10 is open
+  if (!p.alive) fail('le tank a sauté');
+  g.bullets = [];
+  p.x = 8.5; p.y = 8.5; p.body = 0;
+  for (let i = 0; i < 60; i++) g.step(new Map([['p1', { s: 2 + i, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]));
+  if (p.x < 11) fail(`le tank ne passe pas la barrière baissée (x = ${p.x.toFixed(2)}, y = ${p.y.toFixed(2)}, cases ${[7, 8, 9].map((y) => g.tiles[y * W + 10])}, flips ${g.flips})`);
+  // a second shell right away is ignored (cooldown), then one later flips them back
+  const before = g.flips;
+  g.bullets.push({ id: 9996, owner: p.id, x: 13.5, y: 8.5, vx: BULLET_SPEED, vy: 0, bounces: 1, rocket: false, dead: false });
+  g.switchCd = 0.5;
+  for (let i = 0; i < 4; i++) g.step(new Map());
+  if (g.flips !== before) fail('l’interrupteur ne se repose pas entre deux obus');
+  // the AI plays the switch missions to the end, cheaply
+  let cleared = 0, spent = 0, steps = 0, flips = 0;
+  for (const mission of [45, 51]) {
+    for (let run = 0; run < 3; run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        flips += s2.events.filter((ev) => ev[0] === 'flip').length;
+        s2.events = [];
+        for (const t of s2.tanks) if (t.alive && isSolidTank(s2.tiles[Math.floor(t.y) * W + Math.floor(t.x)])) fail(`mission ${mission} : un tank coincé dans une barrière`);
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions à interrupteurs');
+  if (process.exitCode !== 1) console.log(`interrupteurs OK (${cleared}/6 parties gagnées par l’IA, ${flips} bascule(s), ${per.toFixed(3)} ms/tick)`);
 }

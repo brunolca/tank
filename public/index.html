@@ -91,12 +91,13 @@
       </div>
       <button id="btn-atelier" class="btn">🛠️ L’atelier : dessine ta mission</button>
       <button id="btn-journal" class="btn ghost">Carnet de bord : le jeu s’améliore tout seul</button>
-      <!-- « Le manuel » (iteration 39, a player's idea: no more drop-down menus): four paper tabs open the manual on the right page -->
+      <!-- « Le manuel » (iteration 39, a player's idea: no more drop-down menus): paper tabs open the manual on the right page -->
       <nav class="shelf" aria-label="Le manuel">
         <button data-tab="commandes"><i>🎮</i><b>Commandes</b></button>
         <button data-tab="modes"><i>🗺️</i><b>Modes</b></button>
         <button data-tab="caisses"><i>🎁</i><b>Caisses</b></button>
         <button data-tab="bestiaire"><i>📖</i><b>Bestiaire</b><small id="bestiary-count"></small></button>
+        <button data-tab="terrain"><i>🧱</i><b>Terrain</b><small class="new">Nouveau</small></button>
       </nav>
     </div>
     <div class="side-cards">
@@ -215,6 +216,7 @@
         <button role="tab" data-tab="modes"><i>🗺️</i> <span>Modes</span></button>
         <button role="tab" data-tab="caisses"><i>🎁</i> <span>Caisses</span></button>
         <button role="tab" data-tab="bestiaire"><i>📖</i> <span>Bestiaire</span></button>
+        <button role="tab" data-tab="terrain"><i>🧱</i> <span>Terrain</span></button>
       </div>
       <div id="manual-page" class="manual-page" role="tabpanel" data-pad-scroll></div>
       <p class="manual-foot muted">‹ › ou <kbd>LB</kbd> <kbd>RB</kbd> pour tourner les pages · <kbd>Échap</kbd> pour refermer</p>

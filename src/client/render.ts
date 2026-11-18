@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, tunnelAxis } from '../shared/physics';
+import { GATE_COLORS, gateUp, isGate } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { isRivalId } from '../shared/rivals';
@@ -1605,6 +1606,10 @@ export class Renderer {
     this.rising = [];
     for (const b of this.bridges.values()) this.levelGroup.remove(b);
     this.bridges.clear();
+    for (const gt of this.gates.values()) this.levelGroup.remove(gt.mesh);
+    this.gates.clear();
+    for (const sw of this.switches) this.levelGroup.remove(sw.root);
+    this.switches = [];
     for (const f of this.falling) this.levelGroup.remove(f.obj);
     this.falling = [];
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); }
@@ -1651,8 +1656,13 @@ export class Renderer {
         } else if (isPortal(t)) this.addPortal(x, y, PORTAL_COLORS[t - Tile.PortalA]);
         else if (isTunnel(t)) this.addTunnel(tiles, x, y);
         else if (t === Tile.Bridge) this.addBridge(tiles, x, y);
+        else if (isGate(t)) this.addGate(x, y, t);
+        else if (t === Tile.Switch) this.addSwitch(x, y);
       }
     }
+    // the switches show which gates stand (red at the start); a late arrival reads it off the map
+    this.gatePhase = tiles.includes(Tile.BlueUp) && !tiles.includes(Tile.RedUp) ? 1 : 0;
+    for (const sw of this.switches) this.paintSwitch(sw);
     for (const info of infos) {
       const v = buildTank(info);
       this.tanks.set(info.id, v);
@@ -2278,6 +2288,24 @@ export class Renderer {
           // the dusky floor under the arch
           g.fillStyle = 'rgba(60,35,20,0.4)';
           g.fillRect(x * PX + 2, y * PX + 2, PX - 4, PX - 4);
+        } else if (isGate(t)) {
+          // « Les interrupteurs » (iteration 40): the slot of a gate, painted in its colour with hazard stripes (what a lowered gate looks like)
+          const col = '#' + GATE_COLORS[t <= Tile.RedDown ? 0 : 1].toString(16).padStart(6, '0');
+          const X = x * PX, Y = y * PX;
+          g.save();
+          g.beginPath(); g.rect(X + 3, Y + 3, PX - 6, PX - 6); g.clip();
+          g.fillStyle = col + '40'; g.fillRect(X, Y, PX, PX);
+          g.strokeStyle = col + 'a0'; g.lineWidth = 7;
+          for (let k = -PX; k < PX * 2; k += 18) { g.beginPath(); g.moveTo(X + k, Y); g.lineTo(X + k - PX, Y + PX); g.stroke(); }
+          g.restore();
+          g.strokeStyle = 'rgba(60,35,15,0.55)'; g.lineWidth = 2.5;
+          g.strokeRect(X + 3, Y + 3, PX - 6, PX - 6);
+        } else if (t === Tile.Switch) {
+          g.save();
+          g.shadowColor = 'rgba(40,20,0,0.45)'; g.shadowBlur = 14;
+          g.fillStyle = 'rgba(60,30,10,0.35)';
+          g.fillRect(x * PX + 6, y * PX + 6, PX - 12, PX - 12);
+          g.restore();
         }
       }
     }
@@ -2398,6 +2426,117 @@ export class Renderer {
     g.strokeStyle = 'rgba(90,55,25,0.85)';
     g.stroke(path);
     g.restore();
+  }
+
+  // -------------------------------------------------------------- « Les interrupteurs » (iteration 40)
+  private gateGeo = new RoundedBoxGeometry(0.9, WALL_H * 0.92, 0.9, 2, 0.05).translate(0, (WALL_H * 0.92) / 2, 0);
+  private gateMats = GATE_COLORS.map((c) => new THREE.MeshStandardMaterial({ map: woodTexture('#' + c.toString(16).padStart(6, '0'), '#' + new THREE.Color(c).multiplyScalar(0.55).getHexString()), roughness: 0.55, emissive: c, emissiveIntensity: 0.12 }));
+  private gates = new Map<number, { mesh: THREE.Mesh; color: number; up: number; target: number; wait: boolean }>();
+  private switches: { root: THREE.Group; cap: THREE.Mesh; capMat: THREE.MeshStandardMaterial; lever: THREE.Group; x: number; y: number; press: number }[] = [];
+  /** Which gates stand: 0 the red ones, 1 the blue ones. */
+  gatePhase = 0;
+
+  private addGate(x: number, y: number, t: number) {
+    const color = t <= Tile.RedDown ? 0 : 1;
+    const m = new THREE.Mesh(this.gateGeo, this.gateMats[color]);
+    m.position.set(x + 0.5, 0, y + 0.5);
+    m.castShadow = m.receiveShadow = true;
+    const up = gateUp(t) ? 1 : 0;
+    m.scale.y = Math.max(0.02, up);
+    m.visible = up > 0;
+    this.levelGroup.add(m);
+    this.gates.set(y * W + x, { mesh: m, color, up, target: up, wait: false });
+  }
+
+  private addSwitch(x: number, y: number) {
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    const base = new THREE.Mesh(this.wallGeo, this.wallMat);
+    base.position.y = WALL_H / 2;
+    base.castShadow = base.receiveShadow = true;
+    root.add(base);
+    // a big round push button on top, in the colour of the gates that stand, and a little lever pointing at it
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.4, 0.08, 24), new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 0.6 }));
+    ring.position.y = WALL_H + 0.04;
+    root.add(ring);
+    const capMat = new THREE.MeshStandardMaterial({ color: GATE_COLORS[0], roughness: 0.35, emissive: GATE_COLORS[0], emissiveIntensity: 0.35 });
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.3, 0.14, 24), capMat);
+    cap.position.y = WALL_H + 0.12;
+    cap.castShadow = true;
+    root.add(cap);
+    const lever = new THREE.Group();
+    lever.position.set(0, WALL_H + 0.05, 0);
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.34, 8), new THREE.MeshStandardMaterial({ color: 0xf2e2c4, roughness: 0.5 }));
+    stick.position.set(0.36, 0.14, 0);
+    stick.rotation.z = -0.5;
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), capMat);
+    knob.position.set(0.44, 0.29, 0);
+    lever.add(stick, knob);
+    root.add(lever);
+    this.levelGroup.add(root);
+    this.switches.push({ root, cap, capMat, lever, x, y, press: 0 });
+  }
+
+  private paintSwitch(sw: { capMat: THREE.MeshStandardMaterial; lever: THREE.Group }) {
+    const c = GATE_COLORS[this.gatePhase];
+    sw.capMat.color.setHex(c);
+    sw.capMat.emissive.setHex(c);
+    sw.lever.rotation.y = this.gatePhase ? Math.PI : 0;
+  }
+
+  /** A shell hit a switch: every button flips colour and clicks down, the gates that should rise get ready. */
+  flipSwitches(cx: number, cy: number, phase: number) {
+    this.gatePhase = phase ? 1 : 0;
+    for (const sw of this.switches) {
+      this.paintSwitch(sw);
+      sw.press = 1;
+      if (sw.x === cx && sw.y === cy) {
+        for (let i = 0; i < 14; i++) {
+          const a = Math.random() * Math.PI * 2;
+          this.glow.emit({ x: cx + 0.5, y: WALL_H + 0.2, z: cy + 0.5, vx: Math.cos(a) * 2.2, vy: 1 + Math.random() * 1.5, vz: Math.sin(a) * 2.2, life: 0.45, s0: 0.12, s1: 0.02, c0: GATE_COLORS[this.gatePhase], c1: 0xffffff, grav: 4, drag: 1.5 });
+        }
+      }
+    }
+    for (const gt of this.gates.values()) gt.wait = gt.color === this.gatePhase && gt.target === 0;
+  }
+
+  /** A gate rises or sinks (its new tile from the room). */
+  setGate(cx: number, cy: number, tile: number) {
+    const gt = this.gates.get(cy * W + cx);
+    if (!gt) return;
+    gt.target = gateUp(tile) ? 1 : 0;
+    gt.wait = false;
+    gt.mesh.visible = true;
+    if (gt.target) {
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        this.smoke.emit({ x: cx + 0.5 + Math.cos(a) * 0.45, y: 0.08, z: cy + 0.5 + Math.sin(a) * 0.45, vx: Math.cos(a) * 1.1, vy: 0.3 + Math.random() * 0.3, vz: Math.sin(a) * 1.1, life: 0.5, s0: 0.1, s1: 0.26, c0: 0xd9b48a, c1: 0xefdcb8, drag: 3 });
+      }
+    }
+  }
+
+  /** Is there a standing gate in this cell? (for the demo's camera work) */
+  gateStanding(cx: number, cy: number) { return (this.gates.get(cy * W + cx)?.target ?? 0) > 0; }
+
+  private animateGates(dt: number) {
+    for (const gt of this.gates.values()) {
+      if (gt.up !== gt.target) {
+        const sp = gt.target ? 4.2 : 6;
+        gt.up = gt.target ? Math.min(1, gt.up + dt * sp) : Math.max(0, gt.up - dt * sp);
+      }
+      // rising: a little overshoot like a toy block snapping up; waiting for a tank to move off: it trembles in its slot
+      const k = gt.target && gt.up < 1 ? 1 - (1 - gt.up) ** 3 + Math.sin(gt.up * Math.PI) * 0.1 : gt.up;
+      const shiver = gt.wait ? 0.06 + Math.sin(this.time * 38 + gt.mesh.position.x * 3) * 0.04 : 0;
+      gt.mesh.scale.y = Math.max(0.02, k + shiver);
+      gt.mesh.visible = gt.up > 0.01 || gt.wait;
+    }
+    for (const sw of this.switches) {
+      if (sw.press <= 0) continue;
+      sw.press = Math.max(0, sw.press - dt * 3.5);
+      const d = Math.sin(sw.press * Math.PI);
+      sw.cap.position.y = WALL_H + 0.12 - d * 0.09;
+      sw.capMat.emissiveIntensity = 0.35 + d * 0.9;
+    }
   }
 
   /** The Maçon lays a cork block (iteration 12): it pops out of the floor with a puff of sawdust. */
@@ -3485,6 +3624,7 @@ export class Renderer {
     this.animateStorm(dt);
     this.animateQuakes(dt);
     this.animateRising(dt);
+    if (this.gates.size || this.switches.length) this.animateGates(dt);
     this.animateFalling(dt);
     if (this.night > 0.5 && Math.random() < 5 * dt) {
       // fireflies drifting over the table

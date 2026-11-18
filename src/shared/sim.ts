@@ -1,5 +1,5 @@
 import {
-  BELT_DIRS, BELT_SPEED, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
@@ -317,6 +317,18 @@ export class Game {
   private ctfBack = new Map<number, number>();
   /** « La chasse aux caisses » (iteration 37): the crates of the round (undefined in every other mode). */
   hunt?: HuntState;
+  /**
+   * « Les interrupteurs » (iteration 40): the table has switch blocks. A shell hitting one flips every gate: the red
+   * ones sink into the floor and the blue ones rise, or the other way round. A gate never rises onto a tank, a mine or
+   * a crate: it waits (in `gateWait`) until its cell is clear.
+   */
+  gates = false;
+  /** How many times the switches were flipped (even: the red gates stand, as at the start). */
+  flips = 0;
+  /** Seconds before a switch takes another shell. */
+  switchCd = 0;
+  /** Lowered gates waiting to rise (cell indices). */
+  gateWait = new Set<number>();
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -327,6 +339,7 @@ export class Game {
     if (belts?.some(Boolean)) this.belts = belts.slice();
     this.ice = this.belts.includes(ICE);
     this.sand = this.belts.includes(SAND);
+    this.gates = this.tiles.includes(Tile.Switch);
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -450,12 +463,67 @@ export class Game {
     if (this.frost.size || this.tanks.some((t) => t.kind === 'frost')) this.stepFrost(DT);
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
+    if (this.gates) this.stepGates(DT);
     this.stepMines(DT);
     if (this.lobs.length) this.stepLobs(DT);
     if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
     if (this.bonusOn) this.stepBonuses(DT);
     if (this.flags) this.stepFlags(DT);
     if (this.hunt) this.stepHunt(DT);
+  }
+
+  // -------------------------------------------------------------- « Les interrupteurs » (iteration 40)
+
+  /** A shell at (x, y) runs into a switch block: every gate flips (once per SWITCH_COOLDOWN). */
+  pressSwitch(x: number, y: number, owner: number) {
+    if (this.switchCd > 0) return;
+    for (const [cx, cy] of [[x - BULLET_R, y - BULLET_R], [x + BULLET_R, y - BULLET_R], [x - BULLET_R, y + BULLET_R], [x + BULLET_R, y + BULLET_R]]) {
+      const fx = Math.floor(cx), fy = Math.floor(cy);
+      if (tileAt(this.tiles, fx, fy) !== Tile.Switch) continue;
+      this.flipGates(fx, fy, owner);
+      return;
+    }
+  }
+
+  /** Flip the switches (from the switch block at cx, cy): raised gates sink at once, lowered ones rise when they can. */
+  flipGates(cx: number, cy: number, owner = 0) {
+    this.flips++;
+    this.switchCd = SWITCH_COOLDOWN;
+    this.events.push(['flip', cx, cy, this.flips & 1, owner]);
+    for (let i = 0; i < W * H; i++) {
+      const t = this.tiles[i];
+      if (!isGate(t)) continue;
+      if (gateUp(t)) {
+        this.tiles[i] = gateFlipped(t);
+        this.events.push(['gate', i % W, (i / W) | 0, this.tiles[i]]);
+      } else if (this.gateWait.has(i)) this.gateWait.delete(i); // it was still waiting to rise: it stays down
+      else if (!this.raiseGate(i)) this.gateWait.add(i);
+    }
+  }
+
+  /** Raise the lowered gate of cell i, unless a tank, a mine or a crate sits on it. Shells inside it pop. */
+  raiseGate(i: number): boolean {
+    const cx = i % W, cy = (i / W) | 0;
+    const near = (x: number, y: number, r: number) => {
+      const px = Math.max(cx, Math.min(cx + 1, x)), py = Math.max(cy, Math.min(cy + 1, y));
+      return (px - x) ** 2 + (py - y) ** 2 < r * r;
+    };
+    if (this.tanks.some((t) => t.alive && !under(t) && near(t.x, t.y, t.r + 0.02))) return false;
+    if (this.mines.some((m) => !m.dead && near(m.x, m.y, MINE_R))) return false;
+    if (this.bonuses.some((c) => near(c.x, c.y, 0.3))) return false;
+    if (this.flags?.some((f) => near(f.x, f.y, 0.3))) return false;
+    this.tiles[i] = gateFlipped(this.tiles[i]);
+    this.events.push(['gate', cx, cy, this.tiles[i]]);
+    for (const b of this.bullets) {
+      if (!b.dead && near(b.x, b.y, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); }
+    }
+    return true;
+  }
+
+  /** The switches cool down; gates that were waiting rise as soon as their cell is clear. */
+  stepGates(dt: number) {
+    if (this.switchCd > 0) this.switchCd -= dt;
+    for (const i of this.gateWait) if (this.raiseGate(i)) this.gateWait.delete(i);
   }
 
   // -------------------------------------------------------------- « La chasse aux caisses » (iteration 37)
@@ -1003,7 +1071,7 @@ export class Game {
       if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const tl = this.tiles[(cy + dy) * W + cx + dx];
-        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
+        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || tl === Tile.Switch || isGate(tl) || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
       }
       return true;
     };
@@ -1483,6 +1551,7 @@ export class Game {
       const ox = b.x, oy = b.y;
       const nx = b.x + b.vx * dt;
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
+        if (this.gates) this.pressSwitch(nx, b.y, b.owner);
         if (b.cork && this.breakCork(nx, b.y)) {
           if (!b.heavy) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
           if (!bulletBlocked(this.tiles, nx, b.y, BULLET_R)) b.x = nx; else { b.vx = -b.vx; bounced = true; } // « Gros calibre »: straight through
@@ -1490,6 +1559,7 @@ export class Game {
       } else b.x = nx;
       const ny = b.y + b.vy * dt;
       if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) {
+        if (this.gates) this.pressSwitch(b.x, ny, b.owner);
         if (b.cork && this.breakCork(b.x, ny)) {
           if (!b.heavy) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
           if (!bulletBlocked(this.tiles, b.x, ny, BULLET_R)) b.y = ny; else { b.vy = -b.vy; bounced = true; }

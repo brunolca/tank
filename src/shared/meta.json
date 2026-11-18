@@ -1,7 +1,7 @@
 {
-  "iteration": 39,
-  "date": "2026-11-17",
-  "title": "Le manuel",
+  "iteration": 40,
+  "date": "2026-11-18",
+  "title": "Les interrupteurs",
   "journal": [
     {
       "iteration": 1,
@@ -474,6 +474,19 @@
         "Une nouvelle page présente tous les modes de jeu d’un coup d’œil, avec le nombre de joueurs.",
         "Les menus se pilotent à la manette : la croix ou le stick choisit un bouton, A valide, B revient, LB et RB tournent les pages du manuel, Start ouvre le menu en pleine partie.",
         "Au clavier, les flèches tournent les pages du manuel et Échap referme le manuel comme le carnet de bord."
+      ]
+    },
+    {
+      "iteration": 40,
+      "date": "2026-11-18",
+      "title": "Les interrupteurs",
+      "notes": [
+        "Nouveau terrain : l’interrupteur, un bloc de bois coiffé d’un gros bouton. Un obus dessus, « Clac ! », et toutes les barrières de la table basculent : les rouges s’enfoncent dans le sol, les bleues se dressent, ou l’inverse.",
+        "Une barrière levée arrête les tanks comme les obus. Elle ne monte jamais sous un tank : elle tremble dans sa fente et attend que la place soit libre.",
+        "Deux nouvelles missions : « Les interrupteurs » (la 45ᵉ), où un mur à portes rouges coupe la table, et « Rouge ou bleu » (la 51ᵉ), une partie de tir à la corde où celui qui touche l’interrupteur en dernier a les abris. Attention, les ricochets ennemis peuvent tout refermer !",
+        "Le versus gagne deux arènes à interrupteurs, et chaque partie commence maintenant sur une arène tirée au sort : fini de toujours démarrer sur la même table.",
+        "Le manuel s’enrichit d’une page « Terrain » : murs, liège, ponts, tunnels, portails, tapis, glace, sable et interrupteurs, chaque case expliquée en une phrase.",
+        "L’atelier propose l’interrupteur et les deux barrières : à toi les portes secrètes et les labyrinthes qui changent de forme."
       ]
     }
   ]

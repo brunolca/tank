@@ -64,6 +64,10 @@ export const BRUSHES: Brush[] = [
   { ch: 'B', label: 'Bombardier', group: 'tank' },
   // iteration 36: sand (share-code letter l)
   { ch: ',', label: 'Sable', group: 'sol' },
+  // iteration 40: « Les interrupteurs » (share-code letters m, n, o)
+  { ch: '%', label: 'Interrupteur', group: 'sol' },
+  { ch: '[', label: 'Barrière rouge', group: 'sol' },
+  { ch: ']', label: 'Barrière bleue', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -130,10 +134,11 @@ export function checkAtelier(map: unknown): string | undefined {
   for (let i = 0; i < lvl.tiles.length; i++) {
     if (lvl.tiles[i] === Tile.Tunnel && tunnelAxis(lvl.tiles, i) < 0) return 'Chaque tunnel doit passer entre deux murs (ou trous), à gauche et à droite ou en haut et en bas.';
   }
+  if (count('[') + count(']') > 0 && !count('%')) return 'Des barrières sans interrupteur ne bougeront jamais : ajoute un interrupteur.';
   // the players must be able to drive somewhere: at least one open cell next to the first spot
   const [sx, sy] = lvl.spawns[0];
   const cx = Math.floor(sx), cy = Math.floor(sy);
-  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_'.includes(map[y][x]);
+  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%'.includes(map[y][x]);
   if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => open(cx + dx, cy + dy))) return 'Le départ 1 est emmuré : laisse-lui de la place.';
   return undefined;
 }

@@ -128,6 +128,23 @@ export const sfx = {
     for (let i = 0; i < 4; i++) tone(t + 0.42 + i * 0.09 + Math.random() * 0.03, 0.06, 520 - i * 60, 300 - i * 30, 0.1 - i * 0.015, 'triangle');
     noise(t + 0.4, 0.4, 700, 0.6, 0.18, 'lowpass', 150);
   },
+  /** « Les interrupteurs » (iteration 40): a shell hits a switch, a big wooden « clac » and a two-note chime (up for red, down for blue). */
+  flip(phase: number) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.05, 3600, 1.5, 0.4, 'bandpass', 2600);
+    tone(t, 0.05, 900, 500, 0.2, 'square');
+    const [a, b] = phase ? [880, 660] : [660, 880];
+    tone(t + 0.07, 0.12, a, a, 0.14, 'triangle');
+    tone(t + 0.18, 0.18, b, b, 0.14, 'triangle');
+  },
+  /** The gates slide: a low wooden rumble (rising) or a soft thud (sinking). */
+  gate(up: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (up) { tone(t, 0.2, 140, 260, 0.14, 'sawtooth'); noise(t + 0.18, 0.08, 1800, 1.2, 0.16, 'bandpass', 1200); }
+    else { tone(t, 0.18, 240, 110, 0.12, 'sawtooth'); noise(t + 0.12, 0.15, 600, 0.6, 0.12, 'lowpass', 150); }
+  },
   block() {
     if (!ctx) return;
     noise(ctx.currentTime, 0.4, 900, 0.6, 0.6, 'lowpass', 200);
