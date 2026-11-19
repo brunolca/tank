@@ -52,7 +52,7 @@ export type NetTank = [number, number, number, number, number, number, (number |
 // bullet: [id, x, y, vx, vy, rocket, ownerTankId]
 export type NetBullet = [number, number, number, number, number, number, number];
 // mine: [id, x, y, blinking]
-export type NetMine = [number, number, number, number] | [number, number, number, number, number]; // 5th: a seed of the Semeur (iteration 25), 1 + its age in tenths of a second
+export type NetMine = [number, number, number, number] | [number, number, number, number, number] | [number, number, number, number, number, number]; // 6th (iteration 44): the tank that laid it, for player mines only (the 5th is then 0) // 5th: a seed of the Semeur (iteration 25), 1 + its age in tenths of a second
 // bonus crate: [id, x, y, kind (index in BONUS_KINDS), blinking]
 export type NetBonus = [number, number, number, number, number] | [number, number, number, number, number, number]; // id x y kind blink [gold: 1, the golden crate of « La chasse aux caisses », iteration 37]
 

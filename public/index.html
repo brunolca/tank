@@ -27,12 +27,6 @@
   <div id="hud" hidden>
     <div class="hud-left">
       <div id="hud-mission"></div>
-      <div id="hud-lives"></div>
-      <button id="hud-galons" class="galons-btn" hidden></button>
-      <button id="hud-rally" class="galons-btn rally-btn" hidden title="Suis-moi ! Tes coéquipiers te rejoignent (touche T, Y à la manette)">📣 Suis-moi</button>
-      <button id="hud-emote" class="galons-btn rally-btn" hidden title="Les bulles : dis-le en un clic (touches 1 à 6, croix directionnelle à la manette)">💬 Bulles</button>
-      <div id="emote-pad" hidden></div>
-      <div id="hud-buffs"></div>
       <div id="hud-role" hidden></div>
     </div>
     <div class="hud-center"><div id="hud-enemies"></div><div id="hud-wind" hidden title="Le vent : la flèche montre où il souffle, la jauge la force de la rafale"><i>➜</i><span>Vent</span><b><u></u></b></div><div id="hud-clock" hidden></div><div id="scoreboard"></div></div>
@@ -41,6 +35,16 @@
       <button id="btn-full" class="icon-btn" title="Plein écran" aria-label="Plein écran">⛶</button>
       <button id="btn-music" class="icon-btn" title="Musique (M)">♪</button>
       <button id="btn-menu" class="icon-btn" title="Menu (Échap)">☰</button>
+    </div>
+    <!-- « Le réticule » (iteration 44): the team and its tools, at the bottom of the table -->
+    <div class="hud-bottom">
+      <div id="hud-lives"></div>
+      <div id="hud-team"></div>
+      <button id="hud-galons" class="galons-btn" hidden></button>
+      <div id="hud-buffs"></div>
+      <button id="hud-rally" class="round-btn" hidden title="Suis-moi ! Tes coéquipiers te rejoignent (touche T, Y à la manette)" aria-label="Suis-moi !"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v18" class="w"/><path d="M7 4h11l-3 4.5 3 4.5H7z"/></svg></button>
+      <button id="hud-emote" class="round-btn" hidden title="Les bulles : dis-le en un clic (touches 1 à 6, croix directionnelle à la manette)" aria-label="Les bulles"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3.5V17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><circle cx="8.5" cy="11" r="1.2" class="k"/><circle cx="12" cy="11" r="1.2" class="k"/><circle cx="15.5" cy="11" r="1.2" class="k"/></svg></button>
+      <div id="emote-pad" hidden></div>
     </div>
   </div>
   <div id="boss-bar" hidden>
@@ -234,6 +238,7 @@
         </fieldset>
         <fieldset><legend>Affichage</legend>
           <div class="opt-row"><span>Qualité</span><div id="opt-quality" class="segmented"><button data-v="auto">Belle</button><button data-v="eco">Économe</button></div></div>
+          <div class="opt-row"><span>Réticule (obus, mines, recharge)</span><div id="opt-reticle" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
           <div class="opt-row"><span>Secousses de l’écran</span><div id="opt-shake" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
           <div class="opt-row"><span>Ralenti des fins de manche</span><div id="opt-replay" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
         </fieldset>

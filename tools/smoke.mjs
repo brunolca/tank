@@ -53,6 +53,11 @@ try {
     if (!['playing', 'failed', 'cleared'].includes(s.phase)) fail(`${name} : phase inattendue ${s.phase}`);
   }
 
+  // « Le réticule » (iteration 44): the reticle exists, the enemies up top are counted with their tokens, the team strip is at the bottom
+  if ((await a.locator('#reticle').count()) !== 1) fail('le réticule n’existe pas');
+  if (!(await a.locator('#hud-enemies b').count())) fail('le compteur d’ennemis (avec ses jetons) n’apparaît pas en coop');
+  if ((await a.locator('.hud-bottom #hud-emote').count()) !== 1) fail('le bouton des bulles n’est pas dans la barre du bas');
+
   // « Les bulles » (iteration 30): A says « Bravo ! » with the key 1, both players see the bubble
   const bubblesB = (await state(b)).bubbles ?? 0;
   if (!(await state(a)).emoteBtn) fail('le bouton « Bulles » n’apparaît pas en partie');

@@ -18,6 +18,7 @@ import { initAudio, isMusicOn, setMusicIntensity, setRain, setVolume, setWind, s
 import { gustAt, windAngle, windWords } from '../shared/wind';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
+import { Reticle, plainEnemies, renderEnemyTokens, renderTeam, type EnemyToken, type Mate } from './hud';
 import { Workshop, cellImage, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RFlag, type RLob, type RMine, type RTank } from './render';
 import { Film, REPLAYED, koCaption, type Reel } from './replay';
@@ -684,14 +685,91 @@ function clientTick() {
     if (inp.f && localFireCd <= 0 && !ceasefire && !frozen) {
       let own = 0;
       for (const b of last.B.values()) if (b[6] === myTankId) own++;
-      if (own < mySpec.maxBullets) {
+      if (own < mySpec.maxBullets && shellsOut() < mySpec.maxBullets) {
         localFireCd = mySpec.fireCd;
+        localShots.push(performance.now());
         if (meNet[5] & BONUS_INFO.heavy.flag) sfx.heavyShot(); else sfx.shot(mySpec.rocket);
         const tip = TANK_R + 0.22;
         renderer.muzzle(px + Math.cos(aimAng) * tip, py + Math.sin(aimAng) * tip, aimAng, mySpec.rocket, myTankId);
-      }
+      } else dryFire();
     }
   }
+}
+
+// ------------------------------------------------------------------ « Le réticule » (iteration 44)
+// The reticle under the mouse carries the shells ready (an arc of pips), the mines left and the reload ring.
+const reticle = new Reticle();
+let reticleOn = (() => { try { return localStorage.getItem('tanks.reticle') !== '0'; } catch { return true; } })();
+/** Shells fired here that the room has not shown yet (performance.now() of each), so the pips answer at once. */
+let localShots: number[] = [];
+const seenShells = new Set<number>();
+/** My shells in the air: those of the freshest state, plus the ones just fired and not in it yet. */
+function shellsOut() {
+  const last = snaps[snaps.length - 1];
+  if (!last) return 0;
+  let own = 0;
+  for (const b of last.B.values()) {
+    if (b[6] !== myTankId) continue;
+    own++;
+    if (!seenShells.has(b[0])) { seenShells.add(b[0]); localShots.shift(); } // it arrived: no longer « just fired »
+  }
+  if (seenShells.size > 64) for (const id of seenShells) if (!last.B.has(id)) seenShells.delete(id);
+  const now = performance.now();
+  while (localShots.length && now - localShots[0] > ping + 300) localShots.shift();
+  return Math.min(mySpec.maxBullets, own + localShots.length);
+}
+let reticleFrame = false; // the reticle was drawn this frame (otherwise it hides)
+let lastDry = 0;
+let wasEmpty = false;
+/** A shot with every shell out: the trigger clicks, the pips shake. */
+function dryFire() {
+  const now = performance.now();
+  if (now - lastDry < 140) return;
+  lastDry = now;
+  sfx.dry();
+  reticle.dry();
+}
+function reticleAllowed() {
+  return reticleOn && screen === 'game' && $('#menu').hidden && !council && !treeOpen && !reel && $('#feedback').hidden && $('#options').hidden;
+}
+/** Where the reticle goes: under the mouse, or (gamepad, touch) a few cells ahead of the tank along its aim. */
+function reticleSpot(x: number, y: number, ang: number, ahead = 2.6) {
+  const p = controls.pointer();
+  if (p) return p;
+  return renderer.arenaToScreen(x + Math.cos(ang) * ahead, y + Math.sin(ang) * ahead, 0.3);
+}
+function updateReticleOnline(latest: Snap) {
+  const me = latest.T.get(myTankId);
+  const info = infos.get(myTankId);
+  if (!me || !(me[5] & 1) || !info || !reticleAllowed() || (phase !== 'playing' && phase !== 'intro')) { reticle.hide(); return; }
+  const out = shellsOut();
+  let mines = 0;
+  for (const m of latest.M) if (m[5] === myTankId) mines++;
+  const ready = mySpec.maxBullets - out;
+  if (ready > 0 && wasEmpty) sfx.reload();
+  wasEmpty = ready <= 0;
+  const spot = reticleSpot(pred.x + offset.x, pred.y + offset.y, aimAng);
+  reticleFrame = true;
+  reticle.update({
+    x: spot.x, y: spot.y, max: mySpec.maxBullets, ready, mines: mySpec.mines, minesLeft: Math.max(0, mySpec.mines - mines),
+    reload: mySpec.fireCd > 0 ? Math.max(0, localFireCd) / mySpec.fireCd : 0,
+    off: phase !== 'playing' || (coopLike(currentMode) && enemiesLeft === 0) || !!(me[5] & FLAG_FROZEN), color: info.color,
+  });
+}
+/** The enemies up top (tokens) and the team at the bottom, from what is on the table. */
+function updateTeamOnline(a: Snap) {
+  if (!coopLike(currentMode)) { renderTeam($('#hud-team'), []); return; }
+  const enemies: EnemyToken[] = [];
+  const mates: Mate[] = [];
+  for (const t of a.T.values()) {
+    const info = infos.get(t[0]);
+    if (!info) continue;
+    const alive = !!(t[5] & 1);
+    if (info.team === 99) { if (alive) enemies.push({ color: info.color, boss: isBossKind(info.kind) }); }
+    else if (info.kind === 'player') mates.push({ id: info.id, name: info.name ?? '?', color: info.color, alive, me: info.id === myTankId, bot: isRivalId(info.pid) });
+  }
+  renderEnemyTokens($('#hud-enemies'), enemies);
+  renderTeam($('#hud-team'), mates.length > 1 ? mates : []);
 }
 
 function sampleAt(tick: number) {
@@ -755,10 +833,11 @@ function onlineFrame(dt: number) {
     const left = Math.max(0, Math.ceil(phase === 'playing' ? ctfLeft - (performance.now() - ctfLeftAt) / 1000 : ctfLeft));
     $('#hud-enemies').textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : 30) && phase === 'playing');
-  } else {
-    $('#hud-enemies').textContent = coopLike(currentMode) ? `${enemiesAlive} ennemi${enemiesAlive > 1 ? 's' : ''}` : '';
+  } else if (!coopLike(currentMode)) {
+    plainEnemies($('#hud-enemies'), '');
     $('#hud-enemies').classList.remove('hurry');
   }
+  void enemiesAlive; // (the tokens of updateTeamOnline count them)
 
   /** Player shells take their shooter's colour (enemy shells stay white). */
   function shellColor(owner: number) {
@@ -794,6 +873,8 @@ function onlineFrame(dt: number) {
   renderer.syncLobs(lobs);
   film.frame(dt, tanks, bullets, mines, bonuses, flags, lobs);
   updateNameTags(tanks);
+  updateTeamOnline(a);
+  updateReticleOnline(latest);
   const myFlags = latest.T.get(myTankId)?.[5] ?? 0;
   renderBuffs(myFlags & 1 ? myFlags : 0);
 }
@@ -1446,6 +1527,9 @@ function renderHud() {
   renderGalons();
   const livesEl = $('#hud-lives');
   livesEl.innerHTML = coopLike(currentMode) ? `<span class="tank-ico"></span> × ${lives}` : '';
+  livesEl.title = coopLike(currentMode) ? `${lives} vie${lives > 1 ? 's' : ''} pour toute l’équipe` : '';
+  const myColor = infos.get(myTankId)?.color;
+  if (myColor !== undefined) $('#hud').style.setProperty('--me', hex(myColor));
   renderRole();
   $('#hud-rally').hidden = !hasMates();
   $('#hud-emote').hidden = !online;
@@ -2120,6 +2204,52 @@ function bridgeTrap(g: Game) {
   }
 }
 
+// « Le réticule » (iteration 44), for the videos: the HUD of a coop mission over the demo, the first hero playing « me »
+let demoHud = false;
+const demoAim = { x: 0, y: 0, d: 4, set: false };
+function updateDemoHud(g: Game, tanks: RTank[], dt: number) {
+  if (screen !== 'game' || !attractOpts.heroes || attractOpts.versus || attractOpts.drapeau || attractOpts.caisses) return;
+  const heroes = g.tanks.filter((t) => t.kind === 'player');
+  const me = heroes[0];
+  if (!me) return;
+  $('#hud').hidden = false;
+  const lvl = attractOpts.mission;
+  const ticket = `<b>Mission ${lvl ?? 1}</b><span>${escapeHtml(getMission(lvl ?? 1).name)}</span>`;
+  const mission = $('#hud-mission');
+  if (mission.innerHTML !== ticket) mission.innerHTML = ticket;
+  $('#hud').style.setProperty('--me', hex(me.color));
+  const lives = `<span class="tank-ico"></span> × 3`;
+  if ($('#hud-lives').innerHTML !== lives) $('#hud-lives').innerHTML = lives;
+  $('#hud-galons').hidden = true;
+  $('#hud-rally').hidden = heroes.length < 2;
+  $('#hud-emote').hidden = false;
+  renderEnemyTokens($('#hud-enemies'), g.tanks.filter((t) => t.alive && t.team !== me.team).map((t) => ({ color: enemyColor(t.kind), boss: isBossKind(t.kind) })));
+  renderTeam($('#hud-team'), heroes.length > 1 ? heroes.map((t, i) => ({ id: t.id, name: t.name ?? (i ? FUN_NAMES[(i * 7) % FUN_NAMES.length] + (20 + i * 13) : myName), color: t.color, alive: t.alive, me: i === 0, bot: false })) : []);
+  const rt = tanks.find((t) => t.id === me.id);
+  if (!me.alive || !rt || g.frozen || reel) return;
+  // the reticle follows the turret, out to the enemy it is looking at
+  let d = 4;
+  let best = Infinity;
+  for (const f of g.tanks) {
+    if (!f.alive || f.team === me.team) continue;
+    const dd = Math.hypot(f.x - me.x, f.y - me.y);
+    const off = Math.abs(angDiff(Math.atan2(f.y - me.y, f.x - me.x), rt.turret));
+    if (off < 0.5 && dd < best) { best = dd; d = dd; }
+  }
+  demoAim.d += (Math.min(9, Math.max(2, d)) - demoAim.d) * Math.min(1, dt * 4);
+  const p = renderer.arenaToScreen(rt.x + Math.cos(rt.turret) * demoAim.d, rt.y + Math.sin(rt.turret) * demoAim.d, 0.3);
+  if (!demoAim.set) { demoAim.x = p.x; demoAim.y = p.y; demoAim.set = true; }
+  demoAim.x += (p.x - demoAim.x) * Math.min(1, dt * 14);
+  demoAim.y += (p.y - demoAim.y) * Math.min(1, dt * 14);
+  const out = g.bullets.filter((b) => b.owner === me.id).length;
+  const mines = g.mines.filter((m) => m.owner === me.id && !m.dead).length;
+  reticleFrame = true;
+  reticle.update({
+    x: demoAim.x, y: demoAim.y, max: me.spec.maxBullets, ready: Math.max(0, me.spec.maxBullets - out), mines: me.spec.mines, minesLeft: Math.max(0, me.spec.mines - mines),
+    reload: me.spec.fireCd > 0 ? Math.max(0, Math.min(1, me.fireCd / me.spec.fireCd)) : 0, off: false, color: me.color,
+  });
+}
+
 let attractAcc = 0;
 let attractState: Record<string, unknown> = {};
 function attractFrame(dt: number) {
@@ -2159,6 +2289,7 @@ function attractFrame(dt: number) {
   const lobs: RLob[] = g.lobs.map((l) => ({ id: l.id, x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1, t: l.t + u * DT, dur: l.dur }));
   renderer.syncLobs(lobs);
   film.frame(dt, tanks, bullets, mines, bonuses, flags, lobs);
+  if (demoHud) updateDemoHud(g, tanks, dt);
   const ended = !!attractEnd;
   if (attractOpts.drapeau && attractCtf) {
     const standing = [1, 2].filter((k) => g.aliveCount(k) > 0).length;
@@ -2343,6 +2474,8 @@ function frame(now: number) {
     attractFrame(demoMode ? Math.min(0.25, Math.max(0, (now - lastT0) / 1000)) : dt);
     updateNameTags([]);
   }
+  if (!reticleFrame) reticle.hide();
+  reticleFrame = false;
   placeBubbles();
   controls.padMenu = screen === 'game' && !$('#menu').hidden;
   if (!demoMode) navStep(now);
@@ -2606,7 +2739,7 @@ const MODES: [string, string, string, string][] = [
 const KEYS: [string, [string, string][]][] = [
   ['Clavier et souris', [
     ['<kbd>ZQSD</kbd> <kbd>WASD</kbd> <kbd>↑←↓→</kbd>', 'rouler'],
-    ['Souris', 'viser'],
+    ['Souris', 'viser : le réticule compte tes obus prêts (en haut), tes mines (en bas) et la recharge (l’anneau)'],
     ['<kbd>Clic</kbd> <kbd>E</kbd> <kbd>Maj</kbd> <kbd>Entrée</kbd>', 'tirer'],
     ['<kbd>Espace</kbd> clic droit', 'poser une mine'],
     ['<kbd>K</kbd> puis <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>', 'l’arbre des galons (campagne)'],
@@ -2729,6 +2862,7 @@ function renderOptions() {
   }
   pickSeg('opt-quality', quality);
   pickSeg('opt-shake', shakeOn ? '1' : '0');
+  pickSeg('opt-reticle', reticleOn ? '1' : '0');
   pickSeg('opt-replay', replayOn ? '1' : '0');
 }
 function openOptions() {
@@ -2768,6 +2902,15 @@ $('#opt-shake').addEventListener('click', (e) => {
   shakeOn = v === '1';
   writePref('tanks.shake', v);
   renderer.shakeScale = shakeOn ? 1 : 0;
+  sfx.click();
+  renderOptions();
+});
+$('#opt-reticle').addEventListener('click', (e) => {
+  const v = (e.target as HTMLElement).closest('button')?.dataset.v;
+  if (!v) return;
+  reticleOn = v === '1';
+  writePref('tanks.reticle', v);
+  if (!reticleOn) reticle.hide();
   sfx.click();
   renderOptions();
 });
@@ -2949,7 +3092,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -3055,6 +3198,15 @@ if (params.has('demo')) {
         if (attractOpts.versus) renderVsBoard(); else if (attractOpts.drapeau) renderCtfBoard(); else if (attractOpts.caisses) renderAttractHunt(); else $('#hud').hidden = true;
       }, ms);
     },
+    /** « Le réticule » (iteration 44): the coop HUD and the reticle over the demo mission (the first hero is « me »). */
+    hud(on = true) {
+      demoHud = on;
+      demoAim.set = false;
+      if (!on && !document.body.classList.contains('vs-demo')) $('#hud').hidden = true;
+      return demoHud;
+    },
+    /** A dry shot for the videos: the trigger clicks on an empty barrel. */
+    dry() { dryFire(); },
     /** Storm: announce a lightning strike right next to the first enemy still standing (or any tank). */
     bolt() {
       const g = attract;

@@ -7,12 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 57, arms: ['canon', 'sapeur'], seconds: 9, caption: 'Itération 43 : le nouvel accueil', sub: 'Le menu se range dans la boîte à jouets' },
-  { options: 9, seconds: 9, caption: 'Une pile de planches', sub: '« Jouer » lance la campagne d’un clic, les réglages ont leur tableau' },
-  { mission: 58, arms: ['ricochet', 'canon'], seconds: 15, caption: 'Jouer, tout de suite', sub: 'Un clic, et un coéquipier t’accompagne' },
-  { journal: 6, seconds: 6, caption: 'Le tampon rouge', sub: 'Un clic dessus ouvre le carnet de bord' },
-  { mission: 52, arms: ['canon', 'ricochet'], seconds: 11, hops: [2.5, 6.5], caption: 'Et toujours la Sauterelle', sub: 'Elle bondit par-dessus les murs' },
-  { versus: [53], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 11, caption: 'Versus dans la neige', sub: 'Suis les traces de tes rivaux' },
+  { mission: 23, arms: ['canon', 'sapeur'], hud: true, seconds: 12, caption: 'Itération 44 : le réticule', sub: 'Tes obus prêts, tes mines et la recharge, sous la souris' },
+  { mission: 54, arms: ['ricochet', 'canon'], hud: true, seconds: 12, caption: 'Un jeton par ennemi', sub: 'En haut, chaque tank restant à sa couleur' },
+  { mission: 26, arms: ['canon', 'fusee'], hud: true, seconds: 10, caption: 'L’équipe en bas', sub: 'Les vies, une plaquette par coéquipier, « Suis-moi ! » et les bulles' },
+  { options: 7, seconds: 7, caption: 'Au choix', sub: 'Le réticule se coupe dans les options' },
+  { mission: 10, arms: ['canon', 'ricochet'], hud: true, bossHp: 5, seconds: 11, caption: 'Les boss ont leur liseré doré', sub: 'Le Colosse et son escorte, comptés en haut' },
+  { mission: 57, arms: ['canon', 'sapeur'], hud: true, seconds: 10, caption: 'Et toujours la neige', sub: 'Le tableau de bord suit partout' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -73,6 +73,8 @@ try {
       else if (shot.rush) d.rush(shot.rush, shot.arms, shot.rushWeek === undefined ? undefined : 2940 + shot.rushWeek); // a stage (2940 % 6 = 0: rushWeek picks the duo)
       else if (shot.taupe) { if (!shot.keep) d.taupe(shot.taupe, 8, shot.arms); } // keep: the stage goes on behind
       else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm, shot.ranks);
+      d.hud?.(!!shot.hud); // « Le réticule » (iteration 44): the coop HUD and the reticle of the first hero over the demo
+      for (const s of shot.drys ?? []) setTimeout(() => d.dry?.(), s * 1000);
       if (shot.skills) d.skills(shot.skills[0] * 1000, shot.skills[1], shot.skills[2], shot.skills[3]); // the skill tree over the table (iteration 19)
       if (shot.role) setTimeout(() => d.role(true, 4000), 400); // after the title banner has gone
       if (shot.council) d.council(shot.council[0] * 1000, shot.council[1], shot.council[2], shot.council[3]);

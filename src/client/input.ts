@@ -24,6 +24,7 @@ export class Controls {
   private padDpad = -1;
   private lastPadAim: number | null = null;
   usingPad = false;
+  private overTarget = false;
   suspended = false; // a modal (feedback) is open
   padMenu = false; // the pause menu is open: the gamepad picks its entries (iteration 39)
   // touch
@@ -45,7 +46,8 @@ export class Controls {
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
-    target.addEventListener('mousemove', (e) => { this.mouse = { x: e.clientX, y: e.clientY }; this.usingPad = false; });
+    target.addEventListener('mousemove', (e) => { this.mouse = { x: e.clientX, y: e.clientY }; this.usingPad = false; this.overTarget = true; });
+    target.addEventListener('mouseleave', () => { this.overTarget = false; });
     target.addEventListener('mousedown', (e) => {
       this.mouse = { x: e.clientX, y: e.clientY };
       if (e.button === 0) this.fireLatch = true;
@@ -103,6 +105,11 @@ export class Controls {
     target.addEventListener('touchcancel', end);
     mineBtn.addEventListener('touchstart', (e) => { this.mineLatch = true; e.preventDefault(); e.stopPropagation(); }, { passive: false });
     mineBtn.addEventListener('click', () => { this.mineLatch = true; });
+  }
+
+  /** « Le réticule » (iteration 44): where the mouse points on the screen, while it is over the table and is the way we aim. */
+  pointer(): { x: number; y: number } | null {
+    return this.mouse && this.overTarget && !this.usingPad && !this.aimTouch && !this.touchMode ? this.mouse : null;
   }
 
   release() {

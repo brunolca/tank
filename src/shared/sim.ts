@@ -2190,7 +2190,8 @@ export class Game {
   }
   netMines(): NetMine[] {
     return this.mines.map((m): NetMine => {
-      if (m.seed === undefined) return [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0];
+      // « Le réticule » (iteration 44): a player's mine carries its owner (6th field, 5th left at 0) so the reticle can count them; older tabs ignore it
+      if (m.seed === undefined) return this.tankById(m.owner)?.kind === 'player' ? [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0, 0, m.owner] : [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0];
       // a seed (iteration 25): fifth field, its age in tenths of a second plus one (older clients ignore it)
       return [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > m.seed - SEED_BLINK ? 1 : 0, 1 + Math.round(m.t * 10)];
     });

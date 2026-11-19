@@ -1,7 +1,7 @@
 {
-  "iteration": 43,
+  "iteration": 44,
   "date": "2026-11-19",
-  "title": "Le nouvel accueil",
+  "title": "Le réticule",
   "journal": [
     {
       "iteration": 1,
@@ -523,6 +523,18 @@
         "Nouveau tableau « Options » : ton pseudo et ta couleur, le volume de la musique et celui des effets, une qualité « Économe » pour les petits ordinateurs, et les secousses de l’écran à couper si elles te gênent.",
         "Les options s’ouvrent aussi depuis le menu en pleine partie, et le ralenti des fins de manche s’y règle.",
         "Un clic sur le tampon rouge de l’itération ouvre le carnet de bord, et les planches font « toc » sous la souris."
+      ]
+    },
+    {
+      "iteration": 44,
+      "date": "2026-11-19",
+      "title": "Le réticule",
+      "notes": [
+        "Nouveau réticule sous la souris : un arc d’obus au-dessus de la croix (ceux qui sont prêts brillent), tes mines juste en dessous et un anneau qui se remplit pendant la recharge. Plus besoin de compter tes tirs !",
+        "Canon vide ? La gâchette fait « clic » et les obus du réticule tremblent. Un petit « tic » annonce le retour du premier obus.",
+        "Le tableau de bord se resserre : la mission et les ennemis en haut, chaque tank ennemi restant y a son petit jeton à sa couleur (les boss ont leur liseré doré).",
+        "L’équipe passe en bas de l’écran : les vies, une plaquette par coéquipier (barrée quand il est hors de combat), les galons, les bonus, et deux boutons ronds pour « Suis-moi ! » et les bulles.",
+        "À la manette et au tactile, le réticule se place quelques cases devant ton canon. Il se coupe dans les options si tu préfères la croix toute simple."
       ]
     }
   ]

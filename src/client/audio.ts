@@ -337,6 +337,18 @@ export const sfx = {
     if (!ctx) return;
     tone(ctx.currentTime, 0.04, 1200, 1000, 0.08, 'triangle');
   },
+  /** « Le réticule » (iteration 44): the trigger clicks on an empty barrel (all the shells are out). */
+  dry() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.025, 5200, 4, 0.12, 'bandpass');
+    tone(t + 0.012, 0.03, 2300, 1700, 0.05, 'square');
+  },
+  /** A shell is back in the barrel: a tiny tick (only when the barrel was empty). */
+  reload() {
+    if (!ctx) return;
+    tone(ctx.currentTime, 0.05, 900, 1350, 0.05, 'triangle');
+  },
   /** « Le nouvel accueil » (iteration 43): a soft knock of wood when the pointer lands on a plank. */
   toc() {
     if (!ctx) return;
