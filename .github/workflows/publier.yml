@@ -17,7 +17,7 @@ concurrency:
 jobs:
   publier:
     runs-on: ubuntu-24.04 # Playwright ne prend pas encore en charge ubuntu-latest (26.04)
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
