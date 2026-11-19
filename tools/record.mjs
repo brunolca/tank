@@ -7,11 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 57, arms: ['canon', 'sapeur'], seconds: 18, sandTraps: [9.5], caption: 'Nouveau : la neige', sub: 'On s’y enfonce… mais chaque tank y trace une piste où l’on file' },
-  { mission: 58, arms: ['ricochet', 'canon'], seconds: 15, caption: 'Traces dans la neige', sub: 'Les tanks blancs sont invisibles… pas leurs traces !' },
-  { manual: [7, ['terrain']], seconds: 7, caption: 'La neige au manuel', sub: 'Et dans l’atelier, pour dessiner tes missions d’hiver' },
-  { versus: [53], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 12, caption: 'En versus aussi', sub: 'Une arène enneigée : suis les traces de tes rivaux' },
-  { mission: 52, arms: ['canon', 'ricochet'], seconds: 9, hops: [2.5, 6.5], caption: 'Et toujours la Sauterelle', sub: 'Elle bondit par-dessus les murs' },
+  { mission: 57, arms: ['canon', 'sapeur'], seconds: 9, caption: 'Itération 43 : le nouvel accueil', sub: 'Le menu se range dans la boîte à jouets' },
+  { options: 9, seconds: 9, caption: 'Une pile de planches', sub: '« Jouer » lance la campagne d’un clic, les réglages ont leur tableau' },
+  { mission: 58, arms: ['ricochet', 'canon'], seconds: 15, caption: 'Jouer, tout de suite', sub: 'Un clic, et un coéquipier t’accompagne' },
+  { journal: 6, seconds: 6, caption: 'Le tampon rouge', sub: 'Un clic dessus ouvre le carnet de bord' },
+  { mission: 52, arms: ['canon', 'ricochet'], seconds: 11, hops: [2.5, 6.5], caption: 'Et toujours la Sauterelle', sub: 'Elle bondit par-dessus les murs' },
+  { versus: [53], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 11, caption: 'Versus dans la neige', sub: 'Suis les traces de tes rivaux' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -54,6 +55,7 @@ try {
       const d = window.__demo;
       if (shot.still) { /* the table of the previous shot goes on */ }
       else if (shot.home) d.home(shot.home * 1000);
+      else if (shot.options) d.options(shot.options * 1000); // « Le nouvel accueil » (iteration 43): the planks, then the options
       else if (shot.manual) d.manual(shot.manual[0] * 1000, shot.manual[1]); // « Le manuel » (iteration 39): the pages one after the other
       else if (shot.padTour) d.padTour(shot.padTour * 1000); // « Les menus à la manette » (iteration 39)
       else if (shot.journal) d.journal(shot.journal * 1000); // « La boîte à jouets » (iteration 38): the home screen and the journal

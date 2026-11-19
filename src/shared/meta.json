@@ -1,7 +1,7 @@
 {
-  "iteration": 42,
+  "iteration": 43,
   "date": "2026-11-19",
-  "title": "La neige",
+  "title": "Le nouvel accueil",
   "journal": [
     {
       "iteration": 1,
@@ -511,6 +511,18 @@
         "Une mine posée dans la neige disparaît dessous : les ennemis ne la voient pas venir. Et chaque explosion balaie la neige autour d’elle.",
         "Les tanks blancs restent invisibles, mais leurs sillons dans la neige se voient de loin : suis-les à la piste !",
         "Deux nouvelles missions, « Premières neiges » (57) et « Traces dans la neige » (58), une arène enneigée en versus, un pinceau « Neige » dans l’atelier et une case de plus au manuel."
+      ]
+    },
+    {
+      "iteration": 43,
+      "date": "2026-11-19",
+      "title": "Le nouvel accueil",
+      "notes": [
+        "L’accueil se range dans la boîte à jouets : une pile de planches de bois, et la grande planche orange « Jouer » qui dépasse.",
+        "« Jouer » lance la campagne d’un seul clic, avec un coéquipier piloté par l’ordinateur. Pour inviter des amis, c’est la planche « Entre amis ».",
+        "Nouveau tableau « Options » : ton pseudo et ta couleur, le volume de la musique et celui des effets, une qualité « Économe » pour les petits ordinateurs, et les secousses de l’écran à couper si elles te gênent.",
+        "Les options s’ouvrent aussi depuis le menu en pleine partie, et le ralenti des fins de manche s’y règle.",
+        "Un clic sur le tampon rouge de l’itération ouvre le carnet de bord, et les planches font « toc » sous la souris."
       ]
     }
   ]

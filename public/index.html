@@ -80,25 +80,19 @@
   <!-- HOME -->
   <section id="home" class="screen">
     <div class="card hero">
-      <span id="iteration-stamp" class="stamp"></span>
+      <button id="iteration-stamp" class="stamp" type="button"></button>
       <h1 class="logo">TANKS<span>!</span></h1>
-      <p class="tagline">Le classique de Wii Play, remis à neuf. Ricochets, mines et coop en ligne jusqu'à 4.</p>
-      <div class="profile"></div>
-      <button id="btn-create" class="btn primary big">Créer une salle</button>
-      <div class="join">
-        <input id="join-code" placeholder="CODE" maxlength="8" autocomplete="off" spellcheck="false" />
-        <button id="btn-join" class="btn">Rejoindre</button>
-      </div>
-      <button id="btn-atelier" class="btn">🛠️ L’atelier : dessine ta mission</button>
-      <button id="btn-journal" class="btn ghost">Carnet de bord : le jeu s’améliore tout seul</button>
-      <!-- « Le manuel » (iteration 39, a player's idea: no more drop-down menus): paper tabs open the manual on the right page -->
-      <nav class="shelf" aria-label="Le manuel">
-        <button data-tab="commandes"><i>🎮</i><b>Commandes</b></button>
-        <button data-tab="modes"><i>🗺️</i><b>Modes</b></button>
-        <button data-tab="caisses"><i>🎁</i><b>Caisses</b></button>
-        <button data-tab="bestiaire"><i>📖</i><b>Bestiaire</b><small id="bestiary-count"></small></button>
-        <button data-tab="terrain"><i>🧱</i><b>Terrain</b><small class="new">Nouveau</small></button>
+      <p class="tagline">Le classique de Wii Play, remis à neuf. Ricochets, mines et coop en ligne jusqu’à 4.</p>
+      <!-- « Le nouvel accueil » (iteration 43): a stack of wooden planks, « Jouer » sticks out and starts a game at once -->
+      <nav class="planks" aria-label="Menu principal">
+        <button id="btn-play" class="plank main"><b>Jouer</b><small>La campagne, tout de suite, avec un coéquipier</small></button>
+        <button id="btn-create" class="plank"><b>Entre amis</b><small>Crée une salle et partage son code</small></button>
+        <div class="plank join"><b>Rejoindre</b><input id="join-code" placeholder="CODE" maxlength="8" autocomplete="off" spellcheck="false" aria-label="Code de la salle" /><button id="btn-join" class="go" aria-label="Rejoindre la salle">›</button></div>
+        <button id="btn-atelier" class="plank"><b>L’atelier</b><small>Dessine ta propre mission</small></button>
+        <button id="btn-manual" class="plank"><b>Le manuel</b><small>Commandes, modes, caisses, bestiaire <em id="bestiary-count"></em></small></button>
+        <button id="btn-options" class="plank"><b>Options</b><small>Pseudo, couleur, son, affichage</small></button>
       </nav>
+      <button id="btn-journal" class="btn ghost">Carnet de bord : le jeu s’améliore tout seul</button>
     </div>
     <div class="side-cards">
     <div id="daily-card" class="card daily">
@@ -188,6 +182,7 @@
       <button id="menu-resume" class="btn primary">Reprendre</button>
       <button id="menu-lobby" class="btn">Retour au salon (tous)</button>
       <button id="menu-replay" class="btn">Ralenti des fins de manche : oui</button>
+      <button id="menu-options" class="btn">Options</button>
       <button id="menu-quit" class="btn ghost">Quitter la salle</button>
     </div>
   </div>
@@ -220,6 +215,30 @@
       </div>
       <div id="manual-page" class="manual-page" role="tabpanel" data-pad-scroll></div>
       <p class="manual-foot muted">‹ › ou <kbd>LB</kbd> <kbd>RB</kbd> pour tourner les pages · <kbd>Échap</kbd> pour refermer</p>
+    </div>
+  </section>
+
+  <!-- LES OPTIONS (iteration 43): profile, sound, display; filled in by main.ts -->
+  <section id="options" class="screen" hidden>
+    <div class="card options" role="dialog" aria-labelledby="options-title">
+      <div class="manual-head">
+        <div class="kicker">Options</div>
+        <h2 id="options-title">Réglages</h2>
+        <button id="btn-options-close" class="icon-btn" title="Fermer (Échap, B à la manette)" aria-label="Fermer">✕</button>
+      </div>
+      <div class="opt-body" data-pad-scroll>
+        <fieldset><legend>Ton tank</legend><div class="profile"></div></fieldset>
+        <fieldset><legend>Son</legend>
+          <label class="range"><span>Musique</span><input id="opt-music" type="range" min="0" max="100" step="5" /><output id="opt-music-v"></output></label>
+          <label class="range"><span>Effets</span><input id="opt-sfx" type="range" min="0" max="100" step="5" /><output id="opt-sfx-v"></output></label>
+        </fieldset>
+        <fieldset><legend>Affichage</legend>
+          <div class="opt-row"><span>Qualité</span><div id="opt-quality" class="segmented"><button data-v="auto">Belle</button><button data-v="eco">Économe</button></div></div>
+          <div class="opt-row"><span>Secousses de l’écran</span><div id="opt-shake" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
+          <div class="opt-row"><span>Ralenti des fins de manche</span><div id="opt-replay" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
+        </fieldset>
+      </div>
+      <button id="btn-options-ok" class="btn primary">C’est réglé</button>
     </div>
   </section>
 

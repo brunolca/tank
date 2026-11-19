@@ -14,7 +14,7 @@ import { Game, driveStep, slideDrive, type Tank } from '../shared/sim';
 import { BRANCHES, TRAINING_SECONDS, XP_PER_GALON, canBuy, cleanRanks, canBuyAny, freeGalons, trainSpec, type Progress, type Ranks } from '../shared/skills';
 import { renderTree } from './skills';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
-import { initAudio, isMusicOn, setMusicIntensity, setRain, setWind, sfx, startMusic, toggleMusic, windGust } from './audio';
+import { initAudio, isMusicOn, setMusicIntensity, setRain, setVolume, setWind, sfx, startMusic, toggleMusic, volumes, windGust } from './audio';
 import { gustAt, windAngle, windWords } from '../shared/wind';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
@@ -132,6 +132,8 @@ let lobbyPlayers: PlayerInfo[] = [];
 let lobbyMode: Mode = 'coop';
 let lobbyFrom = 1; // coop checkpoint picked by the host
 let wantMode: Mode | undefined; // « Relever le défi » (or « Lancer la ronde », iteration 28) from the home screen: switch the new room to that mode
+let quickPlay = false; // « Jouer » on the home screen (iteration 43): the new room starts the campaign at once, with an AI teammate
+let quickStarting = false; // … and the lobby stays hidden until the first level arrives
 let wantAtelier: AtelierMap | undefined; // « Jouer en ligne » from the workshop: hand the mission to the new room
 let lobbyAtelier: AtelierMap | undefined; // the workshop mission of the room (iteration 14)
 let phase: Phase = 'lobby';
@@ -181,6 +183,7 @@ function openSocket() {
 
 function leaveRoom() {
   wantOnline = false;
+  quickPlay = quickStarting = false;
   ws?.close();
   ws = undefined;
   online = false;
@@ -277,15 +280,24 @@ function onMessage(msg: ServerMsg) {
         if (msg.mode !== wantMode) send({ t: 'mode', mode: wantMode });
         wantMode = undefined;
       }
+      if (quickPlay && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
+        quickPlay = false;
+        quickStarting = true;
+        if (msg.mode !== 'coop') send({ t: 'mode', mode: 'coop' });
+        if (!msg.players.some((p) => isRivalId(p.id))) send({ t: 'rival', op: 'add' });
+        send({ t: 'start' });
+        break; // the level follows: no flash of the lobby
+      }
       if (wantAtelier && msg.players.find((p) => p.id === pid)?.host && msg.phase === 'lobby') {
         send({ t: 'atelier', ...wantAtelier });
         wantAtelier = undefined;
       }
       renderLobby();
-      if (msg.phase === 'lobby' && screen !== 'results' && screen !== 'atelier') { online = false; show('lobby'); hideBanner(); startAttract(); }
+      if (msg.phase === 'lobby' && screen !== 'results' && screen !== 'atelier' && !quickStarting) { online = false; show('lobby'); hideBanner(); startAttract(); }
       break;
     }
     case 'level':
+      quickStarting = false;
       startLevel(msg);
       break;
     case 'phase':
@@ -300,6 +312,7 @@ function onMessage(msg: ServerMsg) {
       break;
     case 'error':
       toast(msg.msg);
+      if (quickStarting) { quickStarting = false; show('lobby'); }
       break;
     case 'role':
       myRole = msg.mole;
@@ -2289,17 +2302,16 @@ function padSkip() {
   padSkipHeld = down;
 }
 
-{
-  const btn = $<HTMLButtonElement>('#menu-replay');
-  const label = () => (btn.textContent = `Ralenti des fins de manche : ${replayOn ? 'oui' : 'non'}`);
-  label();
-  btn.addEventListener('click', () => {
-    replayOn = !replayOn;
-    try { localStorage.setItem('tanks.ralenti', replayOn ? '1' : '0'); } catch {}
-    if (!replayOn) stopReel();
-    label();
-  });
+const replayLabel = () => ($('#menu-replay').textContent = `Ralenti des fins de manche : ${replayOn ? 'oui' : 'non'}`);
+/** The replay switch lives in the pause menu and in the options (iteration 43). */
+function setReplayOn(on: boolean) {
+  replayOn = on;
+  try { localStorage.setItem('tanks.ralenti', replayOn ? '1' : '0'); } catch {}
+  if (!replayOn) stopReel();
+  replayLabel();
 }
+replayLabel();
+$('#menu-replay').addEventListener('click', () => setReplayOn(!replayOn));
 
 // ------------------------------------------------------------------ main loop
 
@@ -2348,13 +2360,20 @@ function unlockAudio() {
 addEventListener('pointerdown', unlockAudio, { once: false });
 addEventListener('keydown', unlockAudio, { once: false });
 
-async function createRoom(btn: HTMLButtonElement, mode?: Mode) {
+async function createRoom(btn: HTMLButtonElement, mode?: Mode, quick = false) {
   sfx.click();
   btn.disabled = true;
   try {
     const r = await fetch('/api/new').then((r) => r.json() as Promise<{ room: string }>);
     wantMode = mode;
+    quickPlay = quick;
     connect(r.room);
+    if (quick) {
+      // the campaign starts by itself; if it does not (an error, a slow server), the lobby shows up after a moment
+      btn.classList.add('busy');
+      setTimeout(() => { btn.classList.remove('busy'); if (roomCode && screen === 'home') { quickPlay = quickStarting = false; show('lobby'); } }, 4000);
+      return;
+    }
     show('lobby');
   } catch {
     toast('Serveur injoignable');
@@ -2363,6 +2382,7 @@ async function createRoom(btn: HTMLButtonElement, mode?: Mode) {
   }
 }
 $('#btn-create').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-create')));
+$('#btn-play').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-play'), undefined, true));
 $('#btn-daily').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-daily'), 'daily'));
 $('#btn-rush').addEventListener('click', () => createRoom($<HTMLButtonElement>('#btn-rush'), 'rush'));
 
@@ -2412,8 +2432,9 @@ $('#btn-menu').addEventListener('click', () => toggleMenu());
 $('#menu-resume').addEventListener('click', () => toggleMenu(false));
 $('#menu-lobby').addEventListener('click', () => { send({ t: 'stop' }); toggleMenu(false); });
 $('#menu-quit').addEventListener('click', () => leaveRoom());
+$('#menu-options').addEventListener('click', () => openOptions());
 addEventListener('keydown', (e) => {
-  if (e.code === 'Escape') { if (treeOpen) { treeReady(); return; } toggleMenu(); }
+  if (e.code === 'Escape') { if (closeOptions()) return; if (treeOpen) { treeReady(); return; } toggleMenu(); }
   if (e.code === 'KeyM' && (e.target as HTMLElement)?.tagName !== 'INPUT') updateMusicBtn(toggleMusic());
 });
 function updateMusicBtn(on = isMusicOn()) {
@@ -2673,7 +2694,7 @@ function openManual(tab: ManualTab = manualTab) {
 function closeManual() {
   if ($('#manual').hidden) return false;
   $('#manual').hidden = true;
-  ($(`.shelf button[data-tab="${manualTab}"]`) as HTMLButtonElement | null)?.focus({ preventScroll: true });
+  if (screen === 'home') $<HTMLButtonElement>('#btn-manual').focus({ preventScroll: true });
   return true;
 }
 function turnManual(dir: number) {
@@ -2682,7 +2703,7 @@ function turnManual(dir: number) {
   if ((document.activeElement as HTMLElement | null)?.closest('#manual-tabs')) $<HTMLButtonElement>(`#manual-tabs button[data-tab="${manualTab}"]`).focus({ preventScroll: true });
   sfx.click();
 }
-document.querySelectorAll<HTMLButtonElement>('.shelf button').forEach((b) => b.addEventListener('click', () => { sfx.click(); openManual(b.dataset.tab as ManualTab); }));
+$('#btn-manual').addEventListener('click', () => { sfx.click(); openManual(); });
 document.querySelectorAll<HTMLButtonElement>('#manual-tabs button').forEach((b) => b.addEventListener('click', () => { sfx.click(); renderManual(b.dataset.tab as ManualTab); }));
 $('#btn-manual-close').addEventListener('click', () => { sfx.click(); closeManual(); });
 $('#manual').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeManual(); }); // a tap beside the binder closes it
@@ -2691,6 +2712,86 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { closeManual(); e.stopImmediatePropagation(); }
   else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { turnManual(e.code === 'ArrowRight' ? 1 : -1); e.preventDefault(); }
 }, { capture: true });
+// ------------------------------------------------------------------ « Les options » (iteration 43)
+// A real settings board: the profile moves here from the home screen, with the volumes, the quality of the picture, the shake and the replays.
+const readPref = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+const writePref = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} };
+let quality: 'auto' | 'eco' = readPref('tanks.quality') === 'eco' ? 'eco' : 'auto';
+let shakeOn = readPref('tanks.shake') !== '0';
+renderer.setQuality(quality);
+renderer.shakeScale = shakeOn ? 1 : 0;
+const pickSeg = (id: string, v: string) => document.querySelectorAll<HTMLButtonElement>(`#${id} button`).forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+function renderOptions() {
+  for (const k of ['music', 'sfx'] as const) {
+    const v = Math.round(volumes()[k] * 100);
+    $<HTMLInputElement>(`#opt-${k}`).value = String(v);
+    $(`#opt-${k}-v`).textContent = `${v} %`;
+  }
+  pickSeg('opt-quality', quality);
+  pickSeg('opt-shake', shakeOn ? '1' : '0');
+  pickSeg('opt-replay', replayOn ? '1' : '0');
+}
+function openOptions() {
+  sfx.click();
+  renderOptions();
+  $('#options').hidden = false;
+  if (document.body.classList.contains('pad-nav')) $<HTMLInputElement>('#options .profile input').focus({ preventScroll: true });
+}
+function closeOptions() {
+  if ($('#options').hidden) return false;
+  $('#options').hidden = true;
+  if (screen === 'home') $<HTMLButtonElement>('#btn-options').focus({ preventScroll: true });
+  return true;
+}
+for (const k of ['music', 'sfx'] as const) {
+  const input = $<HTMLInputElement>(`#opt-${k}`);
+  input.addEventListener('input', () => {
+    const v = Number(input.value) / 100;
+    setVolume(k, v);
+    if (k === 'music' && v > 0 && !isMusicOn()) updateMusicBtn(toggleMusic()); // raising the music switches it back on
+    $(`#opt-${k}-v`).textContent = `${input.value} %`;
+  });
+  if (k === 'sfx') input.addEventListener('change', () => sfx.click()); // hear the new volume
+}
+$('#opt-quality').addEventListener('click', (e) => {
+  const v = (e.target as HTMLElement).closest('button')?.dataset.v;
+  if (v !== 'auto' && v !== 'eco') return;
+  quality = v;
+  writePref('tanks.quality', v);
+  renderer.setQuality(v);
+  sfx.click();
+  renderOptions();
+});
+$('#opt-shake').addEventListener('click', (e) => {
+  const v = (e.target as HTMLElement).closest('button')?.dataset.v;
+  if (!v) return;
+  shakeOn = v === '1';
+  writePref('tanks.shake', v);
+  renderer.shakeScale = shakeOn ? 1 : 0;
+  sfx.click();
+  renderOptions();
+});
+$('#opt-replay').addEventListener('click', (e) => {
+  const v = (e.target as HTMLElement).closest('button')?.dataset.v;
+  if (!v) return;
+  setReplayOn(v === '1');
+  sfx.click();
+  renderOptions();
+});
+$('#btn-options').addEventListener('click', openOptions);
+$('#btn-options-close').addEventListener('click', () => { sfx.click(); closeOptions(); });
+$('#btn-options-ok').addEventListener('click', () => { sfx.click(); closeOptions(); });
+$('#options').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeOptions(); });
+// « Le nouvel accueil » (iteration 43): the planks knock softly under the pointer
+{
+  let lastToc = 0;
+  document.querySelectorAll<HTMLElement>('.planks .plank').forEach((b) => b.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'mouse' || performance.now() - lastToc < 70) return;
+    lastToc = performance.now();
+    sfx.toc();
+  }));
+}
+
 // the scenes of the videos on the home screen (iteration 39): a new scene cancels the timers of the one before,
 // so a late « back to the table » of the previous scene never hides the next one on a slow machine
 let sceneTimers: ReturnType<typeof setTimeout>[] = [];
@@ -2701,12 +2802,14 @@ function clearScene() {
   sceneTimers = [];
   sceneRoll();
   $('#manual').hidden = true;
+  $('#options').hidden = true;
   document.body.classList.remove('pad-nav', 'caption-side');
 }
 // « Les menus à la manette » (iteration 39): which panel the gamepad drives, and what B does there
 const navStep = padNav({
   root() {
     if (!$('#feedback').hidden) return $('#feedback');
+    if (!$('#options').hidden) return $('#options');
     if (!$('#manual').hidden) return $('#manual');
     if (!$('#journal').hidden) return $('#journal');
     if (treeOpen || reel) return null; // the skill tree and the replay have their own buttons
@@ -2715,6 +2818,7 @@ const navStep = padNav({
   },
   back() {
     if (!$('#feedback').hidden) { $<HTMLButtonElement>('#fb-cancel').click(); return true; }
+    if (closeOptions()) return true;
     if (closeManual()) return true;
     if (!$('#journal').hidden) { $('#journal').hidden = true; return true; }
     if (screen === 'game' && !$('#menu').hidden) { toggleMenu(false); return true; }
@@ -2734,7 +2838,8 @@ function renderBestiary() {
 }
 renderBestiary();
 $('#iteration-stamp').textContent = `Itération ${META.iteration}`;
-$('#iteration-stamp').title = META.title;
+$('#iteration-stamp').title = `${META.title} : ouvrir le carnet de bord`;
+$('#iteration-stamp').addEventListener('click', () => $<HTMLButtonElement>('#btn-journal').click());
 $('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; sfx.click(); });
 $('#btn-journal-close').addEventListener('click', () => ($('#journal').hidden = true));
 // Échap closes the journal too (iteration 39)
@@ -3106,9 +3211,10 @@ if (params.has('demo')) {
       show('home');
       document.body.classList.add('pad-nav', 'caption-side'); // the caption moves aside: the shelf of the home screen stays in sight
       const steps: (() => void)[] = [
+        () => $('#btn-play').focus(),
         () => $('#btn-create').focus(),
         () => $('#btn-atelier').focus(),
-        ...(['commandes', 'modes', 'caisses', 'bestiaire'] as const).map((t) => () => $(`.shelf button[data-tab="${t}"]`).focus()),
+        () => $('#btn-manual').focus(),
         () => { sfx.click(); openManual('bestiaire'); },
         () => turnManual(-1),
         () => turnManual(-1),
@@ -3142,6 +3248,17 @@ if (params.has('demo')) {
       show('home');
       setTimeout(() => { renderJournal(); $('#journal').hidden = false; }, Math.min(2500, ms / 2));
       setTimeout(() => { $('#journal').hidden = true; show('game'); $('#hud').hidden = true; }, ms);
+    },
+    /** « Le nouvel accueil » (iteration 43): the home screen, the pointer runs down the planks, then the options board opens. */
+    options(ms = 8000) {
+      clearScene();
+      stopReel(); // the replay of the shot before must not run on behind the home screen
+      show('home');
+      document.body.classList.add('caption-side');
+      const planks = ['#btn-play', '#btn-create', '#btn-atelier', '#btn-manual', '#btn-options'];
+      planks.forEach((id, i) => later(() => { document.querySelectorAll('.plank.hover').forEach((e) => e.classList.remove('hover')); $(id).classList.add('hover'); sfx.toc(); }, 500 + i * 450));
+      later(() => { document.querySelectorAll('.plank.hover').forEach((e) => e.classList.remove('hover')); openOptions(); }, 500 + planks.length * 450 + 200);
+      later(() => { $('#options').hidden = true; document.body.classList.remove('caption-side'); show('game'); $('#hud').hidden = true; }, ms - 200);
     },
     /** Land a hit on the boss (to show its health bar and its anger on camera). */
     hitBoss() {

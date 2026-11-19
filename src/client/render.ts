@@ -1175,6 +1175,8 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   private camTarget = new THREE.Vector3(W / 2, 0, H / 2 + 0.4);
   private shake = 0;
+  /** « Les options » (iteration 43): 0 turns the screen shake off, for players who feel sick with it. */
+  shakeScale = 1;
   private floorCanvas!: HTMLCanvasElement;
   private floorCtx!: CanvasRenderingContext2D;
   private floorTex!: THREE.CanvasTexture;
@@ -1328,6 +1330,14 @@ export class Renderer {
   private baseHemi = 1.1;
   private baseSun = 2.4;
   time = 0;
+
+  /** « Les options » (iteration 43): « eco » draws fewer pixels and no soft shadows, for small laptops and old phones. */
+  setQuality(q: 'auto' | 'eco') {
+    const eco = q === 'eco';
+    this.renderer.setPixelRatio(eco ? 1 : Math.min(devicePixelRatio, 2));
+    const type = eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+    if (this.renderer.shadowMap.type !== type) { this.renderer.shadowMap.type = type; this.renderer.shadowMap.needsUpdate = true; }
+  }
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
@@ -4008,9 +4018,9 @@ export class Renderer {
       this.camLeaned = false;
       this.camera.lookAt(this.camTarget);
     }
-    if (this.shake > 0.005) {
-      this.camera.position.x += (Math.random() - 0.5) * this.shake;
-      this.camera.position.z += (Math.random() - 0.5) * this.shake;
+    if (this.shake * this.shakeScale > 0.005) {
+      this.camera.position.x += (Math.random() - 0.5) * this.shake * this.shakeScale;
+      this.camera.position.z += (Math.random() - 0.5) * this.shake * this.shakeScale;
     }
     this.renderer.render(this.scene, this.camera);
   }

@@ -6,6 +6,11 @@ let sfxBus: GainNode;
 let musicBus: GainNode;
 let noiseBuf: AudioBuffer;
 let musicOn = localStorage.getItem('tanks.music') !== '0';
+// « Les options » (iteration 43): a volume for the music and one for the sounds, 0 to 1
+const readVol = (k: string, d: number) => { try { const v = Number(localStorage.getItem(k) ?? d); return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d; } catch { return d; } };
+let musicVol = readVol('tanks.vol.music', 1);
+let sfxVol = readVol('tanks.vol.sfx', 1);
+const musicGain = () => (musicOn ? 0.22 * musicVol : 0);
 
 export function initAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -15,9 +20,10 @@ export function initAudio() {
   const comp = ctx.createDynamicsCompressor();
   master.connect(comp).connect(ctx.destination);
   sfxBus = ctx.createGain();
+  sfxBus.gain.value = sfxVol;
   sfxBus.connect(master);
   musicBus = ctx.createGain();
-  musicBus.gain.value = musicOn ? 0.22 : 0;
+  musicBus.gain.value = musicGain();
   musicBus.connect(master);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
@@ -331,6 +337,13 @@ export const sfx = {
     if (!ctx) return;
     tone(ctx.currentTime, 0.04, 1200, 1000, 0.08, 'triangle');
   },
+  /** « Le nouvel accueil » (iteration 43): a soft knock of wood when the pointer lands on a plank. */
+  toc() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.05, 420, 300, 0.05, 'triangle');
+    noise(t, 0.03, 1800, 3, 0.03, 'bandpass');
+  },
   /** Storm: a strike is announced (a static crackle that builds up). */
   zap() {
     if (!ctx) return;
@@ -539,10 +552,19 @@ export function stopMusic() {
 export function toggleMusic() {
   musicOn = !musicOn;
   localStorage.setItem('tanks.music', musicOn ? '1' : '0');
-  if (ctx) musicBus.gain.setTargetAtTime(musicOn ? 0.22 : 0, ctx.currentTime, 0.1);
+  if (ctx) musicBus.gain.setTargetAtTime(musicGain(), ctx.currentTime, 0.1);
   return musicOn;
 }
 export const isMusicOn = () => musicOn;
+export const volumes = () => ({ music: musicVol, sfx: sfxVol });
+export function setVolume(which: 'music' | 'sfx', v: number) {
+  v = Math.max(0, Math.min(1, v));
+  if (which === 'music') musicVol = v; else sfxVol = v;
+  try { localStorage.setItem(`tanks.vol.${which}`, String(v)); } catch {}
+  if (!ctx) return;
+  if (which === 'music') musicBus.gain.setTargetAtTime(musicGain(), ctx.currentTime, 0.05);
+  else sfxBus.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+}
 
 function scheduleMusic() {
   if (!ctx) return;
