@@ -187,8 +187,9 @@ try {
   if (!(await rush.locator('#rush-order li .rush-chip').count())) fail('la carte de la ronde des boss ne montre pas l’ordre de la semaine');
   await rush.click('#btn-rush');
   await rush.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
-  await sleep(1500);
-  if (!(await rush.locator('#mode-select button[data-mode="rush"].on').count())) fail('« Lancer la ronde » ne passe pas la salle en mode ronde des boss');
+  // the mode switch is a server round trip: give the slow CI runner time
+  const rushOn = await rush.locator('#mode-select button[data-mode="rush"].on').waitFor({ timeout: 15000 }).then(() => true, () => false);
+  if (!rushOn) fail('« Lancer la ronde » ne passe pas la salle en mode ronde des boss');
   await rush.click('#btn-start');
   await sleep(5000); // intro
   const ru = await state(rush);
