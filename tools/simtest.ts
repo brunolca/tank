@@ -5,7 +5,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
+import { SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -2486,6 +2486,100 @@ console.log('total', Date.now() - t0, 'ms');
   const per = spent / Math.max(1, steps);
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick dans les dunes`);
   if (process.exitCode !== 1) console.log(`sable OK (missions des sables : ${dunes.slice(0, 8).join(', ')}…, ${cleared}/4 gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « La neige » (iteration 42): deep snow slows the tanks down, their tracks pack it into fast trails that the snowfall
+// covers again, mines laid in it are buried, blasts blow it away; the snapshots carry the trails
+{
+  const fail = (m: string) => { console.error('NEIGE:', m); process.exitCode = 1; };
+  const open = new Array(W * H).fill(Tile.Empty);
+  const snowy = () => { const b = new Array(W * H).fill(0); for (let y = 0; y < H; y++) for (let x = 6; x < 16; x++) b[y * W + x] = SNOW; return b; };
+  const run = (belts?: number[], from = 7.5, n = 30) => {
+    const g = new Game(open, belts);
+    const t = g.addTank('player', 1, from, 8.5, 0x3d7bff, 'p1', 'P');
+    g.frozen = false;
+    for (let i = 0; i < n; i++) g.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+    return { d: t.x - from, g };
+  };
+  const bare = run().d, deep = run(snowy());
+  // ploughing through deep snow: the tank keeps SNOW_SLOW of its speed
+  if (Math.abs(deep.d / bare - SNOW_SLOW) > 0.03) fail(`vitesse dans la neige : ${(deep.d / bare).toFixed(2)} de la normale`);
+  // a trail: the cells it drove through are packed
+  const c0 = 8 * W + 7; // the cell it started in, left behind
+  if (deep.g.belts[c0] !== PACKED) fail('la neige devrait être tassée là où le tank est passé');
+  if (deep.g.belts[3 * W + 8] !== SNOW) fail('la neige loin du tank devrait rester fraîche');
+  // on a packed trail, full speed
+  const b2 = snowy();
+  for (let x = 6; x < 16; x++) b2[8 * W + x] = PACKED;
+  const g3 = new Game(open, b2);
+  for (let x = 6; x < 16; x++) g3.packed.set(8 * W + x, SNOW_REFILL);
+  const t3 = g3.addTank('player', 1, 7.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g3.frozen = false;
+  for (let i = 0; i < 30; i++) g3.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+  if (Math.abs((t3.x - 7.5) - bare) > 1e-6) fail(`sur une piste tassée, pleine vitesse attendue (${(t3.x - 7.5).toFixed(3)} contre ${bare.toFixed(3)})`);
+  // the prediction agrees with the server on deep snow and on a trail
+  if (Math.abs(floorSpeed(snowy(), 7.5, 8.5) - SNOW_SLOW) > 1e-9 || floorSpeed(b2, 7.5, 8.5) !== 1) fail('floorSpeed ne connaît pas la neige');
+  // the snowfall covers the trail again
+  const g4 = run(snowy(), 7.5, 10).g;
+  for (let i = 0; i < Math.ceil(SNOW_REFILL / DT) + 5; i++) { g4.tanks[0].alive = false; g4.step(new Map()); }
+  if (g4.belts.includes(PACKED) || g4.packed.size) fail('la neige aurait dû recouvrir la piste');
+  // the level message keeps the snow as it was drawn, the snapshots carry the trails
+  const g5 = run(snowy(), 7.5, 10).g;
+  if (g5.floorBelts()?.includes(PACKED)) fail('le message de niveau ne doit pas contenir de pistes');
+  const N = g5.netSnow()!;
+  if (N.length !== Math.ceil(W * H / 4)) fail(`taille du masque de neige : ${N.length}`);
+  const bit = (c: number) => (parseInt(N[c >> 2], 16) >> (c & 3)) & 1;
+  for (let c = 0; c < W * H; c++) if (bit(c) !== (g5.belts[c] === PACKED ? 1 : 0)) { fail(`masque de neige faux à la case ${c}`); break; }
+  if (new Game(open).netSnow() !== undefined) fail('pas de masque de neige sans neige');
+  // a mine in the snow is buried (even on a trail), the blast blows the snow away and is told as such
+  const g = new Game(open, snowy());
+  const me = g.addTank('player', 1, 3.5, 3.5, 0x3d7bff, 'p1', 'P');
+  const foe = g.addTank('ash', 99, 14.5, 8.5, 0);
+  g.frozen = false;
+  const mine = { id: 777, owner: me.id, team: me.team, x: 10.5, y: 8.5, t: 1, fuse: -1, dead: false };
+  g.mines.push(mine);
+  if (!g.hiddenMine(mine, foe)) fail('une mine dans la neige devrait échapper à l’ennemi');
+  foe.ai = undefined;
+  let ko: unknown[] | undefined;
+  for (let i = 0; i < 240 && !ko; i++) {
+    g.driveTank(foe, -1, 0, DT);
+    g.step(new Map());
+    ko = g.events.find((e) => e[0] === 'ko' && e[1] === foe.id);
+    g.events = [];
+  }
+  if (!ko) fail('l’ennemi aurait dû sauter sur la mine cachée sous la neige');
+  else if (ko[3] !== KO_SNOW) fail(`la mine sous la neige devrait être racontée comme telle (${JSON.stringify(ko)})`);
+  if (g.belts[8 * W + 11] !== PACKED || g.belts[7 * W + 10] !== PACKED) fail('le souffle de la mine devrait balayer la neige');
+  // the missions and the workshop
+  for (const n of [57, 58]) if (!getMission(n).belts?.includes(SNOW)) fail(`la mission ${n} devrait être enneigée`);
+  if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).belts?.includes(SNOW)).some(Boolean)) fail('aucune arène de versus enneigée');
+  for (let d = 0; d < 30; d++) for (let st = 0; st < DAILY_STAGES; st++) if (dailyLevel(20000 + d, st).belts?.includes(SNOW)) fail('de la neige dans le défi du jour');
+  const map = blankMap();
+  map[8] = map[8].slice(0, 8) + '&&&&' + map[8].slice(12);
+  map[3] = map[3].slice(0, 15) + 'a' + map[3].slice(16);
+  if (checkAtelier(map)) fail(`atelier : neige refusée (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Flocon', map }));
+  if (back?.map[8].slice(8, 12) !== '&&&&') fail('atelier : la neige se perd dans le code');
+  if (!atelierLevel({ name: 'Flocon', map }).belts?.includes(SNOW)) fail('atelier : pas de neige dans la mission jouée');
+  // AI duos play the snow missions, cheaply
+  let spent = 0, steps = 0, cleared = 0;
+  for (const n of [57, 58]) {
+    const lvl = getMission(n);
+    const s2 = new Game(lvl.tiles, lvl.belts);
+    for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 90 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick dans la neige`);
+  if (process.exitCode !== 1) console.log(`neige OK (${cleared}/2 missions gagnées par l’IA, ${per.toFixed(3)} ms/tick)`);
 }
 
 // « La chasse aux caisses » (iteration 37): a crate scores, a destroyed tank drops one and comes back, the golden crate,

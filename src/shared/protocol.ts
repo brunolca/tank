@@ -185,7 +185,7 @@ export type ServerMsg =
       left?: number; // « Drapeaux »: seconds left in the round (the clock runs on each side while it is played)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[] } // H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string } // N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

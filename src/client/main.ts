@@ -1,4 +1,4 @@
-import { type TankKind, BULLET_SPEED, GATE_COLORS, gateUp, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, BULLET_SPEED, GATE_COLORS, gateUp, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -216,6 +216,8 @@ let seq = 0;
 let pred = { x: 0, y: 0, body: 0, vx: 0, vy: 0 }; // vx, vy: the speed we slide at on the ice (iteration 21)
 let iceMap = false; // some floor cells of the current level are ice (or a Givré may frost them, iteration 31)
 let mapIce = false; // the map itself has ice (the « Glace » label and hint)
+/** « La neige » (iteration 42): the snow cells of the current level (deep or packed, as the snapshots say). */
+let snowCells: number[] = [];
 /** « Le Givré » (iteration 31): frost cells currently laid over the floor layer (they are ICE in `belts` while they last). */
 let frostCells: number[] = [];
 let offset = { x: 0, y: 0 };
@@ -318,6 +320,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   tiles = msg.tiles.slice();
   belts = Array.isArray(msg.belts) && msg.belts.length === W * H ? msg.belts.map((b) => b | 0) : [];
   mapIce = belts.includes(ICE);
+  snowCells = belts.flatMap((b, i) => (b === SNOW || b === PACKED ? [i] : []));
   frostCells = [];
   const frosty = msg.tanks.some((t) => t.kind === 'frost'); // its frost turns the table into an ice table, as on the server
   if (frosty && !belts.length) belts = new Array(W * H).fill(0);
@@ -382,7 +385,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(SAND) ? ' · Sable' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(SAND) ? ' · Sable' : ''}${snowCells.length ? ' · Neige' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
   const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${mapIce ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
@@ -434,6 +437,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
+  else if (snowCells.length) setTimeout(() => toast('Neige : on s’y enfonce et on roule moins vite… mais chaque tank y trace une piste tassée, où l’on file à pleine vitesse jusqu’à ce que la neige la recouvre. Une mine posée dans la neige disparaît dessous, et même les tanks blancs y laissent des traces !', 6000), 2200);
   else if (belts.includes(SAND)) setTimeout(() => toast('Sable : on y roule moins vite. Une mine posée dans le sable s’enfouit : les ennemis ne la voient pas venir !', 4600), 2200);
   else if (mapIce) setTimeout(() => toast('Glace : ton tank glisse et garde son élan. Freine tôt, braque en avance… et profite des glissades pour esquiver !', 4400), 2200);
   else if (belts.some(Boolean)) setTimeout(() => toast('Tapis roulants : ils emportent les tanks, les mines et les caisses. Remonter le courant, ça ralentit !', 4200), 2200);
@@ -537,6 +541,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
   applyFrost(msg.I);
+  applySnow(msg.N);
   if (Array.isArray(msg.H)) {
     const key = msg.H.join(',');
     if (key !== huntKey) {
@@ -584,6 +589,22 @@ function applyFrost(I: unknown) {
   }
   if (frostCells.length) iceMap = true;
   renderer.setFrost(shown);
+}
+
+/**
+ * « La neige » (iteration 42): the packed trails of the latest snapshot (one bit per cell, in hexadecimal) over the
+ * floor layer, for the prediction (deep snow slows us down) and the drawing (the snowfall covers the old trails).
+ */
+function applySnow(N: unknown) {
+  if (!snowCells.length || typeof N !== 'string' || belts.length !== W * H) return;
+  const packed: number[] = [];
+  for (const c of snowCells) {
+    const d = parseInt(N[c >> 2] ?? '0', 16) || 0;
+    const on = (d >> (c & 3)) & 1;
+    belts[c] = on ? PACKED : SNOW;
+    if (on) packed.push(c);
+  }
+  renderer.setPacked(packed);
 }
 
 function predictStep(x: number, y: number, body: number, vx: number, vy: number, mx: number, my: number, s?: Snap): [number, number, number, number, number] {
@@ -2108,6 +2129,7 @@ function attractFrame(dt: number) {
   });
   renderer.syncTanks(tanks, -1, dt);
   renderer.setFrost(g.frost.size || renderer.frostShown ? [...g.frost] : undefined); // the Givré's frost (iteration 31)
+  if (g.snowy) renderer.setPacked(g.packed.keys()); // the trails in the snow (iteration 42)
   lastTanks = tanks;
   updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
   const bullets: RBullet[] = g.bullets.map((b) => {
@@ -2597,8 +2619,9 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['>', 'Tapis roulant', 'Il emporte les tanks, les mines et les caisses dans le sens de la flèche.'],
   ['~', 'Glace', 'On y glisse : pour tourner, il faut s’y prendre tôt.'],
   [',', 'Sable', 'On y roule moins vite, et une mine posée dans le sable s’y enfouit.'],
-  ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…', true],
-  ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.', true],
+  ['&', 'Neige', 'On s’y enfonce et on y roule moins vite, mais chaque tank y trace une piste tassée, rapide, que la neige finit par recouvrir. Une mine posée dans la neige disparaît dessous, et les tanks blancs y laissent des traces.', true],
+  ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…'],
+  ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.'],
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
 const WEATHER: [string, string, string][] = [
@@ -3181,13 +3204,13 @@ if (params.has('demo')) {
     /** Watch the bridges for the next few seconds: the first enemy to cross one falls (see bridgeTrap). */
     bridgeTrap(seconds = 8) { if (attract) bridgeTrapUntil = attract.tick + Math.round(seconds / DT); return !!attract; },
     /**
-     * « Les dunes » (iteration 36): a hero's mine is buried in the sand just ahead of a moving enemy, on its way: it does
+     * « Les dunes » (iteration 36), and « La neige » (iteration 42): a hero's mine is buried in the sand (or the snow) just ahead of a moving enemy, on its way: it does
      * not see it and drives into the trap (its fall plays again in slow motion). Returns how far ahead it lies (0: none).
      */
     sandTrap() {
       const g = attract;
       if (!g) return 0;
-      const sandAt = (c: number) => c >= 0 && c < W * H && g.belts[c] === SAND && g.tiles[c] === Tile.Empty;
+      const sandAt = (c: number) => c >= 0 && c < W * H && (g.belts[c] === SAND || g.belts[c] === SNOW || g.belts[c] === PACKED) && g.tiles[c] === Tile.Empty; // the snow buries mines too (iteration 42)
       const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
       const foes = g.tanks.filter((t) => t.alive && t.team !== heroes[0]?.team && !isBossKind(t.kind) && t.spec.speed > 0);
       if (!heroes.length || !foes.length) return 0;

@@ -327,6 +327,18 @@ export const SAND_SLOW = 0.6;
 /** A buried mine (laid on sand) stays hidden from the foes' AI until its fuse is lit, unless they come this close. */
 export const SAND_SPOT = 0.9;
 
+// ------------------------------------------------------------------ snow (iteration 42)
+/** Map character of a snow cell. Like the sand, snow lives in the floor layer, the cell itself stays floor. */
+export const SNOW_CHAR = '&';
+/** Floor-layer code of fresh, deep snow: tanks plough through it slowly, mines laid in it are buried. */
+export const SNOW = 8;
+/** Floor-layer code of snow a tank has packed down: a trail at full speed, until the snowfall covers it again. */
+export const PACKED = 9;
+/** How much of its speed a tank keeps in deep snow. */
+export const SNOW_SLOW = 0.62;
+/** Seconds before a packed trail is covered again by the snowfall (if no tank drives on it meanwhile). */
+export const SNOW_REFILL = 22;
+
 // ------------------------------------------------------------------ night
 /** At night the AI only makes out foes this close (tiles), unless they just gave themselves away by firing. */
 export const NIGHT_SIGHT = 4.5;
@@ -466,6 +478,7 @@ export const KO_DRILL = 3;
 export const KO_FALL = 4; // « Les ponts » (iteration 33): the bridge gave way under it
 export const KO_LOB = 5; // « Le Mortier » (iteration 34): a cannonball fell on it
 export const KO_SAND = 6; // « Les dunes » (iteration 36): a mine buried in the sand
+export const KO_SNOW = 7; // « La neige » (iteration 42): a mine buried in the snow
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateUp, isGate } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
@@ -1203,6 +1203,20 @@ export class Renderer {
   private scratchDirty = false;
   private scratchFade = 0;
   private scratchTimer = 0;
+  /**
+   * « La neige » (iteration 42): a layer of snow over the floor, on a canvas of its own. The tanks plough trails into it
+   * (packed snow, a little grey-blue), the blasts blow it away, and the snowfall slowly covers it all again.
+   */
+  private snowCells = new Set<number>();
+  private snowCanvas?: HTMLCanvasElement;
+  private snowCtx?: CanvasRenderingContext2D;
+  private snowBase?: HTMLCanvasElement;
+  private snowTex?: THREE.CanvasTexture;
+  private snowMesh?: THREE.Mesh;
+  private snowDirty = false;
+  private snowTimer = 0;
+  private snowFall = 0;
+  private snowPacked = new Set<number>();
   /** « Les dunes » (iteration 36): the sand cells of the table, painted into the floor texture. */
   private sandCells = new Set<number>();
   /** « Le Givré » (iteration 31): its frost, slabs of ice laid and melted as the snapshots say. */
@@ -1710,6 +1724,7 @@ export class Renderer {
     this.paintFloor(tiles);
     this.addBelts(belts);
     this.addIce(tiles, belts);
+    this.addSnow(tiles, belts);
     this.setFrost(undefined);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -1762,7 +1777,7 @@ export class Renderer {
     if (this.iceMesh) { this.levelGroup.remove(this.iceMesh); this.iceMesh.dispose(); this.iceMesh = undefined; }
     this.iceCells.clear();
     belts.forEach((b, i) => { if (b === ICE && tiles[i] === Tile.Empty) this.iceCells.add(i); });
-    if (this.snow) this.snow.visible = this.iceCells.size > 0;
+    this.flakes(this.iceCells.size > 0 || this.snowCells.size > 0);
     if (!this.iceCells.size) return;
     const cells = [...this.iceCells];
     const mesh = new THREE.InstancedMesh(this.iceGeo, this.iceMat, cells.length);
@@ -1775,6 +1790,11 @@ export class Renderer {
     mesh.receiveShadow = true;
     this.levelGroup.add(mesh);
     this.iceMesh = mesh;
+  }
+
+  /** Snowflakes fall over the table while it has ice (iteration 21) or snow (iteration 42). */
+  private flakes(on: boolean) {
+    if (!on) { if (this.snow) this.snow.visible = false; return; }
     if (!this.snow) {
       for (let k = 0; k < SNOW_FLAKES; k++) {
         this.snowPos[k * 3] = -2 + Math.random() * (W + 4);
@@ -2103,6 +2123,147 @@ export class Renderer {
     }
     this.frostMesh.count = k;
     this.frostMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------- « La neige » (iteration 42)
+
+  /** Is this point of the table on snow (deep or packed)? (deep tread marks, puffs of snow, buried mines) */
+  onSnowR(x: number, y: number) {
+    if (!this.snowCells.size || x < 0 || y < 0 || x >= W || y >= H) return false;
+    return this.snowCells.has(Math.floor(y) * W + Math.floor(x));
+  }
+
+  /** The layer of snow of a new level: soft white drifts with rounded edges over every snow cell (none: hidden). */
+  private addSnow(tiles: number[], belts: number[]) {
+    this.snowCells = new Set(belts.flatMap((b, i) => ((b === SNOW || b === PACKED) && tiles[i] === Tile.Empty ? [i] : [])));
+    this.snowPacked.clear();
+    this.flakes(this.iceCells.size > 0 || this.snowCells.size > 0);
+    if (!this.snowCells.size) { if (this.snowMesh) this.snowMesh.visible = false; return; }
+    if (!this.snowCtx) {
+      const c = (this.snowCanvas = document.createElement('canvas'));
+      c.width = W * SPX; c.height = H * SPX;
+      this.snowCtx = c.getContext('2d')!;
+      this.snowBase = document.createElement('canvas');
+      this.snowBase.width = W * SPX; this.snowBase.height = H * SPX;
+      this.snowTex = new THREE.CanvasTexture(c);
+      this.snowTex.colorSpace = THREE.SRGBColorSpace;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshLambertMaterial({ map: this.snowTex, transparent: true, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(W / 2, 0.006, H / 2);
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      this.snowMesh = mesh;
+    }
+    this.snowMesh!.visible = true;
+    const b = this.snowBase!.getContext('2d')!;
+    b.clearRect(0, 0, W * SPX, H * SPX);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const cells = [...this.snowCells];
+    const disc = (cx: number, cy: number, r: number) => { b.beginPath(); b.arc(cx, cy, r, 0, Math.PI * 2); b.fill(); };
+    // a blue shade along the edges, then the snow itself: discs and squares that run into soft rounded drifts
+    b.fillStyle = 'rgba(150,180,220,0.5)';
+    for (const i of cells) disc((i % W) * SPX + SPX / 2, Math.floor(i / W) * SPX + SPX / 2 + 2, SPX * 0.64);
+    b.fillStyle = '#eef4fa';
+    for (const i of cells) {
+      const x = (i % W) * SPX, y = Math.floor(i / W) * SPX;
+      disc(x + SPX / 2, y + SPX / 2, SPX * 0.6);
+      b.fillRect(x, y, SPX, SPX);
+    }
+    // soft lumps (a lighter top, a bluish underside) and a sparkle here and there
+    for (const i of cells) {
+      const x0 = (i % W) * SPX, y0 = Math.floor(i / W) * SPX;
+      for (let k = 0; k < 3; k++) {
+        const cx = x0 + rnd() * SPX, cy = y0 + rnd() * SPX, r = 4 + rnd() * 7;
+        b.fillStyle = 'rgba(170,195,225,0.1)'; disc(cx, cy + 1.5, r);
+        b.fillStyle = 'rgba(255,255,255,0.4)'; disc(cx, cy - 0.5, r * 0.8);
+      }
+      for (let k = 0; k < 5; k++) {
+        b.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,1)' : 'rgba(160,200,240,0.7)';
+        b.fillRect(x0 + rnd() * SPX, y0 + rnd() * SPX, 1.2, 1.2);
+      }
+    }
+    const g = this.snowCtx!;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, W * SPX, H * SPX);
+    g.drawImage(this.snowBase!, 0, 0);
+    this.snowDirty = true;
+  }
+
+  /** A tank ploughs through the snow: a trail of packed snow, its two treads pressed a little deeper. */
+  private snowTrack(x: number, y: number, ang: number, len: number, r: number) {
+    const g = this.snowCtx;
+    if (!g) return;
+    g.save();
+    g.translate(x * SPX, y * SPX);
+    g.rotate(ang);
+    const l = Math.min(0.5, len + 0.08) * SPX, w = r * 2.1 * SPX;
+    g.fillStyle = 'rgba(196,212,230,0.9)';
+    g.fillRect(-l, -w / 2, l + 2, w);
+    g.fillStyle = 'rgba(150,172,200,0.9)';
+    for (const off of [-0.3, 0.3]) for (let k = 0; k < 2; k++) g.fillRect(-l + k * l / 2, off * SPX * (r / TANK_R) - 3, l / 2 - 2, 6);
+    // the ridges of snow pushed aside along the trail
+    g.fillStyle = 'rgba(255,255,255,0.95)';
+    g.fillRect(-l, -w / 2 - 2, l + 2, 2.5);
+    g.fillRect(-l, w / 2 - 0.5, l + 2, 2.5);
+    g.restore();
+    this.snowDirty = true;
+  }
+
+  /** A blast blows the snow away (the scorched floor shows), until the snowfall covers it again. */
+  private snowBlast(x: number, y: number, R: number) {
+    const g = this.snowCtx;
+    if (!g || !this.snowCells.size) return;
+    let near = false;
+    for (const i of this.snowCells) if (Math.hypot((i % W) + 0.5 - x, Math.floor(i / W) + 0.5 - y) < R + 1) { near = true; break; }
+    if (!near) return;
+    const gr = g.createRadialGradient(x * SPX, y * SPX, 0, x * SPX, y * SPX, R * SPX);
+    gr.addColorStop(0, 'rgba(0,0,0,1)');
+    gr.addColorStop(0.75, 'rgba(0,0,0,0.85)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(x * SPX, y * SPX, R * SPX, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = 'source-over';
+    for (let k = 0; k < 26; k++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 3;
+      this.smoke.emit({ x, y: 0.2, z: y, vx: Math.cos(a) * sp, vy: 1 + Math.random() * 2.2, vz: Math.sin(a) * sp, life: 0.9 + Math.random() * 0.5, s0: 0.12, s1: 0.4, c0: 0xffffff, c1: 0xe4eef8, drag: 2.2, grav: 2 });
+    }
+    this.snowDirty = true;
+  }
+
+  /**
+   * The trails the server says are packed (online: the snapshots; the demo: the simulation). A trail that is no longer
+   * packed was covered by the snowfall: its cell turns fresh white again.
+   */
+  setPacked(cells: Iterable<number>) {
+    if (!this.snowCtx || !this.snowCells.size) return;
+    const now = new Set(cells);
+    const g = this.snowCtx;
+    for (const i of this.snowPacked) {
+      if (now.has(i)) continue;
+      const x = (i % W) * SPX, y = Math.floor(i / W) * SPX;
+      g.clearRect(x, y, SPX, SPX);
+      g.drawImage(this.snowBase!, x, y, SPX, SPX, x, y, SPX, SPX);
+      this.snowDirty = true;
+    }
+    this.snowPacked = now;
+  }
+
+  private stepSnowLayer(dt: number) {
+    if (!this.snowCtx || !this.snowCells.size) return;
+    // the snowfall slowly blurs the trails before covering them for good
+    this.snowFall += dt;
+    if (this.snowFall > 0.6) {
+      this.snowFall = 0;
+      const g = this.snowCtx;
+      g.globalAlpha = 0.035;
+      g.drawImage(this.snowBase!, 0, 0);
+      g.globalAlpha = 1;
+      this.snowDirty = true;
+    }
+    this.snowTimer -= dt;
+    if (this.snowDirty && this.snowTimer <= 0) { this.snowTex!.needsUpdate = true; this.snowDirty = false; this.snowTimer = 0.1; }
   }
 
   private animateSnow(dt: number) {
@@ -2762,6 +2923,14 @@ export class Renderer {
           for (let k = 0, n = side > 0.35 ? 3 : 1; k < n; k++) {
             this.smoke.emit({ x: t.x - mvx * 1.5 + (Math.random() - 0.5) * 0.5, y: 0.06, z: t.y - mvy * 1.5 + (Math.random() - 0.5) * 0.5, vx: -mvx * 3 + (Math.random() - 0.5) * 0.6, vy: 0.5 + Math.random() * 0.4, vz: -mvy * 3 + (Math.random() - 0.5) * 0.6, life: 0.5, s0: 0.05, s1: 0.12, c0: 0xffffff, c1: 0xdff3ff, drag: 2.5 });
           }
+        }
+      } else if (d > 0.18 && this.onSnowR(t.x, t.y)) {
+        // in the snow (iteration 42): a trail of packed snow, even behind a white (invisible) tank, and puffs of powder
+        const mvx = t.x - v.lastMarkX, mvy = t.y - v.lastMarkY;
+        v.lastMarkX = t.x; v.lastMarkY = t.y;
+        this.snowTrack(t.x, t.y, Math.atan2(mvy, mvx), Math.hypot(mvx, mvy), tankRadius(v.info.kind));
+        if (!(t.invisible && t.id !== myId) && Math.random() < 0.7) {
+          this.smoke.emit({ x: t.x - Math.cos(t.body) * 0.4 + (Math.random() - 0.5) * 0.5, y: 0.08, z: t.y - Math.sin(t.body) * 0.4 + (Math.random() - 0.5) * 0.5, vx: (Math.random() - 0.5) * 0.8, vy: 0.5 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 0.8, life: 0.7, s0: 0.08, s1: 0.26, c0: 0xffffff, c1: 0xeaf2fa, drag: 2 });
         }
       } else if (d > 0.22) {
         const bx = t.x, by = t.y, ang = t.body;
@@ -3440,10 +3609,12 @@ export class Renderer {
       g.position.x += (mn.x - g.position.x) * (far ? 1 : 0.5);
       g.position.z += (mn.y - g.position.z) * (far ? 1 : 0.5);
       // « Les dunes » (iteration 36): laid in the sand, a mine sinks in until only its cap shows; it pops up when its fuse is lit
-      const buried = !mn.blink && this.onSand(mn.x, mn.y);
+      // « La neige » (iteration 42): under the snow, the same
+      const snowy = this.onSnowR(mn.x, mn.y);
+      const buried = !mn.blink && (snowy || this.onSand(mn.x, mn.y));
       const depth = buried ? -0.115 : 0;
       if (buried && !g.userData.buried && g.position.y > -0.01) {
-        for (let k = 0; k < 6; k++) this.smoke.emit({ x: mn.x + (Math.random() - 0.5) * 0.3, y: 0.06, z: mn.y + (Math.random() - 0.5) * 0.3, vx: (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 1.2, life: 0.7, s0: 0.08, s1: 0.22, c0: 0xe2b56a, c1: 0xf1dcae, drag: 2 });
+        for (let k = 0; k < 6; k++) this.smoke.emit({ x: mn.x + (Math.random() - 0.5) * 0.3, y: 0.06, z: mn.y + (Math.random() - 0.5) * 0.3, vx: (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 1.2, life: 0.7, s0: 0.08, s1: 0.22, c0: snowy ? 0xffffff : 0xe2b56a, c1: snowy ? 0xe4eef8 : 0xf1dcae, drag: 2 });
       }
       g.userData.buried = buried;
       g.position.y += (depth - g.position.y) * (buried ? 0.06 : 0.35);
@@ -3685,6 +3856,7 @@ export class Renderer {
   explosion(x: number, y: number, big: boolean, tint?: number) {
     const n = big ? 60 : 40;
     const radius = big ? MINE_BLAST : 1;
+    this.snowBlast(x, y, radius); // the blast blows the snow away (iteration 42)
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = (0.5 + Math.random() * 3.5) * (big ? 1.4 : 1);
@@ -3806,6 +3978,7 @@ export class Renderer {
       this.floorDirty = false;
       this.floorTimer = 0.1;
     }
+    this.stepSnowLayer(dt);
     if (this.scratchCtx) {
       // the skate scratches fade slowly (a few seconds), as the ice smooths over
       this.scratchFade += dt;

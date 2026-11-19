@@ -7,7 +7,7 @@ import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const GROUND = '.#Ho_=*+><^V~,%[]'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
+const GROUND = '.#Ho_=*+><^V~,%[]&'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
 
 /** Draw a map onto a 2D canvas (the editor, the lobby preview). `hot`: a cell to highlight (the brush under the cursor). */
 export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number; y: number; ch: string }) {
@@ -151,6 +151,12 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
     }
     g.stroke();
     g.lineWidth = 1; g.lineCap = 'butt';
+  } else if (c === '&') {
+    // snow (iteration 42): white with a blue shade, a few flakes
+    g.fillStyle = '#f4f8fc'; g.fillRect(px, py, s, s);
+    g.fillStyle = 'rgba(150,180,215,0.45)'; g.fillRect(px, py + s * 0.82, s, s * 0.18);
+    g.fillStyle = 'rgba(140,170,210,0.7)';
+    for (const [fx, fy] of [[0.25, 0.3], [0.68, 0.22], [0.5, 0.6], [0.2, 0.72], [0.8, 0.66]]) { g.beginPath(); g.arc(px + s * fx, py + s * fy, Math.max(0.8, s * 0.05), 0, 7); g.fill(); }
   } else if (c === '1' || c === '2') {
     const col = hex(PLAYER_COLORS[c === '1' ? 0 : 1]);
     g.fillStyle = col + '44'; g.beginPath(); g.arc(px + s / 2, py + s / 2, s * 0.46, 0, 7); g.fill();

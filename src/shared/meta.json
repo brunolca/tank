@@ -1,7 +1,7 @@
 {
-  "iteration": 41,
-  "date": "2026-11-18",
-  "title": "La Sauterelle",
+  "iteration": 42,
+  "date": "2026-11-19",
+  "title": "La neige",
   "journal": [
     {
       "iteration": 1,
@@ -499,6 +499,18 @@
         "Une mine posée sous son point de chute l’attend de pied ferme, et si un pont s’effondre pendant son saut… plouf, dans le ravin.",
         "Deux nouvelles missions : « Les sauterelles » (la 52ᵉ), où deux hautes palissades coupent la table, et « Les ruisseaux » (la 53ᵉ), où tu passes par les ponts pendant qu’elle saute par-dessus les ravins. Ensuite, elle se glisse dans les missions générées.",
         "Le bestiaire accueille sa fiche, l’atelier la propose dans sa palette, et la page « Terrain » du manuel explique aussi le temps qu’il fait : nuit, orage, vent et brouillard."
+      ]
+    },
+    {
+      "iteration": 42,
+      "date": "2026-11-19",
+      "title": "La neige",
+      "notes": [
+        "Il neige sur la table ! Dans la neige fraîche, on s’enfonce et on roule moins vite.",
+        "Chaque tank y trace une piste tassée : derrière lui, on file à pleine vitesse… jusqu’à ce que la neige la recouvre, une vingtaine de secondes plus tard.",
+        "Une mine posée dans la neige disparaît dessous : les ennemis ne la voient pas venir. Et chaque explosion balaie la neige autour d’elle.",
+        "Les tanks blancs restent invisibles, mais leurs sillons dans la neige se voient de loin : suis-les à la piste !",
+        "Deux nouvelles missions, « Premières neiges » (57) et « Traces dans la neige » (58), une arène enneigée en versus, un pinceau « Neige » dans l’atelier et une case de plus au manuel."
       ]
     }
   ]

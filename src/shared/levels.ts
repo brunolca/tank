@@ -1,4 +1,4 @@
-import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, W, Tile, TankKind } from './constants';
+import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -1029,6 +1029,53 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 42: « La neige ». The first snowfall: deep snow slows everyone down, but every track packs it into a
+  // trail at full speed (until the snow covers it again), and the yellows bury their mines in it; a portal links top and bottom
+  57: {
+    name: 'Premières neiges',
+    map: [
+      '......................',
+      '.&&&&&&&&&*&&&&&&&&...',
+      '.&&&&&&&&&&&&&&&&&&.y.',
+      '.&&###&&&&&&&&&&###&..',
+      '.&&&&&&&&&oo&&&&&&&&..',
+      '.&&&&&&&&&oo&&&&&&&&a.',
+      '..1&&&&&&&&&&&&&&&&&..',
+      '.&&&&&&###&&###&&&&&..',
+      '.&&&&&&&&&&&&&&&&&&&p.',
+      '.&&&&&&###&&###&&&&&..',
+      '..2&&&&&&&&&&&&&&&&&..',
+      '.&&&&&&&&&oo&&&&&&&&a.',
+      '.&&&&&&&&&oo&&&&&&&&..',
+      '.&&###&&&&&&&&&&###&..',
+      '.&&&&&&&&&&&&&&&&&&&y.',
+      '.&&&&&&&&&*&&&&&&&&...',
+      '......................',
+    ],
+  },
+  // iteration 42: three white tanks in a snowfield. Invisible as ever, but their tracks in the snow give them away
+  58: {
+    name: 'Traces dans la neige',
+    map: [
+      '......................',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&&&HH&&&&&&HH&&&&w.',
+      '.&&&&&HH&&&&&&HH&&&&&.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&###&&&&&&&&###&&&.',
+      '..1&&&&&&&&&&&&&&&&&g.',
+      '.&&&&&&&&&&&w&&&&&&&&.',
+      '.&&&&&&&HH&&HH&&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '..2&&&&&&&&&&&&&&&&&g.',
+      '.&&&###&&&&&&&&###&&&.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&&&HH&&&&&&HH&&&&&.',
+      '.&&&&&HH&&&&&&HH&&&&w.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '......................',
+    ],
+  },
   // iteration 41: « La Sauterelle ». Two tall fences cut the table: the Sauterelles leap over them to take the
   // players from behind, a pink and a grey tank hold the far side
   52: {
@@ -1207,6 +1254,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if ((BELT_CHARS as readonly string[]).includes(c)) (belts ??= new Array(W * H).fill(0))[i] = (BELT_CHARS as readonly string[]).indexOf(c) + 1;
       else if (c === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[i] = ICE;
       else if (c === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SAND;
+      else if (c === SNOW_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SNOW;
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
@@ -1220,6 +1268,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
         if (k >= 0) (belts ??= new Array(W * H).fill(0))[y * W + x] = k + 1;
         else if (row[x] === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = ICE;
         else if (row[x] === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = SAND;
+        else if (row[x] === SNOW_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = SNOW;
 
       }
     }
@@ -1727,10 +1776,10 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 /** How many arenas the versus pool holds (a game starts on a random one of them, iteration 40). */
-export const VERSUS_ARENAS = 17;
+export const VERSUS_ARENAS = 18;
 export function versusArena(round: number): ParsedLevel {
   // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21), the ravine of mission 32 (iteration 33) and the dunes of mission 46 (iteration 36)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[46], EXTRA_LEVELS[45], EXTRA_LEVELS[51]); // and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[45], EXTRA_LEVELS[46], EXTRA_LEVELS[51], EXTRA_LEVELS[57]); // the snow of mission 57 (iteration 42), and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

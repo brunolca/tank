@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 52, arms: ['canon', 'ricochet'], seconds: 17, hops: [2.5, 7, 11.5], newcomers: [[1.5, ['hopper']]], caption: 'Nouveau : la Sauterelle', sub: 'Elle se tasse sur ses ressorts… et bondit par-dessus les murs' },
-  { mission: 53, arms: ['ricochet', 'sapeur'], seconds: 16, hops: [3, 8.5, 13], caption: 'Les ruisseaux', sub: 'Tu passes par les ponts, elle saute par-dessus les ravins' },
-  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Au bestiaire', sub: 'L’anneau vert montre où elle va retomber : vise-le !' },
-  { manual: [8, ['terrain']], seconds: 8, caption: 'Le manuel parle météo', sub: 'Nuit, orage, vent, brouillard : le temps qu’il fait, expliqué' },
-  { mission: 45, arms: ['canon', 'fusee'], seconds: 11, switchShots: [3.5], caption: 'Et toujours les interrupteurs', sub: 'Un obus, « Clac ! », et les barrières basculent' },
+  { mission: 57, arms: ['canon', 'sapeur'], seconds: 18, sandTraps: [9.5], caption: 'Nouveau : la neige', sub: 'On s’y enfonce… mais chaque tank y trace une piste où l’on file' },
+  { mission: 58, arms: ['ricochet', 'canon'], seconds: 15, caption: 'Traces dans la neige', sub: 'Les tanks blancs sont invisibles… pas leurs traces !' },
+  { manual: [7, ['terrain']], seconds: 7, caption: 'La neige au manuel', sub: 'Et dans l’atelier, pour dessiner tes missions d’hiver' },
+  { versus: [53], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], seconds: 12, caption: 'En versus aussi', sub: 'Une arène enneigée : suis les traces de tes rivaux' },
+  { mission: 52, arms: ['canon', 'ricochet'], seconds: 9, hops: [2.5, 6.5], caption: 'Et toujours la Sauterelle', sub: 'Elle bondit par-dessus les murs' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();

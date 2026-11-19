@@ -3,7 +3,7 @@
 // again in slow motion, the camera leaning toward it. Nothing goes through the network: it is only a film of what
 // this screen already showed, so it works the same online, alone against rivals and in the demo.
 import type { GameEvent } from '../shared/protocol';
-import { KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND } from '../shared/constants';
+import { KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW } from '../shared/constants';
 import type { RBonus, RBullet, RFlag, RLob, RMine, RTank } from './render';
 
 export interface FilmFrame { dt: number; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; lobs?: RLob[]; events: GameEvent[] } // lobs: the Mortier's cannonballs (iteration 34)
@@ -139,6 +139,7 @@ export function koCaption(r: Reel, name: (id: number) => string | undefined, bos
   let how: string;
   if (cause === KO_MINE) how = self ? 'Sa propre mine !' : 'Sur la mine !';
   else if (cause === KO_SAND) how = self ? 'Piégé par son propre sable !' : 'Une mine cachée dans le sable !';
+  else if (cause === KO_SNOW) how = self ? 'Sa propre mine, cachée sous la neige !' : 'Une mine cachée sous la neige !';
   else if (cause === KO_BOLT) how = 'Frappé par la foudre !';
   else if (cause === KO_DRILL) how = 'Surgi de sous la table !';
   else if (cause === KO_LOB) how = 'Un boulet tombé du ciel !';

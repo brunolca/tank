@@ -1,13 +1,13 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SHELL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
-import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
@@ -307,8 +307,18 @@ export class Game {
    * right under their nose): they drive straight into the trap. Seeds of the Semeur are never buried.
    */
   hiddenMine(m: Mine, t: Tank): boolean {
-    return this.sand && m.team !== t.team && m.fuse < 0 && m.seed === undefined && onSand(this.belts, m.x, m.y) && Math.hypot(m.x - t.x, m.y - t.y) > SAND_SPOT + t.r;
+    return (this.sand || this.snowy) && m.team !== t.team && m.fuse < 0 && m.seed === undefined && this.buried(m) && Math.hypot(m.x - t.x, m.y - t.y) > SAND_SPOT + t.r;
   }
+  /** Is this mine buried, in the sand (iteration 36) or under the snow (iteration 42, deep or packed: the snowfall covers it)? */
+  private buried(m: Mine): boolean {
+    return (this.sand && onSand(this.belts, m.x, m.y)) || (this.snowy && onSnow(this.belts, m.x, m.y));
+  }
+  /** Some floor cells are snow (iteration 42): deep snow slows the tanks down, their tracks pack it into trails at full speed. */
+  snowy = false;
+  /** « La neige » (iteration 42): packed snow cells (cell index → seconds before the snowfall covers them again). */
+  packed = new Map<number, number>();
+  /** The cell each tank's centre was in (iteration 42): when it moves on, the cell it left is packed. */
+  private snowAt = new Map<number, number>();
   /** Some floor cells are ice (iteration 21): tanks keep their momentum on them. */
   ice = false;
   /**
@@ -357,6 +367,7 @@ export class Game {
     if (belts?.some(Boolean)) this.belts = belts.slice();
     this.ice = this.belts.includes(ICE);
     this.sand = this.belts.includes(SAND);
+    this.snowy = this.belts.includes(SNOW);
     this.gates = this.tiles.includes(Tile.Switch);
   }
 
@@ -482,6 +493,7 @@ export class Game {
     }
     this.separateTanks();
     if (this.frost.size || this.tanks.some((t) => t.kind === 'frost')) this.stepFrost(DT);
+    if (this.snowy) this.stepSnow(DT);
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
     if (this.gates) this.stepGates(DT);
@@ -633,11 +645,64 @@ export class Game {
     }
   }
 
-  /** The floor layer of the map as it was drawn (without the Givré's frost), for the level message. */
+  // -------------------------------------------------------------- « La neige » (iteration 42)
+
+  /**
+   * A tank ploughs through deep snow (slowly), and the cell it leaves behind is packed into a trail (full speed for
+   * whoever follows, itself included when it turns back); a trail nobody drives on is covered again by the snowfall
+   * after SNOW_REFILL seconds. The Foreur under the table and the Sauterelle in the air pack nothing.
+   */
+  stepSnow(dt: number) {
+    for (const t of this.tanks) {
+      const c = t.alive && !under(t) && t.x >= 0 && t.y >= 0 && t.x < W && t.y < H ? Math.floor(t.y) * W + Math.floor(t.x) : -1;
+      const was = this.snowAt.get(t.id);
+      if (was === c) {
+        if (c >= 0 && this.belts[c] === PACKED) this.packed.set(c, SNOW_REFILL); // driving on a trail keeps it open
+        continue;
+      }
+      if (was !== undefined && was >= 0 && (this.belts[was] === SNOW || this.belts[was] === PACKED)) {
+        this.belts[was] = PACKED;
+        this.packed.set(was, SNOW_REFILL);
+      }
+      if (c >= 0) this.snowAt.set(t.id, c); else this.snowAt.delete(t.id);
+    }
+    for (const [i, left] of this.packed) {
+      if (left - dt <= 0) { this.packed.delete(i); if (this.belts[i] === PACKED) this.belts[i] = SNOW; }
+      else this.packed.set(i, left - dt);
+    }
+  }
+
+  /** A blast blows the snow away around it (iteration 42): bare trails, until the snowfall covers them again. */
+  clearSnow(x: number, y: number, R: number) {
+    for (let cy = Math.floor(y - R); cy <= Math.floor(y + R); cy++)
+      for (let cx = Math.floor(x - R); cx <= Math.floor(x + R); cx++) {
+        if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue;
+        const i = cy * W + cx;
+        if (this.belts[i] !== SNOW && this.belts[i] !== PACKED) continue;
+        if (Math.hypot(cx + 0.5 - x, cy + 0.5 - y) > R + 0.2) continue;
+        this.belts[i] = PACKED;
+        this.packed.set(i, SNOW_REFILL);
+      }
+  }
+
+  /** Packed snow for the snapshots (iteration 42): a bit per cell of the table, in hexadecimal; undefined without snow. */
+  netSnow(): string | undefined {
+    if (!this.snowy) return undefined;
+    let out = '';
+    for (let i = 0; i < W * H; i += 4) {
+      let n = 0;
+      for (let k = 0; k < 4; k++) if (this.belts[i + k] === PACKED) n |= 1 << k;
+      out += n.toString(16);
+    }
+    return out;
+  }
+
+  /** The floor layer of the map as it was drawn (without the Givré's frost, nor the trails in the snow), for the level message. */
   floorBelts(): number[] | undefined {
     if (!this.belts.length) return undefined;
     const b = this.belts.slice();
     for (const i of this.frost.keys()) b[i] = 0;
+    for (const i of this.packed.keys()) if (b[i] === PACKED) b[i] = SNOW;
     return b.some(Boolean) ? b : undefined;
   }
 
@@ -1404,6 +1469,7 @@ export class Game {
       if (!m.dead && Math.hypot(m.x - x, m.y - y) < R + 0.3 && (m.fuse < 0 || m.fuse > 0.12)) m.fuse = 0.12;
     }
     if (this.frost.size) this.meltFrost(x, y, R);
+    if (this.snowy) this.clearSnow(x, y, R);
     for (let cy = Math.floor(y - 2); cy <= Math.floor(y + 2); cy++) {
       for (let cx = Math.floor(x - 2); cx <= Math.floor(x + 2); cx++) {
         if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
@@ -1601,7 +1667,7 @@ export class Game {
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
     const px = t.x, py = t.y;
-    const speed = this.speedOf(t) * (this.sand ? floorSpeed(this.belts, t.x, t.y) : 1); // sand slows everyone down (iteration 36)
+    const speed = this.speedOf(t) * (this.sand || this.snowy ? floorSpeed(this.belts, t.x, t.y) : 1); // sand slows everyone down (iteration 36), deep snow too (iteration 42)
     if (this.ice && t.kind !== 'frost') { // the Givré skates on its own frost without sliding (iteration 31)
       if (t.slid) return; // one step per tick on the ice: momentum is integrated once
       t.slid = true;
@@ -1860,7 +1926,7 @@ export class Game {
     this.events.push(ev);
     const owner = this.tankById(m.owner);
     const killer = m.by !== undefined ? this.tankById(m.by) ?? owner : owner;
-    const cause = m.seed === undefined && this.sand && onSand(this.belts, m.x, m.y) ? KO_SAND : KO_MINE; // a buried mine (iteration 36)
+    const cause = m.seed !== undefined ? KO_MINE : this.sand && onSand(this.belts, m.x, m.y) ? KO_SAND : this.snowy && onSnow(this.belts, m.x, m.y) ? KO_SNOW : KO_MINE; // a buried mine (iterations 36 and 42)
     for (const t of this.tanks) {
       if (t === owner && t.ranks && t.ranks[1] >= 3) continue; // « Sang-froid »: one's own mines spare one
       if (t === owner && m.seed !== undefined && m.by === undefined) continue; // a ripe seed spares the Semeur: only a shot one hurts it
@@ -1870,6 +1936,7 @@ export class Game {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
     }
     if (this.frost.size) this.meltFrost(m.x, m.y, R); // the blast melts the Givré's frost (iteration 31)
+    if (this.snowy) this.clearSnow(m.x, m.y, R); // and blows the snow away (iteration 42)
     for (const o of this.mines) {
       if (!o.dead && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < R + 0.3) {
         if (o.fuse < 0 || o.fuse > 0.12) o.fuse = 0.12;
@@ -2512,7 +2579,7 @@ export class Game {
         const n = ny * W + nx;
         if (prev[n] !== -2 || blocked[n]) continue;
         if (dx && dy && (blocked[y * W + nx] || blocked[ny * W + x])) continue;
-        if (slowOnBelts && this.belts[n] && this.belts[n] !== ICE && this.belts[n] !== SAND) {
+        if (slowOnBelts && this.belts[n] && this.belts[n] <= 4) {
           // a tank slower than the belts cannot drive up one: it plans around (or rides it) instead (iteration 16)
           const [bx, by] = BELT_DIRS[this.belts[n]];
           if (bx * dx + by * dy < 0) continue;
