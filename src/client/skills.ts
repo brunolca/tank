@@ -1,4 +1,5 @@
 import { BRANCHES, RANK_COST, XP_PER_GALON, canBuy, freeGalons, type Progress } from '../shared/skills';
+import { icon } from './icons';
 
 // The skill tree card of the coop campaign (iteration 19): three branches of three ranks, bought with galons.
 
@@ -28,7 +29,7 @@ export function renderTree(el: HTMLElement, v: TreeView) {
       const cost = owned ? '<span class="tick">✓</span>' : `<span class="cost">${'★'.repeat(RANK_COST[i])}</span>`;
       return `<button class="node ${cls}${pop}" data-b="${b}" ${can ? '' : 'disabled'}><span class="rk">${['I', 'II', 'III'][i]}</span><b>${rk.label}</b><small>${rk.desc}</small>${cost}</button>`;
     }).join('<i class="link"></i>');
-    return `<div class="branch" style="--c:${hex(br.color)}"><div class="br-head"><span class="ico">${br.icon}</span>${br.label}<kbd>${b + 1}</kbd></div>${nodes}</div>`;
+    return `<div class="branch" style="--c:${hex(br.color)}"><div class="br-head"><span class="ico">${icon(br.icon)}</span>${br.label}<kbd>${b + 1}</kbd></div>${nodes}</div>`;
   }).join('');
   el.hidden = false;
   el.innerHTML = `

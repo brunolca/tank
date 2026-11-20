@@ -12,6 +12,10 @@ export interface InputSample {
   emote: number; // « Les bulles » (iteration 30): the d-pad of a gamepad (up, right, down, left: lines 0 to 3 of EMOTES), -1 none
 }
 
+/** « La roue des bulles » (iteration 46): how long the right button must be held, or how far dragged, to open the wheel. */
+export const WHEEL_HOLD = 220;
+const WHEEL_DRAG = 18;
+
 export class Controls {
   private keys = new Set<string>();
   private fireLatch = false;
@@ -45,13 +49,36 @@ export class Controls {
       if ((e.code === 'Enter' || e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) this.fireLatch = true;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
-    target.addEventListener('mousemove', (e) => { this.mouse = { x: e.clientX, y: e.clientY }; this.usingPad = false; this.overTarget = true; });
+    addEventListener('blur', () => { this.keys.clear(); this.cancelWheel(); });
+    target.addEventListener('mousemove', (e) => {
+      const r = this.right;
+      if (r) {
+        // « La roue des bulles » (iteration 46): a drag with the right button held opens the wheel at once
+        if (!r.open && Math.hypot(e.clientX - r.x, e.clientY - r.y) > WHEEL_DRAG) this.openWheel();
+        if (r.open) return; // the turret stays where it was while we pick a line (the window's listener below moves the wheel)
+      }
+      this.mouse = { x: e.clientX, y: e.clientY }; this.usingPad = false; this.overTarget = true;
+    });
     target.addEventListener('mouseleave', () => { this.overTarget = false; });
     target.addEventListener('mousedown', (e) => {
-      this.mouse = { x: e.clientX, y: e.clientY };
-      if (e.button === 0) this.fireLatch = true;
-      if (e.button === 2) this.mineLatch = true;
+      if (e.button === 0) { this.mouse = { x: e.clientX, y: e.clientY }; this.fireLatch = true; }
+      if (e.button === 2) {
+        this.mouse = { x: e.clientX, y: e.clientY };
+        // a quick right click still lays a mine (on release); held, it opens the wheel of the quick-chat bubbles
+        if (!this.wheelOn || !this.wheel) { this.mineLatch = true; return; }
+        this.right = { x: e.clientX, y: e.clientY, open: false };
+        clearTimeout(this.rightTimer);
+        this.rightTimer = setTimeout(() => this.openWheel(), WHEEL_HOLD);
+      }
+    });
+    addEventListener('mousemove', (e) => { if (this.right?.open) this.wheel?.('move', e.clientX, e.clientY); });
+    addEventListener('mouseup', (e) => {
+      if (e.button !== 2 || !this.right) return;
+      clearTimeout(this.rightTimer);
+      const r = this.right;
+      this.right = null;
+      if (r.open) this.wheel?.('close', e.clientX, e.clientY);
+      else if (!this.suspended) this.mineLatch = true;
     });
     target.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -114,6 +141,27 @@ export class Controls {
 
   release() {
     this.keys.clear();
+    this.cancelWheel();
+  }
+
+  // « La roue des bulles » (iteration 46): right button held (or dragged) over the table
+  /** Off in the options: the right click lays its mine at once, as before. */
+  wheelOn = true;
+  /** Set by the game: 'open' answers whether the wheel may open here (online, in a game), then 'move' and 'close'. */
+  wheel?: (phase: 'open' | 'move' | 'close' | 'cancel', x: number, y: number) => boolean;
+  private right: { x: number; y: number; open: boolean } | null = null;
+  private rightTimer?: ReturnType<typeof setTimeout>;
+  private openWheel() {
+    const r = this.right;
+    clearTimeout(this.rightTimer);
+    if (!r || r.open) return;
+    if (this.suspended || !this.wheel?.('open', r.x, r.y)) { this.right = null; this.mineLatch = !this.suspended; return; } // no wheel here: the mine, as usual
+    r.open = true;
+  }
+  cancelWheel() {
+    clearTimeout(this.rightTimer);
+    if (this.right?.open) this.wheel?.('cancel', 0, 0);
+    this.right = null;
   }
 
   /** A jolt in the hands (iteration 16): the gamepad rumbles if it can, a touch phone buzzes. */

@@ -1,7 +1,7 @@
 {
-  "iteration": 45,
+  "iteration": 46,
   "date": "2026-11-20",
-  "title": "Le bilan",
+  "title": "Les finitions",
   "journal": [
     {
       "iteration": 1,
@@ -547,6 +547,18 @@
         "Trois étoiles à gagner sur chaque mission : personne n’est tombé, mission bouclée sous le chrono, et pas plus d’obus que prévu. Le chrono et le nombre d’obus sont affichés sous chaque étoile.",
         "Ton record d’étoiles est gardé mission par mission : le briefing te le rappelle, la fiche fête chaque nouveau record, et l’écran des résultats fait le total de la partie.",
         "Entre deux missions, la fiche passe d’abord, puis l’arbre des galons s’ouvre ; la petite fanfare de victoire ne se rejoue plus quand un coéquipier achète un galon."
+      ]
+    },
+    {
+      "iteration": 46,
+      "date": "2026-11-20",
+      "title": "Les finitions",
+      "notes": [
+        "Nouvelle roue des bulles : maintiens le clic droit sur la table, glisse vers « Bravo ! », « Merci ! » ou « Attention ! » et lâche. Un clic droit bref pose toujours ta mine.",
+        "Chaque bulle a maintenant sa petite icône, et toutes les icônes des menus sont redessinées à la main : elles sont les mêmes sur tous les ordinateurs et tous les téléphones.",
+        "La caméra vole entre les écrans : derrière les menus, la table recule et se balance doucement comme un jouet en vitrine, puis elle plonge sur la partie quand tu joues.",
+        "Les menus ont leurs bruits : un froissement de papier quand un tableau s’ouvre ou se range, une page qui tourne dans le manuel, un déclic pour chaque réglage.",
+        "Deux nouveaux réglages dans les options : couper les mouvements de caméra, et choisir si le clic droit maintenu ouvre la roue ou pose seulement une mine."
       ]
     }
   ]

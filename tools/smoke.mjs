@@ -67,6 +67,22 @@ try {
   if (!(await bubbled(a, 0))) fail('la touche 1 n’affiche pas de bulle au-dessus de son tank');
   if (!(await bubbled(b, bubblesB))) fail('l’autre joueur ne voit pas la bulle');
 
+  // « La roue des bulles » (iteration 46): right button held, slide toward « Merci ! » (up and to the right), let go
+  const wheelOnce = async () => {
+    await sleep(1400); // the gap between two bubbles of one tank
+    const before = (await state(a)).bubbles ?? 0;
+    await a.mouse.move(640, 380);
+    await a.mouse.down({ button: 'right' });
+    const open = await a.waitForFunction(() => !document.getElementById('emote-wheel')?.hidden, null, { timeout: 2500 }).then(() => true, () => false);
+    await a.mouse.move(640 + 80, 380 - 46, { steps: 4 });
+    await a.mouse.up({ button: 'right' });
+    const said = open && (await bubbled(a, before));
+    if (!said) { const s = await state(a); wheelWhy = `roue ${open ? 'ouverte' : 'fermée'}, écran ${s.screen}, phase ${s.phase}, ralenti ${s.replaying}`; }
+    return said;
+  };
+  let wheelWhy = '';
+  if (!(await wheelOnce()) && !(await wheelOnce())) fail(`la roue des bulles (clic droit maintenu) ne s’ouvre pas ou n’envoie pas la bulle (${wheelWhy})`);
+
   // the skill tree of the campaign (iteration 19): both players have their progress, K opens and closes the card
   for (const [name, p] of [['A', a], ['B', b]]) {
     const s = await state(p);

@@ -18,6 +18,7 @@ import { initAudio, isMusicOn, setMusicIntensity, setRain, setVolume, setWind, s
 import { gustAt, windAngle, windWords } from '../shared/wind';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
+import { EMOTE_ICONS, hydrateIcons, icon } from './icons';
 import { Reticle, plainEnemies, renderEnemyTokens, renderTeam, type EnemyToken, type Mate } from './hud';
 import { Workshop, cellImage, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RFlag, type RLob, type RMine, type RTank } from './render';
@@ -42,6 +43,7 @@ const canvas = $<HTMLCanvasElement>('#game');
 const renderer = new Renderer(canvas);
 renderer.onFogHorn = () => { if (screen === 'game') sfx.foghorn(); }; // a foghorn far away, on foggy tables (iteration 26)
 const controls = new Controls(canvas, (x, y) => renderer.screenToArena(x, y), $('#mine-btn'));
+hydrateIcons(); // « Les finitions » (iteration 46): the SVG icons of the page
 
 // ------------------------------------------------------------------ profile
 
@@ -99,7 +101,8 @@ function show(s: Screen) {
   $('#atelier').hidden = s !== 'atelier';
   $('#hud').hidden = s !== 'game';
   document.body.dataset.screen = s;
-  if (s !== 'game') { hideBrief(false); hideSheet(); }
+  if (s !== 'game') { hideBrief(false); hideSheet(); controls.cancelWheel(); }
+  renderer.camScreen(s === 'game' || s === 'atelier' ? 'play' : 'shelf'); // « Les finitions » (iteration 46): the camera flies between the screens
   if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; setRain(false); setWind(false); }
 }
 
@@ -1293,7 +1296,7 @@ function showBubble(id: number, n: number, x: number, y: number) {
   el.style.setProperty('--c', hex(attract?.tankById(id)?.color ?? renderer.tankColor(id) ?? infos.get(id)?.color ?? 0xffffff));
   const inner = document.createElement('span');
   inner.className = `e${n}`;
-  inner.textContent = text;
+  inner.innerHTML = `${icon(EMOTE_ICONS[n] ?? 'chat')} ${escapeHtml(text)}`; // « Les finitions » (iteration 46): each line has its icon
   el.appendChild(inner);
   floatLayer.appendChild(el);
   bubbles.set(id, { el, until: performance.now() + EMOTE_TIME * 1000, x, y });
@@ -1331,7 +1334,7 @@ function sayEmote(n: number) {
 }
 
 const emotePad = $('#emote-pad');
-emotePad.innerHTML = EMOTES.map((t, i) => `<button data-emote="${i}" class="e${i}"><kbd>${i + 1}</kbd>${t}</button>`).join('');
+emotePad.innerHTML = EMOTES.map((t, i) => `<button data-emote="${i}" class="e${i}"><kbd>${i + 1}</kbd>${icon(EMOTE_ICONS[i])} ${t}</button>`).join('');
 function closeEmotePad() { $('#emote-pad').hidden = true; } // (safe before the pad is filled)
 $('#hud-emote').addEventListener('click', (e) => {
   (e.currentTarget as HTMLElement).blur();
@@ -1342,6 +1345,69 @@ emotePad.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-emote]');
   if (b) { b.blur(); sayEmote(Number(b.dataset.emote)); }
 });
+
+// « La roue des bulles » (iteration 46): hold the right button over the table, slide toward a line, let go.
+// A quick right click still lays a mine. The wheel stays on the screen side of the pointer, never outside the window.
+const WHEEL_R = 96;
+const wheelEl = document.createElement('div');
+wheelEl.id = 'emote-wheel';
+wheelEl.hidden = true;
+wheelEl.innerHTML = `<div class="w-disc"></div><div class="w-pointer"></div>${EMOTES.map((t, i) => {
+  const a = -Math.PI / 2 + (i * 2 * Math.PI) / EMOTES.length;
+  return `<div class="w-item e${i}" style="--x:${(Math.cos(a) * WHEEL_R).toFixed(1)}px;--y:${(Math.sin(a) * WHEEL_R).toFixed(1)}px">${icon(EMOTE_ICONS[i])}<span>${t}</span></div>`;
+}).join('')}<div class="w-hub">${icon('chat')}</div>`;
+document.body.appendChild(wheelEl);
+const wheel = { x: 0, y: 0, sel: -1, opened: 0 };
+/** Which line the pointer points at, -1 in the middle of the wheel. */
+function wheelPick(px: number, py: number) {
+  const dx = px - wheel.x, dy = py - wheel.y;
+  if (Math.hypot(dx, dy) < 26) return -1;
+  const step = (2 * Math.PI) / EMOTES.length;
+  return ((Math.round((Math.atan2(dy, dx) + Math.PI / 2) / step) % EMOTES.length) + EMOTES.length) % EMOTES.length;
+}
+function wheelSelect(n: number) {
+  if (n === wheel.sel) return;
+  wheel.sel = n;
+  wheelEl.querySelectorAll('.w-item').forEach((el, i) => el.classList.toggle('on', i === n));
+  wheelEl.classList.toggle('picked', n >= 0);
+  if (n >= 0) { wheelEl.style.setProperty('--a', `${(n * 360) / EMOTES.length}deg`); sfx.wheelTick(n); }
+}
+function openWheel(x: number, y: number) {
+  const m = WHEEL_R + 62;
+  wheel.x = Math.max(m, Math.min(innerWidth - m, x));
+  wheel.y = Math.max(m - 20, Math.min(innerHeight - m + 20, y));
+  wheel.sel = -2;
+  wheelSelect(-1);
+  wheelEl.style.left = `${wheel.x}px`;
+  wheelEl.style.top = `${wheel.y}px`;
+  wheelEl.hidden = false;
+  wheelEl.classList.remove('out');
+  wheel.opened = performance.now();
+  document.body.classList.add('wheel-open');
+  sfx.wheelOpen();
+}
+function closeWheel(say: boolean) {
+  if (wheelEl.hidden) return -1;
+  const n = wheel.sel;
+  document.body.classList.remove('wheel-open');
+  wheelEl.classList.add('out');
+  setTimeout(() => { if (wheelEl.classList.contains('out')) wheelEl.hidden = true; }, 160);
+  if (!say || n < 0) { sfx.wheelClose(); return -1; }
+  return n;
+}
+controls.wheel = (phase, x, y) => {
+  if (phase === 'open') {
+    if (!online || screen !== 'game' || council || treeOpen || reel || !$('#menu').hidden) return false;
+    closeEmotePad();
+    openWheel(x, y);
+    return true;
+  }
+  if (phase === 'move') { wheelSelect(wheelPick(x, y)); return true; }
+  const n = closeWheel(phase === 'close');
+  if (n >= 0) sayEmote(n);
+  return true;
+};
+
 addEventListener('keydown', (e) => {
   const tag = (e.target as HTMLElement)?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || e.repeat || council || treeOpen || !online || screen !== 'game') return;
@@ -1387,7 +1453,7 @@ function renderRole() {
   const el = $('#hud-role');
   el.hidden = myRole === undefined || !online || currentMode !== 'taupe';
   el.className = myRole ? 'mole' : 'loyal';
-  el.textContent = myRole ? '🎭 Tu es la taupe' : '🛡 Loyal';
+  el.innerHTML = myRole ? `${icon('mask')} Tu es la taupe` : `${icon('shield')} Loyal`;
 }
 
 function showRoleBanner(mole: boolean) {
@@ -2660,7 +2726,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && (e.target as HTMLElement)?.tagName !== 'INPUT') updateMusicBtn(toggleMusic());
 });
 function updateMusicBtn(on = isMusicOn()) {
-  $('#btn-music').textContent = on ? '♪' : '♪̸';
+  $('#btn-music').innerHTML = icon(on ? 'music' : 'mute');
   $('#btn-music').classList.toggle('off', !on);
 }
 $('#btn-music').addEventListener('click', () => updateMusicBtn(toggleMusic()));
@@ -2816,14 +2882,14 @@ function enemySheet(kind: string) {
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
 }
 const MODES: [string, string, string, string][] = [
-  ['🪖', 'Campagne coop', '1 à 4', 'Des missions faites main puis générées à l’infini, un boss toutes les 10 missions, des vies partagées. Chaque mission réussie rapporte jusqu’à trois étoiles : personne ne tombe, sous le chrono, sans gaspiller ses obus. Des coéquipiers pilotés par l’ordinateur complètent l’équipe.'],
-  ['📅', 'Défi du jour', '1 à 4', `${DAILY_STAGES} missions, les mêmes pour tout le monde aujourd’hui, avec une consigne qui change chaque jour. Le chrono fait le classement.`],
-  ['👑', 'Ronde des boss', '1 à 4', 'Les boss l’un après l’autre, puis deux à la fois. L’ordre change chaque lundi : le meilleur chrono de la semaine gagne.'],
-  ['⚔️', 'Versus', '2 à 4', 'Chacun pour soi : le dernier tank debout marque un point, premier à 5 manches. Seul ? Ajoute des rivaux pilotés par l’ordinateur.'],
-  ['🚩', 'Drapeaux', '2 à 4', `Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi. Première équipe à ${CTF_TARGET} manches.`],
-  ['🎁', 'La chasse aux caisses', '2 à 4', `Les caisses pleuvent, chacune vaut un point, et la caisse dorée en vaut ${HUNT_GOLD}. Premier à ${HUNT_TARGET} manches.`],
-  ['🕵️', 'La taupe', `${TAUPE_MIN_PLAYERS} ou 4`, 'Une campagne coop… avec un traître tiré au sort en secret. Après chaque mission, le conseil vote pour le démasquer.'],
-  ['🛠️', 'L’atelier', '1 à 4', 'Dessine ta mission case par case (murs, liège, tunnels, portails, ennemis, météo), puis jouez-la ensemble.'],
+  ['tank', 'Campagne coop', '1 à 4', 'Des missions faites main puis générées à l’infini, un boss toutes les 10 missions, des vies partagées. Chaque mission réussie rapporte jusqu’à trois étoiles : personne ne tombe, sous le chrono, sans gaspiller ses obus. Des coéquipiers pilotés par l’ordinateur complètent l’équipe.'],
+  ['calendar', 'Défi du jour', '1 à 4', `${DAILY_STAGES} missions, les mêmes pour tout le monde aujourd’hui, avec une consigne qui change chaque jour. Le chrono fait le classement.`],
+  ['crown', 'Ronde des boss', '1 à 4', 'Les boss l’un après l’autre, puis deux à la fois. L’ordre change chaque lundi : le meilleur chrono de la semaine gagne.'],
+  ['swords', 'Versus', '2 à 4', 'Chacun pour soi : le dernier tank debout marque un point, premier à 5 manches. Seul ? Ajoute des rivaux pilotés par l’ordinateur.'],
+  ['flag', 'Drapeaux', '2 à 4', `Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi. Première équipe à ${CTF_TARGET} manches.`],
+  ['crate', 'La chasse aux caisses', '2 à 4', `Les caisses pleuvent, chacune vaut un point, et la caisse dorée en vaut ${HUNT_GOLD}. Premier à ${HUNT_TARGET} manches.`],
+  ['mask', 'La taupe', `${TAUPE_MIN_PLAYERS} ou 4`, 'Une campagne coop… avec un traître tiré au sort en secret. Après chaque mission, le conseil vote pour le démasquer.'],
+  ['hammer', 'L’atelier', '1 à 4', 'Dessine ta mission case par case (murs, liège, tunnels, portails, ennemis, météo), puis jouez-la ensemble.'],
 ];
 const KEYS: [string, [string, string][]][] = [
   ['Clavier et souris', [
@@ -2834,6 +2900,7 @@ const KEYS: [string, [string, string][]][] = [
     ['<kbd>K</kbd> puis <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>', 'l’arbre des galons (campagne)'],
     ['<kbd>T</kbd>', '« Suis-moi ! » aux coéquipiers'],
     ['<kbd>1</kbd> à <kbd>6</kbd>', 'une bulle au-dessus de ton tank'],
+    ['Clic droit maintenu', 'la roue des bulles : glisse vers une bulle et lâche (un clic droit bref pose toujours la mine)'],
     ['<kbd>M</kbd> · <kbd>F</kbd> · <kbd>Échap</kbd>', 'musique · ton avis · menu'],
   ]],
   ['Manette', [
@@ -2868,21 +2935,21 @@ const TERRAIN: [string, string, string, boolean?][] = [
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
 const WEATHER: [string, string, string][] = [
-  ['🌙', 'Nuit', 'Les ennemis ne te voient que de près… ou quand tu tires. Tes phares éclairent devant toi.'],
-  ['⚡', 'Orage', 'Quand le sol crépite, la foudre va tomber : écarte-toi ! Chaque éclair montre tout le monde.'],
-  ['🌬️', 'Vent', 'Il courbe les obus en vol : vise en amont, ou tire quand la manche à air retombe.'],
-  ['🌫️', 'Brouillard', 'Des bancs de brume dérivent sur la table : on n’y voit que ses voisins proches.'],
+  ['moon', 'Nuit', 'Les ennemis ne te voient que de près… ou quand tu tires. Tes phares éclairent devant toi.'],
+  ['bolt', 'Orage', 'Quand le sol crépite, la foudre va tomber : écarte-toi ! Chaque éclair montre tout le monde.'],
+  ['wind', 'Vent', 'Il courbe les obus en vol : vise en amont, ou tire quand la manche à air retombe.'],
+  ['fog', 'Brouillard', 'Des bancs de brume dérivent sur la table : on n’y voit que ses voisins proches.'],
 ];
 function manualPage(tab: ManualTab) {
   if (tab === 'commandes') return `<div class="keys">${KEYS.map(([h, rows]) => `<section><h3>${escapeHtml(h)}</h3><ul>${rows.map(([k, v]) => `<li><span>${k}</span><b>${escapeHtml(v)}</b></li>`).join('')}</ul></section>`).join('')}</div>
     <p class="tip">Les obus rebondissent une fois sur les murs : attention à tes propres ricochets !</p>`;
-  if (tab === 'modes') return `<ul class="modes">${MODES.map(([i, n, p, d]) => `<li><i>${i}</i><div><b>${escapeHtml(n)}</b><small>${escapeHtml(p)} joueurs</small><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
+  if (tab === 'modes') return `<ul class="modes">${MODES.map(([i, n, p, d]) => `<li><i>${icon(i)}</i><div><b>${escapeHtml(n)}</b><small>${escapeHtml(p)} joueurs</small><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
     <p class="tip">Crée une salle, choisis le mode dans le salon et partage le code : tes amis n’ont qu’à le taper.</p>`;
   if (tab === 'caisses') return `<ul class="crates">${CRATES.map(([k, line]) => `<li style="--c:${hex(BONUS_INFO[k].color)}"><i></i><div><b>${escapeHtml(BONUS_INFO[k].label)}</b><span>${escapeHtml(line)}</span></div></li>`).join('')}</ul>
     <p class="tip">Les caisses tombent du ciel pendant les missions : roule dessus pour les ouvrir. Le Pilleur, lui aussi, les convoite.</p>`;
   if (tab === 'terrain') return `<ul class="terrain">${TERRAIN.map(([chs, n, d, fresh]) => `<li class="${fresh ? 'new' : ''}">${[...chs].map((c) => `<img src="${cellImage(c)}" alt="">`).join('')}<div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
     <h3 class="weather-h">Le temps qu’il fait</h3>
-    <ul class="terrain weather">${WEATHER.map(([i, n, d]) => `<li><i>${i}</i><div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
+    <ul class="terrain weather">${WEATHER.map(([i, n, d]) => `<li><i class="wx">${icon(i)}</i><div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
     <p class="tip">Tous ces terrains t’attendent aussi dans l’atelier, pour dessiner tes propres missions, avec la météo de ton choix.</p>`;
   const n = BESTIARY.filter(([k]) => metOrDemo(k)).length;
   return `<p class="count">${n >= BESTIARY.length ? 'Collection complète' : 'Rencontrés'} : <b>${n} / ${BESTIARY.length}</b></p>
@@ -2923,11 +2990,11 @@ function turnManual(dir: number) {
   if ($('#manual').hidden) return;
   renderManual(MANUAL_TABS[(MANUAL_TABS.indexOf(manualTab) + dir + MANUAL_TABS.length) % MANUAL_TABS.length]);
   if ((document.activeElement as HTMLElement | null)?.closest('#manual-tabs')) $<HTMLButtonElement>(`#manual-tabs button[data-tab="${manualTab}"]`).focus({ preventScroll: true });
-  sfx.click();
+  sfx.page();
 }
-$('#btn-manual').addEventListener('click', () => { sfx.click(); openManual(); });
-document.querySelectorAll<HTMLButtonElement>('#manual-tabs button').forEach((b) => b.addEventListener('click', () => { sfx.click(); renderManual(b.dataset.tab as ManualTab); }));
-$('#btn-manual-close').addEventListener('click', () => { sfx.click(); closeManual(); });
+$('#btn-manual').addEventListener('click', () => openManual());
+document.querySelectorAll<HTMLButtonElement>('#manual-tabs button').forEach((b) => b.addEventListener('click', () => { sfx.page(); renderManual(b.dataset.tab as ManualTab); }));
+$('#btn-manual-close').addEventListener('click', () => closeManual());
 $('#manual').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeManual(); }); // a tap beside the binder closes it
 addEventListener('keydown', (e) => {
   if ($('#manual').hidden) return;
@@ -2953,9 +3020,10 @@ function renderOptions() {
   pickSeg('opt-shake', shakeOn ? '1' : '0');
   pickSeg('opt-reticle', reticleOn ? '1' : '0');
   pickSeg('opt-replay', replayOn ? '1' : '0');
+  pickSeg('opt-camfx', renderer.camFx ? '1' : '0');
+  pickSeg('opt-wheel', controls.wheelOn ? '1' : '0');
 }
 function openOptions() {
-  sfx.click();
   renderOptions();
   $('#options').hidden = false;
   if (document.body.classList.contains('pad-nav')) $<HTMLInputElement>('#options .profile input').focus({ preventScroll: true });
@@ -2991,7 +3059,7 @@ $('#opt-shake').addEventListener('click', (e) => {
   shakeOn = v === '1';
   writePref('tanks.shake', v);
   renderer.shakeScale = shakeOn ? 1 : 0;
-  sfx.click();
+  sfx.toggle(shakeOn);
   renderOptions();
 });
 $('#opt-reticle').addEventListener('click', (e) => {
@@ -3000,19 +3068,49 @@ $('#opt-reticle').addEventListener('click', (e) => {
   reticleOn = v === '1';
   writePref('tanks.reticle', v);
   if (!reticleOn) reticle.hide();
-  sfx.click();
+  sfx.toggle(reticleOn);
   renderOptions();
 });
 $('#opt-replay').addEventListener('click', (e) => {
   const v = (e.target as HTMLElement).closest('button')?.dataset.v;
   if (!v) return;
   setReplayOn(v === '1');
-  sfx.click();
+  sfx.toggle(v === '1');
   renderOptions();
 });
+// « Les finitions » (iteration 46): the camera that flies between the screens, and the wheel of the right button
+renderer.camFx = readPref('tanks.camfx') === '1' || (readPref('tanks.camfx') === null && !matchMedia?.('(prefers-reduced-motion: reduce)').matches); // follows the system's « reduce motion » until chosen
+controls.wheelOn = readPref('tanks.wheel') !== '0';
+$('#opt-camfx').addEventListener('click', (e) => {
+  const v = (e.target as HTMLElement).closest('button')?.dataset.v;
+  if (!v) return;
+  renderer.camFx = v === '1';
+  writePref('tanks.camfx', v);
+  sfx.toggle(v === '1');
+  renderOptions();
+});
+$('#opt-wheel').addEventListener('click', (e) => {
+  const v = (e.target as HTMLElement).closest('button')?.dataset.v;
+  if (!v) return;
+  controls.wheelOn = v === '1';
+  writePref('tanks.wheel', v);
+  sfx.toggle(v === '1');
+  renderOptions();
+});
+// the panels slide out of the box and back in with a rustle of paper (whoever opens them)
+for (const id of ['manual', 'options', 'journal', 'menu', 'feedback']) {
+  const el = document.getElementById(id);
+  if (!el) continue;
+  let was = el.hidden;
+  new MutationObserver(() => {
+    if (el.hidden === was) return;
+    was = el.hidden;
+    if (el.hidden) sfx.paperOut(); else sfx.paperIn();
+  }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+}
 $('#btn-options').addEventListener('click', openOptions);
-$('#btn-options-close').addEventListener('click', () => { sfx.click(); closeOptions(); });
-$('#btn-options-ok').addEventListener('click', () => { sfx.click(); closeOptions(); });
+$('#btn-options-close').addEventListener('click', () => closeOptions());
+$('#btn-options-ok').addEventListener('click', () => { sfx.clac(); closeOptions(); });
 $('#options').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeOptions(); });
 // « Le nouvel accueil » (iteration 43): the planks knock softly under the pointer
 {
@@ -3032,6 +3130,7 @@ const later = (f: () => void, ms: number) => { sceneTimers.push(setTimeout(f, ms
 function clearScene() {
   sceneTimers.forEach(clearTimeout);
   sceneTimers = [];
+  closeWheel(false);
   sceneRoll();
   $('#manual').hidden = true;
   $('#options').hidden = true;
@@ -3072,7 +3171,7 @@ renderBestiary();
 $('#iteration-stamp').textContent = `Itération ${META.iteration}`;
 $('#iteration-stamp').title = `${META.title} : ouvrir le carnet de bord`;
 $('#iteration-stamp').addEventListener('click', () => $<HTMLButtonElement>('#btn-journal').click());
-$('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; sfx.click(); });
+$('#btn-journal').addEventListener('click', () => { renderJournal(); $('#journal').hidden = false; });
 $('#btn-journal-close').addEventListener('click', () => ($('#journal').hidden = true));
 // Échap closes the journal too (iteration 39)
 addEventListener('keydown', (e) => {
@@ -3301,6 +3400,26 @@ if (params.has('demo')) {
     },
     /** A dry shot for the videos: the trigger clicks on an empty barrel. */
     dry() { dryFire(); },
+    /**
+     * « La roue des bulles » (iteration 46): the first hero of the demo holds the right button: the wheel opens beside
+     * its tank, the pointer goes round the lines, then lands on line n (« Bravo ! » by default) and the bubble goes up.
+     * Returns whether the wheel opened.
+     */
+    wheel(ms = 2600, n = 0) {
+      const g = attract;
+      const hero = g?.tanks.find((t) => t.kind === 'player' && t.alive);
+      if (!g || !hero) return false;
+      const p = renderer.arenaToScreen(hero.x, hero.y, 0.5);
+      openWheel(p.x, p.y);
+      const path = [3, 4, 5, 0, 1, 2, 3, 4, 5].slice(0, 6).concat([n]);
+      const step = Math.max(120, (ms - 500) / path.length);
+      path.forEach((k, i) => later(() => {
+        const a = -Math.PI / 2 + (k * 2 * Math.PI) / EMOTES.length;
+        wheelSelect(wheelPick(wheel.x + Math.cos(a) * 60, wheel.y + Math.sin(a) * 60));
+      }, 250 + i * step));
+      later(() => { closeWheel(true); if (attract === g) g.emote(hero, n, 0); }, 250 + path.length * step + 350);
+      return true;
+    },
     /** Storm: announce a lightning strike right next to the first enemy still standing (or any tank). */
     bolt() {
       const g = attract;

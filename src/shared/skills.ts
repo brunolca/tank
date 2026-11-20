@@ -9,7 +9,7 @@ import type { TankKind, TankSpec } from './constants';
 /** Three branches, three ranks each, in wire order (the index travels in the `skill` message: append, never reorder). */
 export const BRANCHES = [
   {
-    key: 'canon', label: 'Canon', icon: '💥', color: 0xffb43d,
+    key: 'canon', label: 'Canon', icon: 'burst', color: 0xffb43d,
     ranks: [
       { label: 'Chargeur', desc: '+1 obus en vol' },
       { label: 'Ricochet', desc: '+1 rebond pour tous tes obus' },
@@ -17,7 +17,7 @@ export const BRANCHES = [
     ],
   },
   {
-    key: 'genie', label: 'Génie', icon: '💣', color: 0xff6f5e,
+    key: 'genie', label: 'Génie', icon: 'bomb', color: 0xff6f5e,
     ranks: [
       { label: 'Sac de mines', desc: '+1 mine' },
       { label: 'Grand souffle', desc: 'tes mines explosent un quart plus large' },
@@ -25,7 +25,7 @@ export const BRANCHES = [
     ],
   },
   {
-    key: 'blindage', label: 'Blindage', icon: '🛡️', color: 0x4fd1ff,
+    key: 'blindage', label: 'Blindage', icon: 'shield', color: 0x4fd1ff,
     ranks: [
       { label: 'Bouclier de départ', desc: 'chaque mission commence avec un bouclier' },
       { label: 'Bonus prolongés', desc: 'les bonus des caisses durent moitié plus longtemps' },

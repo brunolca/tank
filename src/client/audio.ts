@@ -382,6 +382,60 @@ export const sfx = {
     tone(t, 0.05, 420, 300, 0.05, 'triangle');
     noise(t, 0.03, 1800, 3, 0.03, 'bandpass');
   },
+  // « Les finitions » (iteration 46): the sounds of the menus, all made of paper and wood like the menus themselves
+  /** A sheet of paper slides out (a panel opens: the manual, the options, the journal, the menu). */
+  paperIn() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.16, 2400, 0.9, 0.06, 'bandpass', 5200);
+    tone(t + 0.03, 0.06, 520, 640, 0.03, 'triangle');
+  },
+  /** The sheet goes back in the box (a panel closes). */
+  paperOut() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.13, 4800, 0.9, 0.05, 'bandpass', 1900);
+    tone(t + 0.07, 0.05, 380, 300, 0.035, 'triangle');
+  },
+  /** A page of the manual turns. */
+  page() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.09, 3000, 1.4, 0.05, 'bandpass', 6400);
+    noise(t + 0.07, 0.05, 1500, 2, 0.03, 'bandpass');
+  },
+  /** A switch of the options flips (higher when on). */
+  toggle(on: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.035, on ? 900 : 620, on ? 1300 : 480, 0.06, 'square');
+    noise(t, 0.02, 4000, 3, 0.04, 'bandpass');
+  },
+  /** A button is pressed: a little « clac » of wood. */
+  clac() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.04, 700, 420, 0.07, 'triangle');
+    noise(t, 0.025, 2600, 4, 0.05, 'bandpass');
+  },
+  /** The wheel of the bubbles opens: a soft pop of cardboard. */
+  wheelOpen() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.08, 300, 620, 0.06, 'sine');
+    noise(t, 0.05, 2000, 2, 0.03, 'bandpass');
+  },
+  /** The pointer moves to another line of the wheel (one note of a little scale per line). */
+  wheelTick(n: number) {
+    if (!ctx) return;
+    const notes = [784, 880, 988, 1047, 1175, 1319];
+    tone(ctx.currentTime, 0.04, notes[n % notes.length], notes[n % notes.length], 0.045, 'triangle');
+  },
+  /** The wheel closes without a word. */
+  wheelClose() {
+    if (!ctx) return;
+    tone(ctx.currentTime, 0.07, 560, 300, 0.04, 'sine');
+  },
   /** Storm: a strike is announced (a static crackle that builds up). */
   zap() {
     if (!ctx) return;

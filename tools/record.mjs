@@ -7,10 +7,12 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 1, bilan: true, arms: ['canon', 'ricochet'], hud: true, seconds: 27, caption: 'Itération 45 : le bilan', sub: 'Un briefing, puis la fiche et ses trois étoiles' },
-  { mission: 19, bilan: true, arms: ['canon', 'sapeur'], seconds: 9, caption: 'Le briefing', sub: 'La mission, le temps qu’il fait, et chaque ennemi qui t’attend' },
-  { mission: 10, bilan: true, arms: ['canon', 'ricochet'], hud: true, bossHp: 3, seconds: 14, caption: 'Les boss aussi', sub: 'Le briefing donne l’astuce pour le battre' },
-  { mission: 36, bilan: true, arms: ['ricochet', 'canon'], seconds: 8, caption: 'Même dans la brume', sub: 'Le briefing annonce le temps qu’il fait' },
+  { mission: 3, arms: ['canon', 'ricochet'], hud: true, seconds: 15, wheels: [[3.5, 0], [9.5, 4]], caption: 'Itération 46 : les finitions', sub: 'Clic droit maintenu : la roue des bulles' },
+  { home: 6, seconds: 6, caption: 'La caméra vole entre les écrans', sub: 'Derrière les menus, la table se balance comme en vitrine' },
+  { mission: 23, arms: ['canon', 'sapeur'], hud: true, seconds: 13, wheels: [[2.5, 1], [8, 3]], caption: 'Puis elle plonge sur la partie', sub: 'Chaque bulle a sa petite icône' },
+  { manual: [8, ['modes', 'commandes']], seconds: 8, caption: 'Des icônes dessinées à la main', sub: 'Les mêmes sur tous les écrans, et des pages qui tournent' },
+  { options: 6, seconds: 6, caption: 'Deux nouveaux réglages', sub: 'La caméra qui vole, et le clic droit' },
+  { mission: 10, bilan: true, arms: ['canon', 'ricochet'], hud: true, bossHp: 3, seconds: 16, wheels: [[12, 5]], caption: 'Et toujours le briefing', sub: 'Avant de plonger sur le Colosse' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -74,6 +76,7 @@ try {
       else d.play(shot.mission, true, !!shot.rich, shot.bossHp, shot.night, shot.arms, shot.storm, shot.ranks);
       d.hud?.(!!shot.hud); // « Le réticule » (iteration 44): the coop HUD and the reticle of the first hero over the demo
       for (const s of shot.drys ?? []) setTimeout(() => d.dry?.(), s * 1000);
+      for (const [s, n] of shot.wheels ?? []) setTimeout(() => d.wheel?.(2400, n), s * 1000); // « La roue des bulles » (iteration 46)
       if (shot.skills) d.skills(shot.skills[0] * 1000, shot.skills[1], shot.skills[2], shot.skills[3]); // the skill tree over the table (iteration 19)
       if (shot.role) setTimeout(() => d.role(true, 4000), 400); // after the title banner has gone
       if (shot.council) d.council(shot.council[0] * 1000, shot.council[1], shot.council[2], shot.council[3]);

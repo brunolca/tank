@@ -32,9 +32,9 @@
     <div class="hud-center"><div id="hud-enemies"></div><div id="hud-wind" hidden title="Le vent : la flèche montre où il souffle, la jauge la force de la rafale"><i>➜</i><span>Vent</span><b><u></u></b></div><div id="hud-clock" hidden></div><div id="scoreboard"></div></div>
     <div class="hud-right">
       <span id="hud-ping"></span>
-      <button id="btn-full" class="icon-btn" title="Plein écran" aria-label="Plein écran">⛶</button>
-      <button id="btn-music" class="icon-btn" title="Musique (M)">♪</button>
-      <button id="btn-menu" class="icon-btn" title="Menu (Échap)">☰</button>
+      <button id="btn-full" class="icon-btn" title="Plein écran" aria-label="Plein écran" data-icon="full"></button>
+      <button id="btn-music" class="icon-btn" title="Musique (M)" aria-label="Musique" data-icon="music"></button>
+      <button id="btn-menu" class="icon-btn" title="Menu (Échap)" aria-label="Menu" data-icon="menu"></button>
     </div>
     <!-- « Le réticule » (iteration 44): the team and its tools, at the bottom of the table -->
     <div class="hud-bottom">
@@ -212,14 +212,14 @@
       <div class="manual-head">
         <div class="kicker">Le manuel</div>
         <h2 id="manual-title"></h2>
-        <button id="btn-manual-close" class="icon-btn" title="Fermer (Échap, B à la manette)" aria-label="Fermer">✕</button>
+        <button id="btn-manual-close" class="icon-btn" title="Fermer (Échap, B à la manette)" aria-label="Fermer" data-icon="close"></button>
       </div>
       <div id="manual-tabs" class="manual-tabs" role="tablist">
-        <button role="tab" data-tab="commandes"><i>🎮</i> <span>Commandes</span></button>
-        <button role="tab" data-tab="modes"><i>🗺️</i> <span>Modes</span></button>
-        <button role="tab" data-tab="caisses"><i>🎁</i> <span>Caisses</span></button>
-        <button role="tab" data-tab="bestiaire"><i>📖</i> <span>Bestiaire</span></button>
-        <button role="tab" data-tab="terrain"><i>🧱</i> <span>Terrain</span></button>
+        <button role="tab" data-tab="commandes"><i data-icon="pad"></i> <span>Commandes</span></button>
+        <button role="tab" data-tab="modes"><i data-icon="map"></i> <span>Modes</span></button>
+        <button role="tab" data-tab="caisses"><i data-icon="crate"></i> <span>Caisses</span></button>
+        <button role="tab" data-tab="bestiaire"><i data-icon="book"></i> <span>Bestiaire</span></button>
+        <button role="tab" data-tab="terrain"><i data-icon="bricks"></i> <span>Terrain</span></button>
       </div>
       <div id="manual-page" class="manual-page" role="tabpanel" data-pad-scroll></div>
       <p class="manual-foot muted">‹ › ou <kbd>LB</kbd> <kbd>RB</kbd> pour tourner les pages · <kbd>Échap</kbd> pour refermer</p>
@@ -232,7 +232,7 @@
       <div class="manual-head">
         <div class="kicker">Options</div>
         <h2 id="options-title">Réglages</h2>
-        <button id="btn-options-close" class="icon-btn" title="Fermer (Échap, B à la manette)" aria-label="Fermer">✕</button>
+        <button id="btn-options-close" class="icon-btn" title="Fermer (Échap, B à la manette)" aria-label="Fermer" data-icon="close"></button>
       </div>
       <div class="opt-body" data-pad-scroll>
         <fieldset><legend>Ton tank</legend><div class="profile"></div></fieldset>
@@ -245,6 +245,10 @@
           <div class="opt-row"><span>Réticule (obus, mines, recharge)</span><div id="opt-reticle" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
           <div class="opt-row"><span>Secousses de l’écran</span><div id="opt-shake" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
           <div class="opt-row"><span>Ralenti des fins de manche</span><div id="opt-replay" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
+          <div class="opt-row"><span>Caméra qui vole entre les écrans</span><div id="opt-camfx" class="segmented"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
+        </fieldset>
+        <fieldset><legend>Commandes</legend>
+          <div class="opt-row"><span>Clic droit maintenu</span><div id="opt-wheel" class="segmented"><button data-v="1">Roue des bulles</button><button data-v="0">Mine seulement</button></div></div>
         </fieldset>
       </div>
       <button id="btn-options-ok" class="btn primary">C’est réglé</button>
@@ -252,7 +256,7 @@
   </section>
 
   <!-- FEEDBACK -->
-  <button id="btn-feedback" title="Donner ton avis (F)">💬 Ton avis</button>
+  <button id="btn-feedback" title="Donner ton avis (F)"><i data-icon="chat"></i> Ton avis</button>
   <section id="feedback" class="screen" hidden>
     <div class="card feedback">
       <div class="kicker">Ton avis</div>
@@ -273,7 +277,7 @@
       </div>
       <label class="check"><input type="checkbox" id="fb-include" checked /> Joindre la capture d’écran</label>
       <textarea id="fb-text" maxlength="4000" rows="4" placeholder="Que s’est-il passé ? Qu’est-ce qui te plairait ?"></textarea>
-      <label class="file"><input type="file" id="fb-file" accept="image/*,.txt,.json,.pdf" /><span>📎</span><span id="fb-file-name">Ajouter une pièce jointe</span></label>
+      <label class="file"><input type="file" id="fb-file" accept="image/*,.txt,.json,.pdf" /><span data-icon="clip"></span><span id="fb-file-name">Ajouter une pièce jointe</span></label>
       <div class="fb-data"><span class="muted">Données envoyées avec ton retour :</span><pre id="fb-context"></pre></div>
       <div class="fb-actions">
         <button id="fb-cancel" class="btn ghost">Annuler</button>

@@ -1641,10 +1641,47 @@ export class Renderer {
     this.basePos.copy(this.camera.position);
   }
   private basePos = new THREE.Vector3();
+  // « Les finitions » (iteration 46): the camera flies between the screens. In a game it sits where it always has
+  // (the play pose); behind the menus (home, lobby, results) it backs off, dips and sways slowly, like a toy in a shop
+  // window (the shelf pose). The blend between the two eases out, so entering a game is a dive onto the table.
+  /** Off in the options: the camera never moves between the screens. */
+  camFx = true;
+  private camMode: 'play' | 'shelf' = 'play';
+  private camBlend = 0; // 0: play pose, 1: shelf pose
+  private camClock = 0;
+  private posePos = new THREE.Vector3();
+  private poseLook = new THREE.Vector3();
+  camScreen(kind: 'play' | 'shelf') {
+    this.camMode = kind;
+  }
+  /** Where the camera stands this frame, and where it looks, before the replay lean and the shake. */
+  private cameraPose(dt: number) {
+    const goal = this.camFx && this.camMode === 'shelf' ? 1 : 0;
+    if (!this.camFx) this.camBlend = 0;
+    this.camBlend += (goal - this.camBlend) * (1 - Math.exp(-dt * (goal ? 1.6 : 2.6)));
+    if (Math.abs(goal - this.camBlend) < 0.0005) this.camBlend = goal;
+    this.camClock += dt;
+    const k = this.camBlend;
+    this.poseLook.copy(this.camTarget);
+    if (k <= 0) { this.posePos.copy(this.basePos); return; }
+    const s = k * k * (3 - 2 * k);
+    const ox = this.basePos.x - this.camTarget.x, oy = this.basePos.y - this.camTarget.y, oz = this.basePos.z - this.camTarget.z;
+    const r = Math.hypot(ox, oy, oz);
+    const elev = Math.asin(oy / r) - s * 0.2;
+    const yaw = s * (0.16 * Math.sin(this.camClock * 0.11) + 0.05 * Math.sin(this.camClock * 0.37));
+    const rr = r * (1 + 0.1 * s);
+    this.poseLook.z += s * -0.6;
+    this.posePos.set(
+      this.poseLook.x + Math.sin(yaw) * Math.cos(elev) * rr,
+      this.poseLook.y + Math.sin(elev) * rr,
+      this.poseLook.z + Math.cos(yaw) * Math.cos(elev) * rr,
+    );
+  }
   /** « Le ralenti » (iteration 32): where the replay camera leans (arena x, y) and how far (0: not at all, 1: close up). */
   replayCam?: { x: number; y: number; k: number };
   private camLook = new THREE.Vector3();
   private camLeaned = false;
+  private camWasMoving = false;
 
   // ---------------------------------------------------------------- level
 
@@ -4005,18 +4042,20 @@ export class Renderer {
       if (this.scratchDirty && this.scratchTimer <= 0) { this.scratchTex!.needsUpdate = true; this.scratchDirty = false; this.scratchTimer = 0.1; }
     }
     this.shake *= Math.exp(-dt * 8);
-    this.camera.position.copy(this.basePos);
+    this.cameraPose(dt);
+    this.camera.position.copy(this.posePos);
     const rc = this.replayCam;
     if (rc && rc.k > 0.001) {
       // « Le ralenti » (iteration 32): the camera leans toward the decisive moment and comes closer
       const k = Math.min(1, rc.k);
-      this.camLook.set(this.camTarget.x + (rc.x - this.camTarget.x) * k * 0.8, 0, this.camTarget.z + (rc.y - this.camTarget.z) * k * 0.8);
-      this.camera.position.subVectors(this.basePos, this.camTarget).multiplyScalar(1 - 0.5 * k).add(this.camLook);
+      this.camLook.set(this.poseLook.x + (rc.x - this.poseLook.x) * k * 0.8, 0, this.poseLook.z + (rc.y - this.poseLook.z) * k * 0.8);
+      this.camera.position.subVectors(this.posePos, this.poseLook).multiplyScalar(1 - 0.5 * k).add(this.camLook);
       this.camera.lookAt(this.camLook);
       this.camLeaned = true;
-    } else if (this.camLeaned) {
+    } else if (this.camLeaned || this.camBlend > 0 || this.camWasMoving) {
       this.camLeaned = false;
-      this.camera.lookAt(this.camTarget);
+      this.camWasMoving = this.camBlend > 0;
+      this.camera.lookAt(this.poseLook);
     }
     if (this.shake * this.shakeScale > 0.005) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * this.shakeScale;
