@@ -1,3 +1,4 @@
+import type { Tally } from './bilan';
 import type { TankKind, Weapon } from './constants';
 import type { DailyTwist } from './daily';
 import type { Progress, Ranks } from './skills';
@@ -183,6 +184,7 @@ export type ServerMsg =
       teams?: [number, number]; // « Drapeaux » (iteration 24): rounds won by the Bleus and the Rouges
       win?: number; // « Drapeaux », end of a round: the team that took it (0: a draw)
       left?: number; // « Drapeaux »: seconds left in the round (the clock runs on each side while it is played)
+      tally?: Tally; // « Le bilan » (iteration 45), end of a coop-like mission: the count and the three stars (older tabs ignore it)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
   | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string } // N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]

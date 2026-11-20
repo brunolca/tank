@@ -1543,3 +1543,116 @@ body.replaying #reticle { opacity: 0 !important; }
 /* the videos: the caption sits above the team strip when the HUD is shown */
 body.demo:has(#hud:not([hidden])):not(.vs-demo) #demo-caption { bottom: 74px; }
 body.demo:has(#hud:not([hidden])):not(.vs-demo) #boss-bar { top: 66px; }
+
+/* ------------------------------------------------------------------ « Le bilan » (iteration 45)
+   Before a mission, a full-screen briefing on paper between two wooden bands (« Mission 7 · Tanks ennemis : 4 »);
+   after it, a sheet torn from the notebook: the count colour by colour, the red stamp, three stars. */
+#brief {
+  position: fixed; inset: 0; z-index: 5; pointer-events: none;
+  display: grid; place-items: center; padding: 14vh 16px;
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent 14%, transparent 86%, rgba(0, 0, 0, 0.35)),
+    repeating-linear-gradient(180deg, transparent 0 31px, rgba(80, 120, 170, 0.08) 31px 32px),
+    radial-gradient(ellipse at 50% 42%, #f6e8ca 0%, #ead3a6 70%, #d9bb85 100%);
+  animation: brief-in 0.35s ease-out;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+#brief::before, #brief::after { content: ''; position: absolute; left: 0; right: 0; height: 11vh; background: var(--wood); box-shadow: 0 0 0 3px var(--frame), 0 6px 18px rgba(0, 0, 0, 0.45); }
+#brief::before { top: 0; }
+#brief::after { bottom: 0; }
+#brief.out { opacity: 0; transform: scale(1.04); }
+@keyframes brief-in { from { opacity: 0; } }
+.br-card { text-align: center; max-width: min(820px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.br-kicker {
+  font-family: var(--stencil); font-size: clamp(15px, 2.4vh, 20px); letter-spacing: 0.22em; text-transform: uppercase;
+  padding: 4px 16px 3px; background: linear-gradient(90deg, rgba(0, 0, 0, 0.06), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.06)), #e2c995;
+  clip-path: polygon(0 8%, 3% 0, 97% 4%, 100% 0, 99% 92%, 100% 100%, 2% 96%, 0 100%); transform: rotate(-1.5deg);
+  animation: br-drop 0.45s 0.05s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+.br-num { font-family: var(--stencil); font-size: clamp(70px, 17vh, 150px); line-height: 0.92; color: #e2453c; text-shadow: 0 4px 0 #8e2a20, 0 10px 24px rgba(80, 30, 10, 0.3); animation: br-drop 0.5s 0.12s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.br-name { font-size: clamp(22px, 4.4vh, 38px); font-weight: 900; letter-spacing: -0.01em; animation: br-drop 0.45s 0.22s ease-out both; }
+.br-wx { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; animation: br-drop 0.4s 0.3s ease-out both; }
+.br-wx span { font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px; background: rgba(59, 36, 20, 0.12); color: #6b4a2c; }
+.br-count { margin-top: 8px; font-size: clamp(16px, 2.8vh, 22px); font-weight: 700; color: #5a3f27; animation: br-drop 0.4s 0.34s ease-out both; }
+.br-count b { font-family: var(--stencil); font-weight: 400; font-size: 1.5em; color: var(--ink); vertical-align: -0.08em; }
+.br-tanks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; }
+.br-tanks li { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; align-items: center; column-gap: 2px; animation: br-tank 0.4s calc(0.45s + var(--i) * 0.12s) cubic-bezier(0.3, 1.7, 0.5, 1) both; }
+.br-tanks .art { grid-row: span 2; width: clamp(42px, 7.5vh, 62px); height: clamp(42px, 7.5vh, 62px); filter: drop-shadow(0 3px 2px rgba(60, 30, 10, 0.35)); }
+.br-tanks .art svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.br-tanks b { font-family: var(--stencil); font-weight: 400; font-size: 20px; align-self: end; }
+.br-tanks small { font-size: 12px; font-weight: 700; color: #6b4a2c; align-self: start; grid-column: 2; }
+.br-sub { margin-top: 8px; max-width: 560px; font-size: 15px; font-weight: 600; font-style: italic; color: #6b4a2c; animation: br-drop 0.4s 0.6s ease-out both; }
+.br-record { margin-top: 4px; font-size: 13px; font-weight: 700; color: #6b4a2c; animation: br-drop 0.4s 0.7s ease-out both; }
+.br-record .stars { color: #d99a1e; letter-spacing: 0.12em; font-size: 16px; }
+#brief.boss .br-kicker { background: #f2c14e; }
+#brief.boss .br-num { color: #b8553e; }
+#brief.night { color: #e8eeff; background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent 14%, transparent 86%, rgba(0, 0, 0, 0.35)), radial-gradient(ellipse at 50% 42%, #2c3550 0%, #1a1f31 75%, #10131f 100%); }
+#brief.night .br-name, #brief.night .br-count b, #brief.night .br-tanks b { color: #e8eeff; }
+#brief.night .br-count, #brief.night .br-sub, #brief.night .br-tanks small, #brief.night .br-record, #brief.night .br-wx span { color: #b9c6e8; }
+#brief.night .br-wx span { background: rgba(160, 180, 255, 0.14); }
+#brief.night .br-num { color: #9db4ff; text-shadow: 0 4px 0 #3d4f8a, 0 0 30px rgba(140, 170, 255, 0.5); }
+#brief.mole .br-num { color: #8a3fd1; text-shadow: 0 4px 0 #4a1d75; }
+#brief.daily .br-num { color: #d98a10; text-shadow: 0 4px 0 #7a4a06; }
+@keyframes br-drop { from { opacity: 0; transform: translateY(-14px) scale(1.06); } }
+@keyframes br-tank { from { opacity: 0; transform: translateY(10px) scale(0.5); } }
+@media (max-height: 460px) { #brief { padding: 12vh 16px; } .br-num { font-size: 64px; } .br-sub, .br-record { display: none; } }
+
+#sheet {
+  position: fixed; left: 50%; top: 50%; z-index: 6; pointer-events: none;
+  width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 24px); overflow: hidden;
+  transform: translate(-50%, -50%) rotate(-1.2deg);
+  color: var(--ink); padding: 20px 26px 18px 54px; border-radius: 4px;
+  background: radial-gradient(circle at 22px 34px, #2b1a0e 0 6px, transparent 7px) 0 0 / 100% 96px repeat-y,
+    linear-gradient(90deg, transparent 42px, rgba(200, 70, 60, 0.45) 42px 43px, transparent 43px),
+    repeating-linear-gradient(180deg, transparent 0 27px, rgba(80, 120, 170, 0.18) 27px 28px),
+    var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12), 0 4px 0 #b89d6e, 0 24px 60px rgba(0, 0, 0, 0.55);
+  visibility: hidden;
+}
+#sheet.play { visibility: visible; animation: sheet-in 0.4s cubic-bezier(0.2, 1.4, 0.4, 1); }
+body.replaying #sheet { visibility: hidden !important; }
+@keyframes sheet-in { from { transform: translate(-50%, -40%) rotate(4deg); opacity: 0; } }
+.sh-kicker { font-family: var(--stencil); font-size: 13px; letter-spacing: 0.14em; color: #8e2a20; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-title { font-size: 28px; font-weight: 900; line-height: 1.1; margin: 2px 0 0; padding-right: 128px; }
+.sh-kicker, .sh-sub { padding-right: 128px; }
+body:has(#sheet.play) #reticle { opacity: 0 !important; }
+.sh-sub { font-size: 13px; font-weight: 700; color: #6b4a2c; margin-top: 2px; }
+.sh-lines { list-style: none; margin: 10px 0 0; padding: 0; }
+.sh-lines li, .sh-total { display: flex; align-items: center; gap: 8px; height: 28px; font-weight: 700; font-size: 16px; }
+.sh-lines li.none { color: #8a6a48; font-style: italic; }
+.sh-lines .art { width: 26px; height: 26px; flex: none; }
+.sh-lines .art svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.sh-lines .dots, .sh-total .dots { flex: 1; border-bottom: 2px dotted rgba(59, 36, 20, 0.35); margin-top: 8px; }
+.sh-lines b, .sh-total b { font-family: var(--stencil); font-weight: 400; font-size: 20px; min-width: 42px; text-align: right; }
+.sh-total { border-top: 2px solid var(--ink); margin-top: 2px; font-family: var(--stencil); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
+.sh-total b { font-size: 24px; color: #8e2a20; }
+#sheet.play .sh-lines li, #sheet.play .sh-total { animation: sh-line 0.25s calc(0.35s + var(--i) * 0.3s) ease-out both; }
+@keyframes sh-line { from { opacity: 0; transform: translateX(-12px); } }
+.sh-stamp {
+  position: absolute; right: 16px; top: 26px;
+  font-family: var(--stencil); font-size: 25px; letter-spacing: 0.08em; text-transform: uppercase; color: #e2453c;
+  padding: 2px 12px; border: 4px solid #e2453c; border-radius: 8px; transform: rotate(-12deg); opacity: 0;
+  mix-blend-mode: multiply; -webkit-mask: radial-gradient(circle at 30% 40%, #000 60%, rgba(0, 0, 0, 0.75) 61%) ; mask: radial-gradient(circle at 30% 40%, #000 60%, rgba(0, 0, 0, 0.75) 61%);
+}
+#sheet.play .sh-stamp { animation: sh-stamp 0.32s calc(0.5s + (var(--n) + 1) * 0.3s) cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+@keyframes sh-stamp { from { opacity: 0; transform: rotate(-20deg) scale(2.2); } to { opacity: 0.92; transform: rotate(-12deg) scale(1); } }
+.sh-stars { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+.sh-stars li { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.sh-stars svg { width: 44px; height: 44px; fill: rgba(59, 36, 20, 0.12); stroke: rgba(59, 36, 20, 0.45); stroke-width: 1.6; stroke-dasharray: 3 2.4; stroke-linejoin: round; }
+.sh-stars li.on svg { fill: #ffc93a; stroke: #8a5a10; stroke-dasharray: none; filter: drop-shadow(0 2px 0 #b07a16); }
+.sh-stars b { font-size: 12px; line-height: 1.2; }
+.sh-stars small { font-size: 11px; color: #6b4a2c; font-weight: 600; line-height: 1.2; }
+.sh-stars li:not(.on) b { color: #8a6a48; }
+#sheet.play .sh-stars li { animation: sh-star 0.42s calc(0.95s + (var(--n) + 1) * 0.3s + var(--i) * 0.28s) cubic-bezier(0.3, 1.8, 0.5, 1) both; }
+@keyframes sh-star { from { opacity: 0; transform: scale(0.2) rotate(-40deg); } }
+.sh-best { margin-top: 8px; text-align: center; font-family: var(--stencil); font-size: 16px; letter-spacing: 0.1em; color: #8e2a20; }
+#sheet.play .sh-best { animation: br-drop 0.4s calc(1.9s + (var(--n) + 1) * 0.3s) ease-out both; }
+@media (max-height: 520px) { #sheet { padding-top: 12px; padding-bottom: 10px; } .sh-lines li, .sh-total { height: 22px; font-size: 14px; } .sh-stars svg { width: 30px; height: 30px; } .sh-title { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) {
+  #sheet.play .sh-lines li, #sheet.play .sh-total, #sheet.play .sh-stars li, #sheet.play .sh-best, .br-tanks li, .br-kicker, .br-num, .br-name, .br-wx, .br-count, .br-sub, .br-record { animation-duration: 0.01s; }
+  #sheet.play .sh-stamp { animation-duration: 0.01s; }
+}
+body.demo #sheet { top: 46%; }
+.run-stars { margin: 12px 0 0; font-size: 14px; font-weight: 600; color: var(--muted); text-align: center; }
+.run-stars b { color: var(--text); }
+.run-stars .st { color: #ffc93a; font-size: 18px; }

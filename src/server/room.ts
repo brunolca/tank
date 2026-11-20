@@ -1,12 +1,13 @@
 import { DurableObject } from 'cloudflare:workers';
 import META from '../shared/meta.json';
-import { BOSS_HP_PER_PLAYER, DT, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, isCheckpoint, isWeapon } from '../shared/constants';
+import { BOSS_HP_PER_PLAYER, DT, TICK_RATE, PLAYER_COLORS, SETTLE_MAX, TankKind, Weapon, isCheckpoint, isWeapon } from '../shared/constants';
 import { ATELIER_LIVES, atelierLevel, checkAtelier, cleanName } from '../shared/atelier';
 import { applyTwist, DAILY_LIVES, DAILY_STAGES, dailyLevel, dailyTwist, dayNumber } from '../shared/daily';
 import { RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_LIVES, RUSH_STAGES, rushLevel, rushStageBosses, weekNumber } from '../shared/rush';
 import { VERSUS_ARENAS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, Input, Mode, Phase, PlayerInfo, Results, RushState, ServerMsg } from '../shared/protocol';
 import { Game } from '../shared/sim';
+import { SHEET_EXTRA, TallyCount, parSeconds, shotBudget } from '../shared/bilan';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon, rivalMode } from '../shared/rivals';
 import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
 import { HUNT_CRATES, HUNT_ROUND, HUNT_TARGET, huntArena, huntLeader, newHunt } from '../shared/caisses';
@@ -73,6 +74,7 @@ export class Room extends DurableObject<Env> {
   private round = 0;
   /** Versus (iteration 40): each game starts on a random arena of the pool, so the later ones (the switches…) come up too. */
   private arenaBase = 0;
+  private tally: TallyCount | undefined; // « Le bilan » (iteration 45): the count of the current mission, all its tries together
   private killedEnemies = new Set<number>(); // enemy indices destroyed in current mission (persist across retries)
   private enemyIndexByTank = new Map<number, number>();
   private enemyHp = new Map<number, number>(); // damage dealt to tough enemies (the boss) sticks across retries
@@ -428,6 +430,7 @@ export class Room extends DurableObject<Env> {
     this.board = undefined;
     this.killedEnemies.clear();
     this.enemyHp.clear();
+    this.tally = undefined;
     this.loadStage();
     this.startLoop();
   }
@@ -512,6 +515,12 @@ export class Room extends DurableObject<Env> {
     }
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
+    if (pvp(this.mode)) this.tally = undefined;
+    else if (!this.tally || this.tally.mission !== this.mission) {
+      // a new mission (not a retry): its par time and its shell budget, from the tanks as they stand now
+      const foes = game.tanks.filter((t) => t.team === 99);
+      this.tally = new TallyCount(this.mission, parSeconds(foes.map((t) => ({ boss: !!t.boss }))), shotBudget(foes.reduce((n, t) => n + t.maxHp, 0), participants.length));
+    }
     this.game = game;
     this.setPhase('intro', 3);
     this.lastEnemyCount = -1;
@@ -564,6 +573,10 @@ export class Room extends DurableObject<Env> {
   }
 
   private onKill(victim: { pid?: string; kind: TankKind; id: number; team: number; x: number; y: number }, killer?: { pid?: string; team: number; id: number }) {
+    if (this.tally && this.phase === 'playing') {
+      if (victim.team === 99) this.tally.kill(victim.kind);
+      else if (victim.pid) this.tally.falls++; // a player or an AI teammate
+    }
     if (victim.pid) {
       const vp = this.entrant(victim.pid);
       if (vp) vp.deaths++;
@@ -613,11 +626,11 @@ export class Room extends DurableObject<Env> {
 
   /** A mission cleared: everyone in it gets a little experience, then those with galons to spend get time to choose. */
   private clearedTraining(): number {
-    if (this.mode !== 'coop') return END_PAUSE;
+    if (this.mode !== 'coop') return END_PAUSE + SHEET_EXTRA; // « Le bilan » (iteration 45): time to read the sheet
     for (const p of this.players.values()) if (p.inGame) this.addXp(p, XP_CLEAR);
     this.training.clear();
     for (const p of this.players.values()) if (p.inGame && p.ws && p.prog && canBuyAny(p.prog)) this.training.add(p.pid);
-    return this.training.size ? TRAINING_SECONDS : END_PAUSE;
+    return (this.training.size ? TRAINING_SECONDS : END_PAUSE) + SHEET_EXTRA;
   }
 
   private progress(): Record<string, Progress> | undefined {
@@ -651,6 +664,7 @@ export class Room extends DurableObject<Env> {
       stages: this.mode === 'taupe' ? TAUPE_STAGES : undefined,
       prog: this.progress(),
       training: this.phase === 'cleared' && this.training.size ? [...this.training] : undefined,
+      tally: this.phase === 'cleared' && this.tally && this.tally.mission === this.mission ? this.tally.sheet(TICK_RATE) : undefined,
       teams: this.mode === 'drapeau' ? [this.teams[0], this.teams[1]] : undefined,
       win: this.mode === 'drapeau' && this.phase === 'roundEnd' ? this.roundWin : undefined,
       left: this.mode === 'drapeau' && this.game ? Math.max(0, +(CTF_ROUND - this.game.ctfTime).toFixed(1))
@@ -771,6 +785,10 @@ export class Room extends DurableObject<Env> {
 
     this.phaseTimer -= DT;
     if (this.phase === 'playing' && (this.mode === 'daily' || this.mode === 'rush')) this.runTicks++;
+    if (this.phase === 'playing' && this.tally && this.settle < 0) {
+      this.tally.ticks++;
+      for (const e of E) if (e[0] === 'shot' && this.players.has(game.tankById(e[5] as number)?.pid ?? '')) this.tally.shots++;
+    }
     switch (this.phase) {
       case 'intro':
         if (this.phaseTimer <= 0) { this.setPhase('playing', 0); this.broadcastPhase(); }

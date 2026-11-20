@@ -222,6 +222,32 @@ export const sfx = {
     tone(t + 0.07, 0.3, 2637, 2637, v, 'square');
     if (points > 1) [1047, 1319, 1568, 2093].forEach((f, i) => tone(t + 0.16 + i * 0.08, 0.3, f, f, 0.1, 'triangle'));
   },
+  /** « Le bilan » (iteration 45): a pencil tick on the sheet, a little higher on every line. */
+  tally(i: number) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const f = 520 * Math.pow(2, Math.min(i, 12) / 12);
+    tone(t, 0.07, f, f * 0.98, 0.1, 'triangle');
+    noise(t, 0.03, 3200, 2, 0.08, 'bandpass');
+  },
+  /** The red stamp comes down on the paper. */
+  stamp() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.16, 900, 0.7, 0.5, 'lowpass', 160);
+    tone(t, 0.14, 130, 55, 0.4, 'triangle');
+    noise(t + 0.02, 0.08, 2600, 1, 0.12, 'bandpass');
+  },
+  /** A star of the sheet: a bright chime when won (higher for each star), a dull knock when missed. */
+  star(i: number, on: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (!on) { tone(t, 0.12, 196, 160, 0.08, 'triangle'); return; }
+    const f = [1047, 1319, 1568][i] ?? 1568;
+    tone(t, 0.4, f, f, 0.12, 'triangle');
+    tone(t, 0.3, f * 2, f * 2, 0.04, 'sine');
+    tone(t + 0.06, 0.35, f * 1.5, f * 1.5, 0.05, 'sine');
+  },
   /** « Nouveau au bestiaire ! » (iteration 38): a little wooden xylophone run, then a bell. */
   newcomer() {
     if (!ctx) return;

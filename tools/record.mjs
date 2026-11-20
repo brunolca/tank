@@ -7,12 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 23, arms: ['canon', 'sapeur'], hud: true, seconds: 12, caption: 'Itération 44 : le réticule', sub: 'Tes obus prêts, tes mines et la recharge, sous la souris' },
-  { mission: 54, arms: ['ricochet', 'canon'], hud: true, seconds: 12, caption: 'Un jeton par ennemi', sub: 'En haut, chaque tank restant à sa couleur' },
-  { mission: 26, arms: ['canon', 'fusee'], hud: true, seconds: 10, caption: 'L’équipe en bas', sub: 'Les vies, une plaquette par coéquipier, « Suis-moi ! » et les bulles' },
-  { options: 7, seconds: 7, caption: 'Au choix', sub: 'Le réticule se coupe dans les options' },
-  { mission: 10, arms: ['canon', 'ricochet'], hud: true, bossHp: 5, seconds: 11, caption: 'Les boss ont leur liseré doré', sub: 'Le Colosse et son escorte, comptés en haut' },
-  { mission: 57, arms: ['canon', 'sapeur'], hud: true, seconds: 10, caption: 'Et toujours la neige', sub: 'Le tableau de bord suit partout' },
+  { mission: 1, bilan: true, arms: ['canon', 'ricochet'], hud: true, seconds: 27, caption: 'Itération 45 : le bilan', sub: 'Un briefing, puis la fiche et ses trois étoiles' },
+  { mission: 19, bilan: true, arms: ['canon', 'sapeur'], seconds: 9, caption: 'Le briefing', sub: 'La mission, le temps qu’il fait, et chaque ennemi qui t’attend' },
+  { mission: 10, bilan: true, arms: ['canon', 'ricochet'], hud: true, bossHp: 3, seconds: 14, caption: 'Les boss aussi', sub: 'Le briefing donne l’astuce pour le battre' },
+  { mission: 36, bilan: true, arms: ['ricochet', 'canon'], seconds: 8, caption: 'Même dans la brume', sub: 'Le briefing annonce le temps qu’il fait' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -53,6 +51,7 @@ try {
   for (const shot of MONTAGE) {
     await page.evaluate((shot) => {
       const d = window.__demo;
+      if (!shot.still) d.bilan?.(!!shot.bilan); // « Le bilan » (iteration 45): the briefing before the mission, the sheet after it
       if (shot.still) { /* the table of the previous shot goes on */ }
       else if (shot.home) d.home(shot.home * 1000);
       else if (shot.options) d.options(shot.options * 1000); // « Le nouvel accueil » (iteration 43): the planks, then the options

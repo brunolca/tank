@@ -1,3 +1,4 @@
+import { TallyCount, cleanTally, parSeconds, shotBudget, starCount } from '../src/shared/bilan';
 import { RUSH_BOSSES, RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_DUOS, RUSH_STAGES, rushDuo, rushLevel, rushOrder, rushStageBosses, weekNumber, weekStart } from '../src/shared/rush';
 import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
@@ -2737,4 +2738,23 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions à interrupteurs');
   if (process.exitCode !== 1) console.log(`interrupteurs OK (${cleared}/6 parties gagnées par l’IA, ${flips} bascule(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le bilan » (iteration 45): par times, shell budgets, the stars and a tally from the network that may be broken
+{
+  const fail = (m: string) => { console.error('BILAN:', m); process.exitCode = 1; };
+  if (parSeconds([]) !== 20 || parSeconds([{ boss: false }, { boss: false }]) !== 40 || parSeconds([{ boss: true }]) !== 60) fail('bilan : chrono de référence inattendu');
+  if (shotBudget(1, 1) !== 6 || shotBudget(4, 2) <= shotBudget(4, 1)) fail('bilan : budget d’obus inattendu');
+  const tc = new TallyCount(3, 40, 9);
+  tc.kill('brown'); tc.kill('ash'); tc.kill('brown');
+  tc.ticks = 30 * 35; tc.shots = 9;
+  let sh = tc.sheet(30);
+  if (sh.k.length !== 2 || sh.k[0][0] !== 'brown' || sh.k[0][1] !== 2 || starCount(sh) !== 3) fail(`bilan : décompte faux ${JSON.stringify(sh)}`);
+  tc.falls = 1; tc.shots = 10; tc.ticks = 30 * 41;
+  sh = tc.sheet(30);
+  if (starCount(sh) !== 0 || sh.s !== 41) fail(`bilan : étoiles fausses ${JSON.stringify(sh)}`);
+  if (cleanTally(null) || cleanTally({ k: 'x' }) || cleanTally({ k: [], stars: 'abc' })) fail('bilan : un décompte cassé est accepté');
+  const ok = cleanTally({ k: [['brown', 3], ['bad'], [1, 2]], s: 'x', par: 40, shots: 2, budget: 9, falls: 0, stars: [1, 0, true] });
+  if (!ok || ok.k.length !== 1 || ok.s !== 0 || !ok.stars[0] || ok.stars[1]) fail(`bilan : nettoyage du décompte ${JSON.stringify(ok)}`);
+  if (process.exitCode !== 1) console.log('bilan OK');
 }

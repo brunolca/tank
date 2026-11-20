@@ -23,6 +23,8 @@ import { Workshop, cellImage, drawMap } from './atelier';
 import { Renderer, type RBonus, type RBullet, type RFlag, type RLob, type RMine, type RTank } from './render';
 import { Film, REPLAYED, koCaption, type Reel } from './replay';
 import { padNav } from './padnav';
+import { hideBrief, hideSheet, playSheet, saveStars, sheetLength, sheetWaiting, showBrief, showSheet, starRecord, starTotal, type SheetView } from './bilan';
+import { TallyCount, cleanTally, parSeconds, shotBudget, starCount, type Tally } from '../shared/bilan';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -97,6 +99,7 @@ function show(s: Screen) {
   $('#atelier').hidden = s !== 'atelier';
   $('#hud').hidden = s !== 'game';
   document.body.dataset.screen = s;
+  if (s !== 'game') { hideBrief(false); hideSheet(); }
   if (s !== 'game') { $('#menu').hidden = true; $('#council').hidden = true; council = undefined; setRain(false); setWind(false); }
 }
 
@@ -258,6 +261,7 @@ let myVote: string | undefined; // our ballot in the council in progress
 let prog: Record<string, Progress> = {}; // coop campaign (iteration 19): everyone's experience, galons and skills
 let training: string[] = []; // end of a mission: players still choosing their skills
 let treeOpen = false; // the skill tree card is on screen
+let treeDue = 0; // « Le bilan » (iteration 45): when the skill tree opens, once the sheet has counted (0: not waiting)
 let treeAuto = false; // it opened by itself at the end of a mission (and closes with it)
 let treeEnd = 0; // performance.now() when the end-of-mission choice runs out
 let treeFlash: number | undefined; // branch just bought, for a little pop
@@ -408,24 +412,21 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   const bombardFight = enemies.some((e) => e.kind === 'bombard');
   if (online && coopLike(msg.mode)) meetEnemies(enemies.map((e) => e.kind));
   if (coopLike(msg.mode)) {
-    const kinds = [...new Set(enemies.map((e) => e.kind))];
-    if (msg.daily) {
-      const tw = TWIST_INFO[msg.daily.twist];
-      banner(`Défi du jour · étape ${msg.daily.stage}/${msg.daily.stages}${wx}`, msg.name,
-        `${tw ? `${tw.label} · ` : ''}Tanks ennemis : ${enemies.length}`, `intro daily${wxCls}${bossFight ? ' boss' : ''}`);
-    } else if (msg.mode === 'rush') {
-      const st = rushState?.stage ?? msg.mission;
-      const finale = st >= RUSH_STAGES;
-      banner(finale ? `Ronde des boss · le bouquet final${wx}` : `Ronde des boss · boss ${st}/${RUSH_STAGES}${wx}`, msg.name,
-        finale ? 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !' : bossTip(thunderFight, sowerFight, drillFight, bombardFight), `intro boss rush${wxCls}`);
-    } else if (msg.mode === 'taupe') {
-      banner(`La taupe · étape ${msg.mission}/${TAUPE_STAGES}`, msg.name, `Tanks ennemis : ${enemies.length}`, 'intro mole');
-    } else if (msg.mode === 'atelier') {
-      banner(`Atelier · mission maison${wx}`, msg.name, `Tanks ennemis : ${enemies.length} · ${ATELIER_LIVES} vies`, `intro atelier${wxCls}${bossFight ? ' boss' : ''}`);
-    } else if (bossFight) banner(`Mission ${msg.mission} · Boss`, msg.name, bossTip(thunderFight, sowerFight, drillFight, bombardFight), `intro boss${thunderFight ? ' storm' : ''}`);
-    else banner(`Mission ${msg.mission}${wx}`, msg.name, `Tanks ennemis : ${enemies.length}`, `intro${wxCls}`);
-    const sub = $('#banner .b-sub');
-    sub.innerHTML += `<div class="b-tanks">${kinds.map((k) => `<span style="--c:${hex(enemyColor(k))}">${specOf(k).label}</span>`).join('')}</div>`;
+    // « Le bilan » (iteration 45): a full-screen briefing, as in the original, instead of the banner
+    const rushSt = rushState?.stage ?? msg.mission;
+    const b: { kicker: string; big: string; sub: string; cls: string } = msg.daily
+      ? { kicker: 'Défi du jour · étape', big: `${msg.daily.stage}/${msg.daily.stages}`, sub: TWIST_INFO[msg.daily.twist]?.label ?? '', cls: 'daily' }
+      : msg.mode === 'rush'
+      ? (rushSt >= RUSH_STAGES ? { kicker: 'Ronde des boss · le bouquet final', big: `${rushSt}/${RUSH_STAGES}`, sub: 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !', cls: 'boss rush' }
+        : { kicker: 'Ronde des boss · boss', big: `${rushSt}/${RUSH_STAGES}`, sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight), cls: 'boss rush' })
+      : msg.mode === 'taupe' ? { kicker: 'La taupe · étape', big: `${msg.mission}/${TAUPE_STAGES}`, sub: '', cls: 'mole' }
+      : msg.mode === 'atelier' ? { kicker: 'Atelier · mission maison', big: '', sub: `${ATELIER_LIVES} vies pour en venir à bout`, cls: 'atelier' }
+      : bossFight ? { kicker: 'Mission · Boss', big: String(msg.mission), sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight), cls: 'boss' }
+      : { kicker: 'Mission', big: String(msg.mission), sub: '', cls: '' };
+    hideBanner();
+    hideSheet();
+    showBrief({ ...b, name: msg.name, wx: weatherWords(!!msg.night, !!msg.storm), kinds: kindCounts(enemies.map((e) => e.kind)), total: enemies.length,
+      record: msg.mode === 'coop' ? starRecord(msg.mission) : undefined, cls: `${b.cls}${wxCls}` }, briefArt, kindLabel);
   } else if (msg.mode === 'drapeau') {
     banner(`Drapeaux · manche ${msg.mission}${wx}`, msg.name,
       `${myTeam ? `Tu joues chez les ${TEAM_NAMES[myTeam - 1]} (${myTeam === 1 ? 'à gauche' : 'à droite'}) : ` : ''}rapporte le drapeau adverse à ta base !`, `intro ctf team${myTeam}${wxCls}`);
@@ -459,6 +460,37 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
+/** « Le bilan » (iteration 45): the weather of a table, as words for the briefing. */
+function weatherWords(night: boolean | undefined, storm: boolean | undefined, bl: number[] = belts, wind = levelWind, fog = levelFog) {
+  const w: string[] = [];
+  if (night) w.push('Nuit');
+  if (storm) w.push('Orage');
+  if (bl.includes(ICE)) w.push('Glace');
+  if (bl.includes(SAND)) w.push('Sable');
+  if (bl.includes(SNOW) || bl.includes(PACKED)) w.push('Neige');
+  if (wind !== undefined) w.push('Vent');
+  if (fog !== undefined) w.push('Brouillard');
+  return w;
+}
+/** Enemy kinds and how many of each, bosses first, then in order of appearance. */
+function kindCounts(kinds: string[]): [string, number][] {
+  const m = new Map<string, number>();
+  for (const k of kinds) m.set(k, (m.get(k) ?? 0) + 1);
+  return [...m].sort((a, b) => Number(isBossKind(b[0])) - Number(isBossKind(a[0])));
+}
+const briefArt = (k: string) => tankSvg(k, true);
+const kindLabel = (k: string) => specOf(k).label;
+const sheetSfx = { tick: (i: number) => sfx.tally(i), stamp: () => sfx.stamp(), star: (i: number, on: boolean) => sfx.star(i, on) };
+
+/** The end-of-mission sheet (iteration 45): it waits behind the replay, then counts. Campaign stars are kept on this device. */
+let runStars = { stars: 0, missions: 0 }; // the stars of the game being played (shown with its results)
+function openSheet(v: SheetView, mission?: number) {
+  if (mission !== undefined) v.best = saveStars(mission, starCount(v.tally));
+  if (online) { runStars.stars += starCount(v.tally); runStars.missions++; }
+  hideBanner();
+  showSheet(v, briefArt, kindLabel, sheetSfx);
+}
+
 /** One line on how to beat the boss of the table (the intro banner of a boss fight). */
 function bossTip(thunder: boolean, sower: boolean, drill: boolean, bombard = false) {
   return bombard ? 'Il pilonne des rangées entières de boulets. Ne longe pas la rangée : avance vers lui ou recule !'
@@ -478,7 +510,10 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   if (msg.daily) { dailyState = msg.daily; dailyK = latestK; }
   if (msg.rush && currentMode === 'rush') { rushState = msg.rush; dailyK = latestK; }
   enemiesLeft = msg.enemies;
-  onProgress(msg, prev);
+  const tally = msg.phase === 'cleared' ? cleanTally(msg.tally) : undefined;
+  if (msg.phase !== 'cleared') hideSheet();
+  if (msg.phase !== 'intro') hideBrief(msg.phase === 'playing');
+  onProgress(msg, prev, tally);
   renderHud();
   if (msg.phase === 'council' && msg.council) {
     if (!council || prev !== 'council') myVote = undefined;
@@ -502,23 +537,32 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
       hideBanner();
       setMusicIntensity(bossFight ? 2 : 1);
       break;
-    case 'cleared':
+    case 'cleared': {
+      if (prev === 'cleared') break; // the same pause, told again (a galon bought): the sheet is already out
       setMusicIntensity(0);
       sfx.jingle('clear');
       if (treeOpen && treeAuto) break; // the skill tree card opened instead of the banner (iteration 19)
+      let c: [string, string, string];
       if (msg.daily) {
         const last = msg.daily.stage >= msg.daily.stages;
-        banner('Bravo !', last ? 'Défi relevé !' : `Étape ${msg.daily.stage} réussie`, `Chrono : ${formatTicks(msg.daily.ticks)}`, 'good');
+        c = ['Bravo !', last ? 'Défi relevé !' : `Étape ${msg.daily.stage} réussie`, `Chrono : ${formatTicks(msg.daily.ticks)}`];
       } else if (msg.rush && currentMode === 'rush') {
         const r = msg.rush;
         const split = r.splits[r.splits.length - 1];
         const last = r.stage >= r.stages;
         const who = r.bosses.map((b) => BOSS_NAMES[b as BossKind] ?? 'le boss');
-        banner(last ? 'La ronde est bouclée !' : `Boss ${r.stage}/${r.stages} vaincu !`, last ? 'Les quatre boss sont tombés… et le duo aussi !' : `${cap(who.join(' et '))} ${who.length > 1 ? 'sont tombés' : 'est tombé'}`,
-          `${split !== undefined ? `En ${formatTicks(split)} · ` : ''}chrono : ${formatTicks(r.ticks)}${!last && r.stage + 1 >= r.stages ? ' · Prochain : le bouquet final !' : ''}`, 'good');
-      } else if (currentMode === 'atelier') banner('Bravo !', 'Mission réussie', currentLevelName, 'good');
-      else banner('Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : '', 'good');
+        c = [last ? 'La ronde est bouclée !' : `Boss ${r.stage}/${r.stages} vaincu !`, last ? 'Les quatre boss sont tombés… et le duo aussi !' : `${cap(who.join(' et '))} ${who.length > 1 ? 'sont tombés' : 'est tombé'}`,
+          `${split !== undefined ? `En ${formatTicks(split)} · ` : ''}chrono : ${formatTicks(r.ticks)}${!last && r.stage + 1 >= r.stages ? ' · Prochain : le bouquet final !' : ''}`];
+      } else if (currentMode === 'atelier') c = ['Bravo !', 'Mission réussie', currentLevelName];
+      else c = ['Bravo !', 'Mission réussie', msg.mission % 5 === 0 ? 'Vie bonus à la prochaine mission !' : ''];
+      // « Le bilan » (iteration 45): the sheet of the mission, when the room sends its count (older rooms: the banner)
+      if (tally) {
+        const kick = currentMode === 'coop' ? `Mission ${msg.mission} · ${currentLevelName}` : currentMode === 'atelier' ? `Atelier · ${currentLevelName}` : currentLevelName;
+        const plain = currentMode === 'coop' || currentMode === 'atelier'; // the stamp says « Réussie »: the level's name is the title
+        openSheet({ kicker: plain ? kick.split(' · ')[0] : kick, title: plain ? currentLevelName : c[0] === 'Bravo !' ? c[1] : c[0], sub: plain ? c[2] : c[0] === 'Bravo !' ? c[2] : `${c[1]} · ${c[2]}`, tally }, currentMode === 'coop' ? msg.mission : undefined);
+      } else banner(c[0], c[1], c[2], 'good');
       break;
+    }
     case 'failed':
       setMusicIntensity(0);
       sfx.jingle('fail');
@@ -543,6 +587,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
       if (msg.results) showResults(msg.results);
       break;
     case 'lobby':
+      runStars = { stars: 0, missions: 0 };
       online = false;
       if (screen !== 'results') show('lobby');
       break;
@@ -1429,7 +1474,7 @@ function myProg(): Progress | undefined {
   return treeDemo ?? prog[pid];
 }
 
-function onProgress(msg: Extract<ServerMsg, { t: 'phase' }>, prev: Phase) {
+function onProgress(msg: Extract<ServerMsg, { t: 'phase' }>, prev: Phase, tally?: Tally) {
   const before = prog[pid];
   prog = msg.prog ?? {};
   training = msg.training ?? [];
@@ -1442,9 +1487,12 @@ function onProgress(msg: Extract<ServerMsg, { t: 'phase' }>, prev: Phase) {
   }
   if (!now && !treeDemo) { if (treeOpen) closeTree(); return; }
   if (msg.phase === 'cleared' && training.includes(pid) && prev !== 'cleared') {
-    treeEnd = performance.now() + TRAINING_SECONDS * 1000;
-    openTree(true);
-  } else if (msg.phase !== 'cleared' && treeAuto) closeTree();
+    // « Le bilan » (iteration 45): the sheet first (the room gave it the time), then the skill tree
+    const wait = tally ? sheetLength() + 600 : 0;
+    treeEnd = performance.now() + TRAINING_SECONDS * 1000 + wait;
+    if (wait) treeDue = performance.now() + wait;
+    else openTree(true);
+  } else if (msg.phase !== 'cleared' && (treeAuto || treeDue)) { treeDue = 0; closeTree(); }
   else if (treeOpen) drawTree();
 }
 
@@ -1856,6 +1904,12 @@ function taupeResultHtml(t: NonNullable<Results['taupe']>, players: Results['pla
   </div>`;
 }
 
+/** « Le bilan » (iteration 45): the stars of the game, and (campaign) all those kept on this device. */
+function starsResultHtml(campaign: boolean) {
+  const all = starTotal();
+  return `<p class="run-stars"><span class="st">★</span> <b>${runStars.stars}</b> étoile${runStars.stars > 1 ? 's' : ''} sur ${3 * runStars.missions} possibles pendant cette partie${campaign && all.missions ? ` · ton carnet en compte <b>${all.stars}</b> sur ${all.missions} mission${all.missions > 1 ? 's' : ''}` : ''}</p>`;
+}
+
 function showResults(r: Results) {
   const kinds = Object.keys(SPECS).filter((k) => k !== 'player') as (keyof typeof SPECS)[];
   const title = r.daily
@@ -1884,7 +1938,8 @@ function showResults(r: Results) {
           }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}${hunt ? `<td>${p.crates || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
-    </table>${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
+    </table>${coop && runStars.missions ? starsResultHtml(r.mode === 'coop') : ''}${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
+  runStars = { stars: 0, missions: 0 };
   const over = online && phase === 'gameover';
   $('#btn-results-ok').textContent = over ? 'Retour au salon' : 'Continuer';
   const again = $<HTMLButtonElement>('#btn-results-again');
@@ -1897,6 +1952,10 @@ function showResults(r: Results) {
 
 let attract: Game | undefined;
 let attractEnd = 0;
+let demoBilan = false; // « Le bilan » (iteration 45): the videos show the briefing and the sheet around the demo missions
+let attractTally: TallyCount | undefined;
+let attractBriefUntil = 0;
+let attractName = '';
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
 /** A versus of AI rivals (iteration 17): the videos, and now and then the home-screen background. */
@@ -1918,6 +1977,10 @@ function attractMission() {
 function startAttract(opts: AttractOpts = attractOpts) {
   if (attract) return;
   stopReel();
+  hideSheet();
+  hideBrief(false);
+  attractTally = undefined;
+  attractBriefUntil = 0;
   reelWanted = -1;
   film.clear();
   clearBubbles();
@@ -1966,9 +2029,24 @@ function startAttract(opts: AttractOpts = attractOpts) {
     else if (opts.rush && opts.rush.stage >= RUSH_STAGES && t.boss) g.setHp(t, RUSH_DUO_HP, RUSH_DUO_HP); // the finale's lighter bosses
   });
   // friendly fire between heroes: the same « Tir ami ! » as online
-  g.onKill = (v, k) => { if (v.kind === 'player' && k?.kind === 'player') g.events.push(['ff', v.x, v.y, v.id, k.id]); };
+  g.onKill = (v, k) => {
+    if (v.kind === 'player' && k?.kind === 'player') g.events.push(['ff', v.x, v.y, v.id, k.id]);
+    if (attractTally && !attractEnd) { if (v.team === 2) attractTally.kill(v.kind); else if (v.kind === 'player') attractTally.falls++; } // « Le bilan » (iteration 45)
+  };
   g.frozen = false;
   attract = g;
+  if (demoBilan && opts.heroes) {
+    // « Le bilan » (iteration 45), in the videos: the briefing over a frozen table, then the count of the mission
+    const foes = g.tanks.filter((t) => t.team === 2);
+    const heroes = g.tanks.filter((t) => t.team === 1).length;
+    attractTally = new TallyCount(opts.mission ?? 0, parSeconds(foes.map((t) => ({ boss: !!t.boss }))), shotBudget(foes.reduce((n, t) => n + t.maxHp, 0), heroes));
+    attractName = lvl.name;
+    g.frozen = true;
+    attractBriefUntil = performance.now() + 3000;
+    const boss = foes.some((t) => !!t.boss);
+    showBrief({ kicker: boss ? 'Mission · Boss' : 'Mission', big: String(opts.mission ?? 1), name: lvl.name, sub: boss ? bossTip(foes.some((t) => t.kind === 'thunder'), foes.some((t) => t.kind === 'sower'), foes.some((t) => t.kind === 'drill'), foes.some((t) => t.kind === 'bombard')) : '',
+      wx: weatherWords(g.night, g.storm, g.belts, g.wind, g.fog), kinds: kindCounts(foes.map((t) => t.kind)), total: foes.length, cls: `${boss ? 'boss' : ''}${g.night ? ' night' : ''}${g.storm ? ' storm' : ''}` }, briefArt, kindLabel);
+  }
   attractEnd = 0;
   attractPrev.clear();
   renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
@@ -2254,11 +2332,16 @@ let attractAcc = 0;
 let attractState: Record<string, unknown> = {};
 function attractFrame(dt: number) {
   const g = attract!;
+  if (attractBriefUntil && performance.now() >= attractBriefUntil) { attractBriefUntil = 0; g.frozen = false; hideBrief(); }
   attractAcc += dt;
   while (attractAcc >= DT) {
     attractAcc -= DT;
     for (const t of g.tanks) attractPrev.set(t.id, { x: t.x, y: t.y, body: t.body, turret: t.turret });
     g.step(new Map());
+    if (attractTally && !g.frozen && !attractEnd) {
+      attractTally.ticks++;
+      for (const e of g.events) if (e[0] === 'shot' && g.tankById(e[5] as number)?.team === 1) attractTally.shots++;
+    }
     for (const e of g.events) handleEvent(e, false);
     g.events = [];
     if (bridgeTrapUntil && g.tick <= bridgeTrapUntil) bridgeTrap(g);
@@ -2322,6 +2405,10 @@ function attractFrame(dt: number) {
     if (!attractEnd && (g.aliveCount(1) === 0 || g.aliveCount(2) === 0 || g.tick > TICK_RATE * 90)) {
       attractEnd = g.tick + TICK_RATE * 2.5;
       if (g.aliveCount(2) === 0) g.cheer(1); // the heroes cheer the mission won (iteration 30)
+      if (attractTally && g.aliveCount(2) === 0) {
+        attractEnd = g.tick + TICK_RATE * 8; // the replay, then the sheet
+        openSheet({ kicker: `Mission ${attractOpts.mission ?? 1}`, title: attractName, sub: '', tally: attractTally.sheet(TICK_RATE) });
+      }
     }
     if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
   }
@@ -2340,7 +2427,7 @@ let replayOn = (() => { try { return localStorage.getItem('tanks.ralenti') !== '
 
 /** The mission (or round) is over: the replay starts a moment later, once the last snapshots have been drawn. */
 function queueReel(force = false) {
-  if ((!replayOn && !force) || reel || screen !== 'game') return; // not behind the home screen or the lobby
+  if ((!replayOn && !force) || reel || screen !== 'game' || treeDue) return; // not behind the home screen or the lobby (nor before the skill tree)
   reelDue = performance.now() + (online ? 350 : 450);
   reelTries = 0;
 }
@@ -2357,7 +2444,7 @@ function reelName(id: number) {
 
 function startReel(force = false) {
   reelDue = 0;
-  if (reel || (!force && !replayOn) || (treeOpen && treeAuto) || screen === 'results') return false;
+  if (reel || (!force && !replayOn) || (treeOpen && treeAuto) || treeDue || screen === 'results') return false;
   const r = film.reel(force ? 4.5 : 3.5);
   if (!r) {
     // the last blast may not be drawn yet (the table runs a few ticks behind the server): look again a little later
@@ -2455,6 +2542,8 @@ function frame(now: number) {
   if (now > lastT) fps += (1000 / (now - lastT) - fps) * 0.05;
   lastT = now;
   if (reelDue && now >= reelDue) startReel();
+  if (sheetWaiting() && !reel && !reelDue) playSheet(); // « Le bilan » (iteration 45): the count starts once the replay is over
+  if (treeDue && now >= treeDue) { treeDue = 0; if (phase === 'cleared' && training.includes(pid)) { hideSheet(); openTree(true); } }
   let rdt = dt;
   if (reel) padSkip();
   else padSkipHeld = true;
@@ -2727,7 +2816,7 @@ function enemySheet(kind: string) {
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
 }
 const MODES: [string, string, string, string][] = [
-  ['🪖', 'Campagne coop', '1 à 4', 'Des missions faites main puis générées à l’infini, un boss toutes les 10 missions, des vies partagées. Des coéquipiers pilotés par l’ordinateur complètent l’équipe.'],
+  ['🪖', 'Campagne coop', '1 à 4', 'Des missions faites main puis générées à l’infini, un boss toutes les 10 missions, des vies partagées. Chaque mission réussie rapporte jusqu’à trois étoiles : personne ne tombe, sous le chrono, sans gaspiller ses obus. Des coéquipiers pilotés par l’ordinateur complètent l’équipe.'],
   ['📅', 'Défi du jour', '1 à 4', `${DAILY_STAGES} missions, les mêmes pour tout le monde aujourd’hui, avec une consigne qui change chaque jour. Le chrono fait le classement.`],
   ['👑', 'Ronde des boss', '1 à 4', 'Les boss l’un après l’autre, puis deux à la fois. L’ordre change chaque lundi : le meilleur chrono de la semaine gagne.'],
   ['⚔️', 'Versus', '2 à 4', 'Chacun pour soi : le dernier tank debout marque un point, premier à 5 manches. Seul ? Ajoute des rivaux pilotés par l’ordinateur.'],
@@ -3204,6 +3293,11 @@ if (params.has('demo')) {
       demoAim.set = false;
       if (!on && !document.body.classList.contains('vs-demo')) $('#hud').hidden = true;
       return demoHud;
+    },
+    /** « Le bilan » (iteration 45): the next demo missions open on their briefing and close on their sheet. */
+    bilan(on = true) {
+      demoBilan = on;
+      return on;
     },
     /** A dry shot for the videos: the trigger clicks on an empty barrel. */
     dry() { dryFire(); },

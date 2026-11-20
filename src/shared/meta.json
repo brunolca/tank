@@ -1,7 +1,7 @@
 {
-  "iteration": 44,
-  "date": "2026-11-19",
-  "title": "Le réticule",
+  "iteration": 45,
+  "date": "2026-11-20",
+  "title": "Le bilan",
   "journal": [
     {
       "iteration": 1,
@@ -535,6 +535,18 @@
         "Le tableau de bord se resserre : la mission et les ennemis en haut, chaque tank ennemi restant y a son petit jeton à sa couleur (les boss ont leur liseré doré).",
         "L’équipe passe en bas de l’écran : les vies, une plaquette par coéquipier (barrée quand il est hors de combat), les galons, les bonus, et deux boutons ronds pour « Suis-moi ! » et les bulles.",
         "À la manette et au tactile, le réticule se place quelques cases devant ton canon. Il se coupe dans les options si tu préfères la croix toute simple."
+      ]
+    },
+    {
+      "iteration": 45,
+      "date": "2026-11-20",
+      "title": "Le bilan",
+      "notes": [
+        "Avant chaque mission, un grand briefing plein écran sur papier, entre deux planches de bois : le numéro de la mission en grand, son nom, le temps qu’il fait et chaque tank ennemi qui t’attend, avec son portrait.",
+        "Mission réussie ? Une fiche arrachée au carnet fait les comptes : les tanks détruits couleur par couleur, ligne après ligne, puis le tampon rouge « Réussie » s’abat sur le papier.",
+        "Trois étoiles à gagner sur chaque mission : personne n’est tombé, mission bouclée sous le chrono, et pas plus d’obus que prévu. Le chrono et le nombre d’obus sont affichés sous chaque étoile.",
+        "Ton record d’étoiles est gardé mission par mission : le briefing te le rappelle, la fiche fête chaque nouveau record, et l’écran des résultats fait le total de la partie.",
+        "Entre deux missions, la fiche passe d’abord, puis l’arbre des galons s’ouvre ; la petite fanfare de victoire ne se rejoue plus quand un coéquipier achète un galon."
       ]
     }
   ]
