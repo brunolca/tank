@@ -33,7 +33,7 @@ export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const c = map[y]?.[x] ?? '.';
-      if (c !== '.') drawCell(g, x * s, y * s, s, c, c === '=' ? tunnelAxis(tiles, y * W + x) : c === ':' ? bridgeAxis(tiles, y * W + x) : 0);
+      if (c !== '.') drawCell(g, x * s, y * s, s, c, c === '=' ? tunnelAxis(tiles, y * W + x) : c === ':' || c === '{' || c === '}' ? bridgeAxis(tiles, y * W + x) : 0);
     }
   }
   if (hot && hot.x >= 0 && hot.y >= 0 && hot.x < W && hot.y < H) {
@@ -91,6 +91,18 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
       g.restore(); g.lineWidth = 1;
       g.strokeStyle = col; g.strokeRect(px + 1.5, py + 1.5, s - 3, s - 3);
     }
+  } else if (c === '{' || c === '}') {
+    // a drawbridge (iteration 48): the pit, planks in its colour; the red one starts raised (only its hinge edge shows)
+    const col = hex(GATE_COLORS[c === '{' ? 0 : 1]);
+    g.fillStyle = '#3a2a1e'; g.fillRect(px, py, s, s);
+    g.fillStyle = col; g.strokeStyle = 'rgba(40,20,5,0.6)'; g.lineWidth = 1;
+    const n = c === '{' ? 1 : 4;
+    for (let k = 0; k < n; k++) {
+      const u = 0.06 + k * 0.235;
+      if (axis === 1) { g.fillRect(px + s * 0.08, py + s * u, s * 0.84, s * 0.17); g.strokeRect(px + s * 0.08 + 0.5, py + s * u + 0.5, s * 0.84 - 1, s * 0.17 - 1); }
+      else { g.fillRect(px + s * u, py + s * 0.08, s * 0.17, s * 0.84); g.strokeRect(px + s * u + 0.5, py + s * 0.08 + 0.5, s * 0.17 - 1, s * 0.84 - 1); }
+    }
+    if (c === '{') { g.fillStyle = '#e8e0d0'; g.font = `800 ${s * 0.5}px Rubik, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('↑', px + s * 0.6, py + s * 0.55); }
   } else if (c === ':') {
     // a bridge (iteration 33): the pit under it, planks across the way (axis 1: the way runs up and down)
     g.fillStyle = '#3a2a1e'; g.fillRect(px, py, s, s);

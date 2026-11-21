@@ -120,7 +120,9 @@ console.log('total', Date.now() - t0, 'ms');
   g.giveBonus(p, 'freeze');
   g.killTank(e, p);
   if (e.alive || e.chill !== undefined) fail('un tank gelé doit pouvoir être détruit');
-  // the Pilleur's way round: an enemy grabbing it freezes the players
+  // the Pilleur's way round: an enemy grabbing it freezes the players (the boss may have shot one meanwhile: back on the table)
+  g.bullets = [];
+  for (const t of [p, mate]) t.alive = true;
   g.giveBonus(boss, 'freeze');
   if (p.chill === undefined || mate.chill === undefined) fail('le gel d’un ennemi doit geler les joueurs');
   p.chill = mate.chill = undefined;
@@ -2861,4 +2863,78 @@ console.log('total', Date.now() - t0, 'ms');
   const ok = cleanTally({ k: [['brown', 3], ['bad'], [1, 2]], s: 'x', par: 40, shots: 2, budget: 9, falls: 0, stars: [1, 0, true] });
   if (!ok || ok.k.length !== 1 || ok.s !== 0 || !ok.stars[0] || ok.stars[1]) fail(`bilan : nettoyage du décompte ${JSON.stringify(ok)}`);
   if (process.exitCode !== 1) console.log('bilan OK');
+}
+
+// « Les ponts-levis » (iteration 48): drawbridges flip with the switches, never rise under a tank, shells fly over the
+// raised ones, the belts turn round on each flip, and the AI plays the two new missions to the end
+{
+  const fail = (m: string) => { console.error('PONTS-LEVIS :', m); process.exitCode = 1; };
+  for (const mission of [65, 74]) {
+    const lvl = getMission(mission);
+    if (!lvl.tiles.includes(Tile.Switch) || !lvl.tiles.includes(Tile.RedLift) || !lvl.tiles.includes(Tile.BlueSpan)) fail(`la mission ${mission} n’a pas d’interrupteur ou de ponts-levis`);
+    if (checkAtelier(EXTRA_LEVELS[mission].map)) fail(`l’atelier refuse la mission ${mission} : ${checkAtelier(EXTRA_LEVELS[mission].map)}`);
+  }
+  if (!getMission(74).belts?.some((b) => b >= 1 && b <= 4)) fail('la mission 74 n’a plus de tapis');
+  const code = encodeAtelier({ name: 'Bascule', map: EXTRA_LEVELS[74].map });
+  if (decodeAtelier(code)?.map.join('') !== EXTRA_LEVELS[74].map.join('')) fail('le lien de l’atelier perd les ponts-levis');
+  if (!checkAtelier(EXTRA_LEVELS[74].map.map((r) => r.replace(/%/g, '.')))) fail('l’atelier accepte des ponts-levis sans interrupteur');
+  // a ravine at x = 10, a red drawbridge (raised) at y = 8, a blue one (lowered) at y = 3, a switch at (15, 8), a belt at (3, 12)
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  for (let y = 0; y < H; y++) tiles[y * W + 10] = Tile.Hole;
+  tiles[8 * W + 10] = Tile.RedLift;
+  tiles[3 * W + 10] = Tile.BlueSpan;
+  tiles[8 * W + 15] = Tile.Switch;
+  const belts = new Array(W * H).fill(0);
+  belts[12 * W + 3] = 1; belts[13 * W + 3] = 4;
+  const g = new Game(tiles, belts);
+  const p = g.addTank('player', 0, 8.5, 8.5, 0x3d7bff, 'p1', 'P');
+  g.frozen = false;
+  for (let i = 0; i < 40; i++) g.step(new Map([['p1', { s: 1 + i, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]));
+  if (p.x > 9.7) fail(`le tank passe un pont-levis levé (x = ${p.x.toFixed(2)})`);
+  // the tank waits on the blue bridge, a shell hits the switch
+  p.x = 10.5; p.y = 3.5;
+  g.bullets.push({ id: 9995, owner: p.id, x: 13, y: 8.5, vx: BULLET_SPEED, vy: 0, bounces: 1, rocket: false, dead: false });
+  g.events = [];
+  for (let i = 0; i < 20; i++) g.step(new Map());
+  if (!g.events.some((e) => e[0] === 'flip')) fail('l’obus n’a pas actionné l’interrupteur');
+  if (g.tiles[8 * W + 10] !== Tile.RedSpan) fail('le pont-levis rouge ne s’est pas abaissé');
+  if (g.tiles[3 * W + 10] !== Tile.BlueSpan || !g.gateWait.has(3 * W + 10)) fail('le pont-levis bleu s’est levé sous le tank');
+  if (!p.alive) fail('le tank est tombé du pont');
+  if (g.belts[12 * W + 3] !== 2 || g.belts[13 * W + 3] !== 3) fail(`les tapis n’ont pas changé de sens (${g.belts[12 * W + 3]}, ${g.belts[13 * W + 3]})`);
+  p.x = 8.5;
+  for (let i = 0; i < 3; i++) g.step(new Map());
+  if (g.tiles[3 * W + 10] !== Tile.BlueLift || g.gateWait.size) fail('le pont-levis bleu ne se lève pas une fois libre');
+  // a shell flies over the raised bridge
+  g.bullets = [{ id: 9994, owner: p.id, x: 9.2, y: 3.5, vx: BULLET_SPEED, vy: 0, bounces: 1, rocket: false, dead: false }];
+  for (let i = 0; i < 12; i++) g.step(new Map());
+  if (!g.bullets.some((b) => b.id === 9994 && !b.dead && b.x > 11)) fail('l’obus ne passe pas au-dessus du pont-levis levé');
+  // and the red one is now a bridge to drive over
+  g.bullets = [];
+  p.x = 8.5; p.y = 8.5; p.body = 0;
+  for (let i = 0; i < 60; i++) g.step(new Map([['p1', { s: 100 + i, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]));
+  if (p.x < 11.2) fail(`le tank ne traverse pas le pont-levis baissé (x = ${p.x.toFixed(2)})`);
+  // the AI plays the new missions to the end, cheaply, and nobody ends up inside a raised drawbridge
+  let cleared = 0, spent = 0, steps = 0, flips = 0;
+  for (const mission of [65, 74]) {
+    for (let run = 0; run < 3 || (cleared === 0 && run < 7); run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        flips += s2.events.filter((ev) => ev[0] === 'flip').length;
+        s2.events = [];
+        for (const t of s2.tanks) if (t.alive && !t.hop && isSolidTank(s2.tiles[Math.floor(t.y) * W + Math.floor(t.x)])) fail(`mission ${mission} : un tank coincé dans un pont-levis`);
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions à ponts-levis');
+  if (process.exitCode !== 1) console.log(`ponts-levis OK (${cleared} partie(s) gagnée(s) par l’IA, ${flips} bascule(s), ${per.toFixed(3)} ms/tick)`);
 }

@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 64, arms: ['canon', 'ricochet'], hud: true, seconds: 16, watches: [3, 9.5], newcomers: [[1.2, ['watcher']]], caption: 'Itération 47 : le Veilleur', sub: 'Un phare sur chenilles : son faisceau balaie la table' },
-  { mission: 61, night: true, arms: ['canon', 'fusee'], hud: true, seconds: 16, watches: [2.5, 8.5], caption: 'La ronde de nuit', sub: 'Éclairé ? L’alarme sonne, et tous les ennemis savent où tu es' },
-  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Une nouvelle fiche au bestiaire', sub: 'Hors de sa lumière, il ne voit rien' },
-  { mission: 66, arms: ['canon', 'sapeur'], hud: true, seconds: 14, watches: [3, 9], caption: 'Puis il monte la garde', sub: 'Dans les missions générées, et dans l’atelier' },
+  { mission: 65, arms: ['canon', 'ricochet'], hud: true, seconds: 17, switchShots: [3.2, 10.5], caption: 'Itération 48 : les ponts-levis', sub: 'Un obus sur l’interrupteur : les ponts rouges et bleus basculent' },
+  { mission: 74, arms: ['canon', 'fusee'], hud: true, seconds: 17, switchShots: [3, 10], caption: 'L’usine à bascule', sub: 'À chaque « Clac ! », les tapis roulants changent de sens' },
+  { manual: [7, ['terrain']], seconds: 7, caption: 'Une nouvelle case au manuel', sub: 'Levé, le pont laisse passer les obus, pas les tanks' },
+  { atelier: 9, atelierMission: 74, seconds: 9, caption: 'Et dans l’atelier', sub: 'Deux pinceaux de plus : le pont-levis rouge et le bleu' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -60,7 +60,7 @@ try {
       else if (shot.journal) d.journal(shot.journal * 1000); // « La boîte à jouets » (iteration 38): the home screen and the journal
       else if (shot.cratesHelp) d.crates(shot.cratesHelp * 1000); // the list of crates on the home screen (iteration 29)
       else if (shot.bestiary) d.bestiary(shot.bestiary * 1000); // the bestiary on the home screen (iteration 25)
-      else if (shot.atelier) d.atelier(shot.atelier * 1000);
+      else if (shot.atelier) d.atelier(shot.atelier * 1000, shot.atelierMission ? d.missionAtelier?.(shot.atelierMission) : undefined); // « Les ponts-levis » (iteration 48): a handmade mission painted in the workshop
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);

@@ -151,6 +151,14 @@ export const sfx = {
     if (up) { tone(t, 0.2, 140, 260, 0.14, 'sawtooth'); noise(t + 0.18, 0.08, 1800, 1.2, 0.16, 'bandpass', 1200); }
     else { tone(t, 0.18, 240, 110, 0.12, 'sawtooth'); noise(t + 0.12, 0.15, 600, 0.6, 0.12, 'lowpass', 150); }
   },
+  /** « Les ponts-levis » (iteration 48): the chains rattle link by link, then the deck lands with a wooden boom (lowering) or locks up (raising). */
+  drawbridge(up: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 7; i++) noise(t + i * 0.055 + Math.random() * 0.015, 0.03, 4200 - i * 120, 2.5, 0.09, 'bandpass', 3400);
+    if (up) { tone(t, 0.35, 120, 200, 0.1, 'sawtooth'); tone(t + 0.4, 0.06, 700, 700, 0.12, 'square'); }
+    else { tone(t + 0.32, 0.22, 150, 60, 0.2, 'sine'); noise(t + 0.32, 0.25, 500, 0.6, 0.22, 'lowpass', 120); }
+  },
   block() {
     if (!ctx) return;
     noise(ctx.currentTime, 0.4, 900, 0.6, 0.6, 'lowpass', 200);

@@ -1,7 +1,7 @@
 {
-  "iteration": 47,
+  "iteration": 48,
   "date": "2026-11-21",
-  "title": "Le Veilleur",
+  "title": "Les ponts-levis",
   "journal": [
     {
       "iteration": 1,
@@ -571,6 +571,19 @@
         "Hors de son faisceau, il ne voit rien… mais un obus qui traverse sa lumière le fait se retourner vers le tireur.",
         "De nuit, son faisceau éclaire vraiment la table, et quiconque s’y fait prendre est aussitôt repéré par tous les ennemis. Sa lumière trahit aussi les chars blancs invisibles.",
         "Deux nouvelles missions, « La ronde de nuit » (61) et « Le phare » (64), un phare sur son îlot au milieu d’une fosse. Ensuite, il monte la garde dans les missions générées, et l’atelier le propose dans sa palette."
+      ]
+    },
+    {
+      "iteration": 48,
+      "date": "2026-11-21",
+      "title": "Les ponts-levis",
+      "notes": [
+        "Nouveau terrain : le pont-levis, jeté au-dessus d’un ravin et branché sur les interrupteurs. Un obus sur le bouton, « Clac ! », et les chaînes cliquettent.",
+        "Les ponts rouges sont levés au départ, les bleus baissés ; chaque « Clac ! » les fait basculer. Levé, un pont laisse passer les obus, mais pas les tanks.",
+        "Un pont-levis ne se relève jamais sous un tank, une mine ou une caisse : il tire sur ses chaînes et attend que la place soit libre.",
+        "Et les tapis roulants s’en mêlent : à chaque « Clac ! », ils changent tous de sens, avec les tanks, les mines et les caisses qu’ils emportent.",
+        "Deux nouvelles missions : « Le pont-levis » (la 65ᵉ), un ravin que seuls les ponts traversent, et « L’usine à bascule » (la 74ᵉ), où ponts et tapis basculent ensemble.",
+        "Le manuel explique la nouvelle case, et l’atelier gagne deux pinceaux : le pont-levis rouge et le bleu."
       ]
     }
   ]

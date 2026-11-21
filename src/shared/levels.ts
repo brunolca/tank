@@ -1,4 +1,4 @@
-import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
+import { BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -10,6 +10,8 @@ import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H,
 //         : bridge (iteration 33): a wooden bridge over a pit, tanks drive over it, shells fly over, a mine blast brings it down
 //         % [ ] « Les interrupteurs » (iteration 40): a switch block (a shell on it flips every gate), a red gate (raised at the
 //           start) and a blue gate (lowered at the start); a raised gate stops tanks and shells, a lowered one is floor
+//         { } « Les ponts-levis » (iteration 48): a red drawbridge (raised at the start: a pit) and a blue one (lowered: a
+//           bridge) over a pit, flipped by the same switches; on a flip of the switches, the conveyor belts turn round too
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)
 export const ENEMY_CHARS: Record<string, TankKind> = {
@@ -1220,6 +1222,53 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 48: « Les ponts-levis ». A ravine splits the table; the blue drawbridges are down, the red ones up: a shell
+  // on a switch swaps them (and the enemies' switch swaps them back)
+  65: {
+    name: 'Le pont-levis',
+    map: [
+      '..........__..........',
+      '..........__..........',
+      '....##....}}...##.....',
+      '....##....}}...##..s..',
+      '..........__..........',
+      '..1.......__......v...',
+      '..........__..oo......',
+      '..........{{.......g..',
+      '....%.....{{....%.....',
+      '..........{{.......g..',
+      '..........__..oo......',
+      '..2.......__......v...',
+      '..........__..........',
+      '....##....}}...##..s..',
+      '....##....}}...##.....',
+      '..........__..........',
+      '..........__..........',
+    ],
+  },
+  // iteration 48: a toy factory astride the ravine. Every « Clac ! » swaps the drawbridges and turns the belts round
+  74: {
+    name: 'L’usine à bascule',
+    map: [
+      '..........__..........',
+      '..........__......s...',
+      '.>>>>>>>>.}}.>>>>>>>>.',
+      '..........__..........',
+      '...##.....__.....##...',
+      '.1........__......c...',
+      '....%.....__..........',
+      '..........{{....#.....',
+      '...oo.....{{....#..t..',
+      '..........{{....#.....',
+      '..........__.....%....',
+      '.2........__......v...',
+      '...##.....__.....##...',
+      '..........__..........',
+      '.<<<<<<<<.}}.<<<<<<<<.',
+      '..........__......s...',
+      '..........__..........',
+    ],
+  },
   // iteration 21: ice floes between the holes of a frozen lake, the green turrets watch the channels
   28: {
     name: 'La banquise',
@@ -1300,6 +1349,8 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === SWITCH_CHAR) tiles[i] = Tile.Switch;
       else if (c === RED_GATE_CHAR) tiles[i] = Tile.RedUp;
       else if (c === BLUE_GATE_CHAR) tiles[i] = Tile.BlueDown;
+      else if (c === RED_LIFT_CHAR) tiles[i] = Tile.RedLift;
+      else if (c === BLUE_LIFT_CHAR) tiles[i] = Tile.BlueSpan;
       else if ((BELT_CHARS as readonly string[]).includes(c)) (belts ??= new Array(W * H).fill(0))[i] = (BELT_CHARS as readonly string[]).indexOf(c) + 1;
       else if (c === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[i] = ICE;
       else if (c === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SAND;

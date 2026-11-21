@@ -1,5 +1,5 @@
 import {
-  BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
+  BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
   TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
@@ -543,9 +543,11 @@ export class Game {
     this.flips++;
     this.switchCd = SWITCH_COOLDOWN;
     this.events.push(['flip', cx, cy, this.flips & 1, owner]);
+    // « Les ponts-levis » (iteration 48): the conveyor belts of the table turn round too (the client does the same on 'flip')
+    if (this.belts.length) reverseBelts(this.belts);
     for (let i = 0; i < W * H; i++) {
       const t = this.tiles[i];
-      if (!isGate(t)) continue;
+      if (!isSwitchable(t)) continue;
       if (gateUp(t)) {
         this.tiles[i] = gateFlipped(t);
         this.events.push(['gate', i % W, (i / W) | 0, this.tiles[i]]);
@@ -554,7 +556,7 @@ export class Game {
     }
   }
 
-  /** Raise the lowered gate of cell i, unless a tank, a mine or a crate sits on it. Shells inside it pop. */
+  /** Raise the lowered gate (or drawbridge, iteration 48) of cell i, unless a tank, a mine or a crate sits on it. Shells inside a gate pop. */
   raiseGate(i: number): boolean {
     const cx = i % W, cy = (i / W) | 0;
     const near = (x: number, y: number, r: number) => {
@@ -567,8 +569,10 @@ export class Game {
     if (this.mines.some((m) => !m.dead && near(m.x, m.y, MINE_R))) return false;
     if (this.bonuses.some((c) => near(c.x, c.y, 0.3))) return false;
     if (this.flags?.some((f) => near(f.x, f.y, 0.3))) return false;
+    const lift = isDrawbridge(this.tiles[i]);
     this.tiles[i] = gateFlipped(this.tiles[i]);
     this.events.push(['gate', cx, cy, this.tiles[i]]);
+    if (lift) return true; // a drawbridge rising leaves the shells flying over the pit alone
     for (const b of this.bullets) {
       if (!b.dead && near(b.x, b.y, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); }
     }
@@ -1179,7 +1183,7 @@ export class Game {
       if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const tl = this.tiles[(cy + dy) * W + cx + dx];
-        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || tl === Tile.Switch || isGate(tl) || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
+        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || tl === Tile.Switch || isSwitchable(tl) || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
       }
       return true;
     };
@@ -1361,7 +1365,8 @@ export class Game {
     const st = t.hop!;
     st.air = -1;
     t.x = st.x1; t.y = st.y1;
-    if (tileAt(this.tiles, Math.floor(t.x), Math.floor(t.y)) === Tile.Hole) {
+    const landTl = tileAt(this.tiles, Math.floor(t.x), Math.floor(t.y));
+    if (landTl === Tile.Hole || landTl === Tile.RedLift || landTl === Tile.BlueLift) {
       this.events.push(['hopLand', r2(t.x), r2(t.y), t.id]);
       this.killTank(t, undefined, KO_FALL);
       return;
@@ -1380,7 +1385,7 @@ export class Game {
     const cx = Math.floor(x), cy = Math.floor(y);
     if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
     const tl = this.tiles[cy * W + cx];
-    if (tl !== Tile.Empty && tl !== Tile.Bridge && tl !== Tile.RedDown && tl !== Tile.BlueDown) return false;
+    if (tl !== Tile.Empty && tl !== Tile.Bridge && tl !== Tile.RedDown && tl !== Tile.BlueDown && tl !== Tile.RedSpan && tl !== Tile.BlueSpan) return false;
     if (this.gateWait.has(cy * W + cx)) return false; // a lowered gate about to rise
     const [rx, ry] = resolveCircle(this.tiles, x, y, t.r);
     if (Math.abs(rx - x) + Math.abs(ry - y) > 0.04) return false;

@@ -1,4 +1,4 @@
-import { type TankKind, BULLET_SPEED, GATE_COLORS, gateUp, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -456,6 +456,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (enemies.some((e) => e.kind === 'thief')) setTimeout(() => toast('Le Pilleur file droit sur les caisses et garde les bonus pour lui. Détruis-le : il lâche son butin !', 4200), 2200);
   else if (enemies.some((e) => e.kind === 'mason')) setTimeout(() => toast('Le Maçon bâtit des murs de liège pour s’abriter. Une mine ou un ricochet bien placé, et tout s’écroule !', 4200), 2200);
   else if (drillFight) setTimeout(() => toast('Le Foreur : on ne peut le toucher qu’en surface. Il ronge le liège en passant !', 4000), 2200);
+  else if (tiles.some(isDrawbridge)) setTimeout(() => toast('Ponts-levis : un obus sur l’interrupteur, « Clac ! », et les ponts rouges et bleus s’abaissent ou se relèvent. Un pont levé laisse passer les obus, pas les tanks.' + (belts.some((b) => b >= 1 && b <= 4) ? ' Et les tapis roulants changent de sens !' : ''), 5200), 2200);
   else if (snowCells.length) setTimeout(() => toast('Neige : on s’y enfonce et on roule moins vite… mais chaque tank y trace une piste tassée, où l’on file à pleine vitesse jusqu’à ce que la neige la recouvre. Une mine posée dans la neige disparaît dessous, et même les tanks blancs y laissent des traces !', 6000), 2200);
   else if (belts.includes(SAND)) setTimeout(() => toast('Sable : on y roule moins vite. Une mine posée dans le sable s’enfouit : les ennemis ne la voient pas venir !', 4600), 2200);
   else if (mapIce) setTimeout(() => toast('Glace : ton tank glisse et garde son élan. Freine tôt, braque en avance… et profite des glissades pour esquiver !', 4400), 2200);
@@ -620,6 +621,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
     else if (e[0] === 'build') tiles[e[2] * W + e[1]] = Tile.Cork; // the Maçon's new block stops my tank right away
     else if (e[0] === 'bridge') tiles[e[2] * W + e[1]] = Tile.Hole; // a bridge gave way (iteration 33): no driving over it any more
     else if (e[0] === 'gate') tiles[e[2] * W + e[1]] = e[3]; // « Les interrupteurs » (iteration 40): a gate rose or sank
+    else if (e[0] === 'flip' && belts.length) reverseBelts(belts); // « Les ponts-levis » (iteration 48): the belts turn round, as on the server
   }
   // reconcile own tank
   const me = s.T.get(myTankId);
@@ -1017,13 +1019,14 @@ function handleEvent(e: GameEvent, audible: boolean) {
       break;
     case 'flip': // « Les interrupteurs » (iteration 40): a shell hit a switch, every gate flips
       renderer.flipSwitches(e[1], e[2], e[3]);
+      renderer.reverseBelts();
       floater(e[1] + 0.5, e[2] + 0.5, 'Clac !', GATE_COLORS[e[3] ? 1 : 0]);
       if (audible) sfx.flip(e[3]);
       break;
     case 'gate':
       renderer.setGate(e[1], e[2], e[3]);
       // a whole row moves at once: one sound is enough
-      if (audible && performance.now() - lastGateSound > 150) { lastGateSound = performance.now(); sfx.gate(gateUp(e[3])); }
+      if (audible && performance.now() - lastGateSound > 150) { lastGateSound = performance.now(); if (isDrawbridge(e[3])) sfx.drawbridge(gateUp(e[3])); else sfx.gate(gateUp(e[3])); }
       break;
     case 'bridge': // « Les ponts » (iteration 33): the planks fall into the pit
       if (renderer.collapseBridge(e[1], e[2])) floater(e[1] + 0.5, e[2] + 0.5, 'Crac !', 0xc98f55);
@@ -2937,9 +2940,10 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['>', 'Tapis roulant', 'Il emporte les tanks, les mines et les caisses dans le sens de la flèche.'],
   ['~', 'Glace', 'On y glisse : pour tourner, il faut s’y prendre tôt.'],
   [',', 'Sable', 'On y roule moins vite, et une mine posée dans le sable s’y enfouit.'],
-  ['&', 'Neige', 'On s’y enfonce et on y roule moins vite, mais chaque tank y trace une piste tassée, rapide, que la neige finit par recouvrir. Une mine posée dans la neige disparaît dessous, et les tanks blancs y laissent des traces.', true],
+  ['&', 'Neige', 'On s’y enfonce et on y roule moins vite, mais chaque tank y trace une piste tassée, rapide, que la neige finit par recouvrir. Une mine posée dans la neige disparaît dessous, et les tanks blancs y laissent des traces.'],
   ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…'],
   ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.'],
+  ['{}', 'Ponts-levis', 'Au-dessus d’un trou. Les rouges sont levés au départ, les bleus baissés, et l’interrupteur les fait basculer. Levé, il laisse passer les obus mais pas les tanks. Et à chaque « Clac ! », les tapis roulants changent de sens.', true],
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
 const WEATHER: [string, string, string][] = [
@@ -3539,6 +3543,7 @@ if (params.has('demo')) {
     },
     /** The workshop: paint the showcase mission cell by cell in the editor, for `ms`, then leave it on screen. */
     atelier(ms = 9000, a: AtelierMap = ATELIER_SAMPLE) {
+      clearScene(); // a manual still open from the shot before (iteration 48) would hide the workshop when it closes
       attract = undefined; // the table behind stays still: all the machine's time goes to the painting
       openWorkshop();
       workshop.animate(a, ms);
@@ -3546,6 +3551,11 @@ if (params.has('demo')) {
     },
     /** The showcase mission of the workshop. */
     atelierSample: () => ({ ...ATELIER_SAMPLE, map: ATELIER_SAMPLE.map.slice() }),
+    /** A handmade mission as a workshop map (iteration 48: the montage paints « L’usine à bascule » in the workshop). */
+    missionAtelier(n: number): AtelierMap | undefined {
+      const def = n >= 1 && n <= LEVELS.length ? LEVELS[n - 1] : EXTRA_LEVELS[n];
+      return def ? { name: def.name, map: def.map.slice(), night: def.night || undefined } : undefined;
+    },
     /** Play a workshop mission (the showcase one by default) with the heroes. */
     playAtelier(a: AtelierMap = ATELIER_SAMPLE, arms?: Weapon[]) {
       show('game');
@@ -3573,7 +3583,12 @@ if (params.has('demo')) {
         const page = $('#manual-page');
         // the bestiary jumps to the newest card (« La Sauterelle », iteration 41), the terrain page rolls down to the weather
         if (t === 'bestiaire') later(() => page.querySelector(`[data-k="${focusKind}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 900);
-        else if (t === 'terrain') later(() => (roll = setInterval(() => (page.scrollTop += 2), 24)), 1200);
+        else if (t === 'terrain') {
+          // the newest cell (« Les ponts-levis », iteration 48) comes into view; without one, the page rolls down to the weather
+          const fresh = page.querySelector('li.new');
+          if (fresh) later(() => fresh.scrollIntoView({ block: 'center', behavior: 'smooth' }), 900);
+          else later(() => (roll = setInterval(() => (page.scrollTop += 2), 24)), 1200);
+        }
       }, lead + i * each));
       sceneRoll = () => clearInterval(roll);
       later(() => { clearInterval(roll); $('#manual').hidden = true; show('game'); $('#hud').hidden = true; }, ms - 200);

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
-import { GATE_COLORS, gateUp, isGate } from '../shared/constants';
+import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { isRivalId } from '../shared/rivals';
@@ -1818,6 +1818,8 @@ export class Renderer {
     this.bridges.clear();
     for (const gt of this.gates.values()) this.levelGroup.remove(gt.mesh);
     this.gates.clear();
+    for (const lf of this.lifts.values()) this.levelGroup.remove(lf.root);
+    this.lifts.clear();
     for (const sw of this.switches) this.levelGroup.remove(sw.root);
     this.switches = [];
     for (const f of this.falling) this.levelGroup.remove(f.obj);
@@ -1868,11 +1870,12 @@ export class Renderer {
         else if (isTunnel(t)) this.addTunnel(tiles, x, y);
         else if (t === Tile.Bridge) this.addBridge(tiles, x, y);
         else if (isGate(t)) this.addGate(x, y, t);
+        else if (isDrawbridge(t)) this.addDrawbridge(tiles, x, y, t);
         else if (t === Tile.Switch) this.addSwitch(x, y);
       }
     }
     // the switches show which gates stand (red at the start); a late arrival reads it off the map
-    this.gatePhase = tiles.includes(Tile.BlueUp) && !tiles.includes(Tile.RedUp) ? 1 : 0;
+    this.gatePhase = (tiles.includes(Tile.BlueUp) || tiles.includes(Tile.BlueLift)) && !tiles.includes(Tile.RedUp) && !tiles.includes(Tile.RedLift) ? 1 : 0;
     for (const sw of this.switches) this.paintSwitch(sw);
     for (const info of infos) {
       const v = buildTank(info);
@@ -1882,8 +1885,23 @@ export class Renderer {
     }
   }
 
+  /** The belt codes the slabs were laid from (iteration 48: a flip of the switches turns them round). */
+  private beltCodes: number[] = [];
+  /** « Les ponts-levis » (iteration 48): every belt turns round, its chevrons point the other way, with a puff of sawdust. */
+  reverseBelts() {
+    if (!this.beltMesh) return;
+    const b = this.beltCodes.slice();
+    reverseBelts(b);
+    this.addBelts(b);
+    b.forEach((c, i) => {
+      if (c < 1 || c > 4 || Math.random() > 0.35) return;
+      this.smoke.emit({ x: (i % W) + 0.5, y: 0.06, z: Math.floor(i / W) + 0.5, vx: (Math.random() - 0.5) * 0.8, vy: 0.4, vz: (Math.random() - 0.5) * 0.8, life: 0.45, s0: 0.08, s1: 0.2, c0: 0xffb15a, c1: 0xefdcb8, drag: 3 });
+    });
+  }
+
   private addBelts(belts: number[]) {
     if (this.beltMesh) { this.levelGroup.remove(this.beltMesh); this.beltMesh.dispose(); this.beltMesh = undefined; }
+    this.beltCodes = belts.slice();
     const cells: number[] = [];
     belts.forEach((b, i) => { if (b >= 1 && b <= 4) cells.push(i); });
     if (!cells.length) return;
@@ -2856,10 +2874,13 @@ export class Renderer {
       }
     }
     for (const gt of this.gates.values()) gt.wait = gt.color === this.gatePhase && gt.target === 0;
+    for (const lf of this.lifts.values()) lf.wait = lf.color === this.gatePhase && lf.target === 0;
   }
 
   /** A gate rises or sinks (its new tile from the room). */
   setGate(cx: number, cy: number, tile: number) {
+    const lf = this.lifts.get(cy * W + cx);
+    if (lf) { lf.target = gateUp(tile) ? 1 : 0; lf.wait = false; return; }
     const gt = this.gates.get(cy * W + cx);
     if (!gt) return;
     gt.target = gateUp(tile) ? 1 : 0;
@@ -2876,7 +2897,89 @@ export class Renderer {
   /** Is there a standing gate in this cell? (for the demo's camera work) */
   gateStanding(cx: number, cy: number) { return (this.gates.get(cy * W + cx)?.target ?? 0) > 0; }
 
+  // -------------------------------------------------------------- « Les ponts-levis » (iteration 48)
+  private chainGeo = new THREE.CylinderGeometry(0.018, 0.018, 1, 5).translate(0, 0.5, 0);
+  private chainMat = new THREE.MeshStandardMaterial({ color: 0x55504a, roughness: 0.4, metalness: 0.7 });
+  private liftPostGeo = new THREE.BoxGeometry(0.11, 0.62, 0.11).translate(0, 0.31, 0);
+  private lifts = new Map<number, { root: THREE.Group; pivot: THREE.Group; chains: THREE.Mesh[]; d: number; color: number; up: number; target: number; wait: boolean }>();
+
+  /**
+   * A drawbridge over a pit: planks in the colour of its switches, hinged on the side of the board, two posts and two
+   * chains that haul its far end up (raised: the pit stops the tanks, shells fly over) or let it down (a bridge).
+   */
+  private addDrawbridge(tiles: number[], x: number, y: number, t: number) {
+    const cell = y * W + x;
+    const axis = bridgeAxis(tiles, cell);
+    const color = gateColor(t);
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    if (axis === 0) root.rotation.y = Math.PI / 2; // as addBridge: built running along local z
+    const along = (k: number) => {
+      // local +z is grid +y when the way runs up-down; turned by +90° about y, local +z becomes grid +x
+      const nx = axis === 1 ? x : x + k, ny = axis === 1 ? y + k : y;
+      return nx >= 0 && ny >= 0 && nx < W && ny < H ? tiles[ny * W + nx] : Tile.Wall;
+    };
+    // the hinge sits where the bridge meets the board (or on the -z end when both ends do)
+    const d = isPit(along(-1)) && !isPit(along(1)) ? 1 : -1;
+    const pivot = new THREE.Group();
+    pivot.position.set(0, 0.03, d * 0.5);
+    for (let k = 0; k < 5; k++) {
+      const p = new THREE.Mesh(this.plankGeo, k % 2 ? this.gateMats[color] : this.plankMats[(x + y) % 2]);
+      p.position.set(0, 0.015, -d * (0.1 + k * 0.2));
+      p.castShadow = p.receiveShadow = true;
+      pivot.add(p);
+    }
+    for (const sx of [-0.3, 0.3]) {
+      const r = new THREE.Mesh(this.railGeo, this.gateMats[color]);
+      r.position.set(sx, -0.015, -d * 0.5);
+      pivot.add(r);
+    }
+    root.add(pivot);
+    const chains: THREE.Mesh[] = [];
+    for (const sx of [-0.44, 0.44]) {
+      const post = new THREE.Mesh(this.liftPostGeo, this.plankMats[1]);
+      post.position.set(sx, 0, d * 0.47);
+      post.castShadow = true;
+      root.add(post);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), this.gateMats[color]);
+      cap.position.set(sx, 0.66, d * 0.47);
+      root.add(cap);
+      const ch = new THREE.Mesh(this.chainGeo, this.chainMat);
+      root.add(ch);
+      chains.push(ch);
+    }
+    this.levelGroup.add(root);
+    const up = gateUp(t) ? 1 : 0;
+    const lf = { root, pivot, chains, d, color, up, target: up, wait: false };
+    this.lifts.set(cell, lf);
+    this.poseDrawbridge(lf, up);
+  }
+
+  private poseDrawbridge(lf: { pivot: THREE.Group; chains: THREE.Mesh[]; d: number }, k: number) {
+    const a = k * 1.2; // raised: about 70°
+    lf.pivot.rotation.x = lf.d * a;
+    // the far end of the deck, in the bridge's own space: the pivot turned about x
+    const L = 0.95, ty = 0.03 + L * Math.sin(a), tz = lf.d * 0.5 - lf.d * L * Math.cos(a);
+    const v = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    lf.chains.forEach((ch, i) => {
+      const sx = i ? 0.44 : -0.44;
+      const from = new THREE.Vector3(sx, 0.64, lf.d * 0.47), to = new THREE.Vector3(sx * 0.75, ty, tz);
+      v.subVectors(to, from);
+      ch.position.copy(from);
+      ch.scale.set(1, v.length(), 1);
+      ch.quaternion.setFromUnitVectors(up, v.normalize());
+    });
+  }
+
   private animateGates(dt: number) {
+    for (const lf of this.lifts.values()) {
+      if (lf.up === lf.target && !lf.wait) continue;
+      const sp = lf.target ? 2.2 : 3;
+      lf.up = lf.target ? Math.min(1, lf.up + dt * sp) : Math.max(0, lf.up - dt * sp);
+      // lowering: it drops faster at the end and bounces once on the far bank; waiting for a tank to move off: it tugs at its chains
+      const k = !lf.target && lf.up < 0.25 ? lf.up * lf.up * 4 * 0.25 + Math.abs(Math.sin(lf.up * 25)) * 0.03 : lf.up;
+      this.poseDrawbridge(lf, lf.wait ? 0.05 + Math.abs(Math.sin(this.time * 20)) * 0.05 : k);
+    }
     for (const gt of this.gates.values()) {
       if (gt.up !== gt.target) {
         const sp = gt.target ? 4.2 : 6;
@@ -4152,7 +4255,7 @@ export class Renderer {
     this.animateStorm(dt);
     this.animateQuakes(dt);
     this.animateRising(dt);
-    if (this.gates.size || this.switches.length) this.animateGates(dt);
+    if (this.gates.size || this.lifts.size || this.switches.length) this.animateGates(dt);
     this.animateFalling(dt);
     if (this.night > 0.5 && Math.random() < 5 * dt) {
       // fireflies drifting over the table

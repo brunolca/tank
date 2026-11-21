@@ -35,6 +35,12 @@ export const enum Tile {
   RedDown = 11,
   BlueUp = 12,
   BlueDown = 13,
+  // iteration 48, « Les ponts-levis »: drawbridges over a pit, wired to the same switches; red ones start raised (the pit
+  // stops tanks, shells fly over), blue ones lowered (a bridge); every flip of the switches swaps them, like the gates
+  RedLift = 14,
+  RedSpan = 15,
+  BlueLift = 16,
+  BlueSpan = 17,
 }
 
 export type TankKind =
@@ -313,6 +319,13 @@ export const BELT_CHARS = ['>', '<', '^', 'V'] as const;
 export const BELT_DIRS: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, -1], [0, 1]];
 /** How fast a belt carries tanks, mines and crates (tiles per second; a player drives at 3). */
 export const BELT_SPEED = 1.45;
+/** « Les ponts-levis » (iteration 48): a flip of the switches turns every conveyor belt round (right <-> left, up <-> down), in place. */
+export function reverseBelts(belts: number[]) {
+  for (let i = 0; i < belts.length; i++) {
+    const b = belts[i];
+    if (b >= 1 && b <= 4) belts[i] = b & 1 ? b + 1 : b - 1;
+  }
+}
 
 // ------------------------------------------------------------------ ice (iteration 21)
 /** Map character of an ice cell. Ice lives in the same floor layer as the belts (code ICE), the cell itself stays floor. */
@@ -355,23 +368,40 @@ export const FLAG_ALERT = 256;
 export const PLAYER_COLORS = [0x3d7bff, 0xff4d5e, 0x2fd07a, 0xffa63d, 0x26c6f0, 0xc66bff];
 
 export function isSolidTank(t: number) {
-  return t !== Tile.Empty && t !== Tile.Tunnel && t !== Tile.Bridge && t !== Tile.RedDown && t !== Tile.BlueDown && !isPortal(t);
+  return t !== Tile.Empty && t !== Tile.Tunnel && t !== Tile.Bridge && t !== Tile.RedDown && t !== Tile.BlueDown && t !== Tile.RedSpan && t !== Tile.BlueSpan && !isPortal(t);
+}
+/** A drawbridge of « Les ponts-levis » (iteration 48), raised or lowered. */
+export function isDrawbridge(t: number) {
+  return t >= Tile.RedLift && t <= Tile.BlueSpan;
+}
+/** A lowered drawbridge: tanks drive over it like over a bridge. */
+export function isSpan(t: number) {
+  return t === Tile.RedSpan || t === Tile.BlueSpan;
+}
+/** A cell the switches flip: a gate (iteration 40) or a drawbridge (iteration 48). */
+export function isSwitchable(t: number) {
+  return isGate(t) || isDrawbridge(t);
+}
+/** Colour of a gate or a drawbridge: 0 red, 1 blue. */
+export function gateColor(t: number) {
+  return t <= Tile.RedDown || t === Tile.RedLift || t === Tile.RedSpan ? 0 : 1;
 }
 /** A gate of « Les interrupteurs » (iteration 40), raised or lowered. */
 export function isGate(t: number) {
   return t >= Tile.RedUp && t <= Tile.BlueDown;
 }
-/** A raised gate: a wall for tanks and shells alike. */
+/** A raised gate (a wall for tanks and shells alike), or a raised drawbridge (iteration 48: a pit for the tanks). */
 export function gateUp(t: number) {
-  return t === Tile.RedUp || t === Tile.BlueUp;
+  return t === Tile.RedUp || t === Tile.BlueUp || t === Tile.RedLift || t === Tile.BlueLift;
 }
 /** The other state of a gate cell (what a flip of the switches turns it into); any other tile stays itself. */
 export function gateFlipped(t: number) {
+  if (isDrawbridge(t)) return t ^ 1; // 14 <-> 15, 16 <-> 17
   return t === Tile.RedUp ? Tile.RedDown : t === Tile.RedDown ? Tile.RedUp : t === Tile.BlueUp ? Tile.BlueDown : t === Tile.BlueDown ? Tile.BlueUp : t;
 }
 /** A pit cell, or a bridge over one (iteration 33): the renderer digs both, the bridge just gets its deck on top. */
 export function isPit(t: number) {
-  return t === Tile.Hole || t === Tile.Bridge;
+  return t === Tile.Hole || t === Tile.Bridge || isDrawbridge(t);
 }
 export function isPortal(t: number) {
   return t === Tile.PortalA || t === Tile.PortalB;
@@ -512,6 +542,9 @@ export const BRIDGE_CHAR = ':';
 export const SWITCH_CHAR = '%';
 export const RED_GATE_CHAR = '[';
 export const BLUE_GATE_CHAR = ']';
+/** « Les ponts-levis » (iteration 48): a red drawbridge (raised at the start) and a blue one (lowered at the start), over a pit. */
+export const RED_LIFT_CHAR = '{';
+export const BLUE_LIFT_CHAR = '}';
 /** Colours of the gates (red, blue), also the switch's button showing which gates stand. */
 export const GATE_COLORS = [0xe8463c, 0x3a7be0];
 /** After a flip, the switches ignore shells for this long (a shell rattling on the button flips them only once). */
