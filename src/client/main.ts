@@ -443,6 +443,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (sowerFight) setTimeout(() => toast('Le Semeur : ses graines mûres l’épargnent, mais une graine touchée par ton obus explose aussitôt… et le blesse s’il est à côté !', 4600), 2200);
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
+  else if (enemies.some((e) => e.kind === 'watcher')) setTimeout(() => toast(msg.night ? 'Le Veilleur balaie la nuit de son faisceau. S’il t’éclaire, l’alarme sonne, tous les ennemis savent où tu es… et sa fusée suit la lumière : sors du faisceau !' : 'Le Veilleur balaie la table de son faisceau. S’il t’éclaire, l’alarme sonne et sa fusée suit la lumière : sors du faisceau ! Hors de sa lumière, il ne voit rien.', 5400), 2200);
   else if (levelFog !== undefined) setTimeout(() => toast(coopLike(msg.mode) ? 'Brouillard : au cœur de la brume, un tank ne se voit que de près… ou quand il tire. Les ennemis aussi te perdent de vue !' : 'Brouillard : cache-toi dans la brume ! Chaque tir trahit ta position.', 4600), 2200);
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
@@ -1009,6 +1010,10 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.hopLand(e[3], e[1], e[2]);
       floater(e[1], e[2], 'Boing !', enemyColor('hopper'));
       if (audible) sfx.hopLand();
+      break;
+    case 'spot': // « Le Veilleur » (iteration 47): it caught someone in its light, the alarm rings
+      floater(e[1], e[2], 'Repéré !', 0xff4a30);
+      if (audible) sfx.spot(e[4] === myTankId);
       break;
     case 'flip': // « Les interrupteurs » (iteration 40): a shell hit a switch, every gate flips
       renderer.flipSwitches(e[1], e[2], e[3]);
@@ -2791,6 +2796,7 @@ const BESTIARY: [TankKind, string][] = [
   ['frost', 'patine et givre le sol derrière lui : là, tout le monde dérape'],
   ['mortar', 'tire en cloche par-dessus les murs : fuis le cercle rouge, fonce-lui dessus'],
   ['hopper', 'saute par-dessus les murs pour te prendre à revers : vise l’anneau vert où elle va retomber'],
+  ['watcher', 'son faisceau balaie la table : s’il t’éclaire, sa fusée suit la lumière ; hors du faisceau, il ne voit rien'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -2858,6 +2864,7 @@ function tankSvg(kind: string, known: boolean) {
     : kind === 'rampart' ? '<path d="M37 13 q6 11 0 22" fill="none" stroke="#e8b04a" stroke-width="3" stroke-linecap="round"/>'
     : kind === 'magnet' ? '<path d="M36 17 v-4 h4 v4 m0 14 v4 h-4 v-4" fill="none" stroke="#d8392f" stroke-width="2.4"/>'
     : kind === 'hopper' ? '<path d="M14 9 l-7 -5 l-4 7 M14 39 l-7 5 l-4 -7" fill="none" stroke="#2a1d12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="20" r="2.6" fill="#fff"/><circle cx="29" cy="28" r="2.6" fill="#fff"/>'
+    : kind === 'watcher' ? '<path d="M24 24 L46 15 L46 33 Z" fill="#ffd648" opacity=".55"/><circle cx="24" cy="24" r="4" fill="#ffe680" stroke="#2a1d12" stroke-width="1.2"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
     : '';
   return `<svg viewBox="0 0 48 48" aria-hidden="true">${ring}
@@ -2879,6 +2886,7 @@ function enemySheet(kind: string) {
   else if ((s.hp ?? 1) > 1) tags.push(`Blindé : ${s.hp} coups`);
   if (s.invisible) tags.push('Invisible');
   if (kind === 'hopper') tags.push('Saute les murs');
+  if (kind === 'watcher') tags.push('Phare tournant');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
 }
 const MODES: [string, string, string, string][] = [
@@ -3554,7 +3562,7 @@ if (params.has('demo')) {
       newcomerCards(kinds, 0);
     },
     /** « Le manuel » (iteration 39): the home screen, then the manual opened on `tabs` one after the other (the bestiary page scrolls slowly). */
-    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'hopper') {
+    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'watcher') {
       clearScene();
       show('home');
       const lead = Math.min(1500, ms / 4), each = (ms - lead - 400) / tabs.length;
@@ -3760,6 +3768,28 @@ if (params.has('demo')) {
         m.mortar.x = Math.max(0.6, Math.min(W - 0.6, best.x + Math.cos(best.body) * 0.6));
         m.mortar.y = Math.max(0.6, Math.min(H - 0.6, best.y + Math.sin(best.body) * 0.6));
         m.mortar.warn = MORTAR_WARN;
+        n++;
+      }
+      return n;
+    },
+    /**
+     * « Le Veilleur » (iteration 47): every Veilleur still sweeping turns its beam just short of the nearest hero it could
+     * light up (so the beam sweeps onto it, turns red and the alarm rings on camera). Returns how many.
+     */
+    watch() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const w of g.tanks) {
+        if (!w.alive || !w.watch || w.watch.foe || w.chill !== undefined) continue;
+        let best: (typeof g.tanks)[number] | undefined, bd = Infinity;
+        for (const o of g.tanks) {
+          if (!o.alive || o.team === w.team) continue;
+          const d = Math.hypot(o.x - w.x, o.y - w.y);
+          if (d < bd && d < 8 && g.lineClear(w.x, w.y, o.x, o.y)) { bd = d; best = o; }
+        }
+        if (!best) continue;
+        w.turret = Math.atan2(best.y - w.y, best.x - w.x) - w.watch.dir * 0.55;
         n++;
       }
       return n;

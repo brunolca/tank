@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -51,6 +51,19 @@ export interface Tank {
   chill?: number; // « Gel » (iteration 29): seconds left frozen in an ice cube
   mortar?: MortarState; // the Mortier (iteration 34)
   hop?: HopState; // « La Sauterelle » (iteration 41)
+  watch?: WatchState; // « Le Veilleur » (iteration 47)
+}
+
+/**
+ * The Veilleur: which way its beam sweeps (1 or -1) and when it may turn back, the foe caught in its light (0: none),
+ * seconds before it fires at it (`lock`), and how long that foe has been out of the light (`lost`).
+ */
+export interface WatchState {
+  dir: number;
+  flipT: number;
+  foe: number;
+  lock: number;
+  lost: number;
 }
 
 /**
@@ -385,6 +398,7 @@ export class Game {
     if (kind === 'magnet') t.mag = { on: false, t: 1.2 + Math.random() * 1.6, held: 0 };
     if (kind === 'mortar') t.mortar = { t: MORTAR_FIRST + Math.random() * 1.2, warn: 0, x: x, y: y };
     if (kind === 'hopper') t.hop = { t: HOP_FIRST + Math.random() * 1.5, warn: 0, air: -1, dur: 1, x0: x, y0: y, x1: x, y1: y, foe: 0 };
+    if (kind === 'watcher') t.watch = { dir: Math.random() < 0.5 ? 1 : -1, flipT: WATCH_FLIP[0] + Math.random() * (WATCH_FLIP[1] - WATCH_FLIP[0]), foe: 0, lock: 0, lost: 0 };
     if (kind === 'frost') {
       // its frost turns any table into an ice table: momentum for everyone (and their speed in the snapshots)
       this.ice = true;
@@ -482,6 +496,12 @@ export class Game {
       if (t.mortar) this.updateMortar(t);
       if (t.hop && this.updateHop(t)) continue; // crouching on its springs, or just leapt (iteration 41)
       t.slid = false;
+      if (t.watch) { // « Le Veilleur » (iteration 47): its beam does all its thinking, it never drives
+        this.updateWatch(t);
+        if (this.ice) this.driveTank(t, 0, 0, DT);
+        this.rideBelt(t);
+        continue;
+      }
       if (t.ai) {
         this.updateAI(t);
         if (this.ice && !t.slid) this.driveTank(t, 0, 0, DT); // nobody at the wheel: it slides on (iteration 21)
@@ -1410,6 +1430,85 @@ export class Game {
     return best;
   }
 
+  // -------------------------------------------------------------- « Le Veilleur » (iteration 47)
+
+  /**
+   * Is (x, y) (a body of radius r) in the Veilleur's light? Within reach, inside the cone of its beam, with no wall in
+   * between; a tunnel or a bank of mist hides it. Night makes no difference: the beam is a light.
+   */
+  inBeam(t: Tank, x: number, y: number, r: number): boolean {
+    const dx = x - t.x, dy = y - t.y, d = Math.hypot(dx, dy);
+    if (d > WATCH_RANGE + r) return false;
+    if (d > 0.3 && Math.abs(angDiff(t.turret, Math.atan2(dy, dx))) > WATCH_HALF + Math.asin(Math.min(1, r / d))) return false;
+    if (this.fogNow.length && fogHides(this.fogNow, x, y, t.x, t.y, r)) return false;
+    return this.lineClear(t.x, t.y, x, y);
+  }
+
+  /** Can the Veilleur see this tank in its light? */
+  lit(t: Tank, o: Tank): boolean {
+    if (!o.alive || o.team === t.team || under(o)) return false;
+    if (this.inTunnel(o)) return false;
+    return this.inBeam(t, o.x, o.y, o.r);
+  }
+
+  /**
+   * The Veilleur: its beam sweeps round and round until a foe shows up in the light (or a foe's shell flies through
+   * it: it swings round toward the shooter). Then the alarm rings, the beam turns red and follows that foe; after
+   * WATCH_LOCK seconds a rocket flies straight down the beam whenever the foe is still lit. At night, whoever is lit is
+   * given away to every enemy. Out of the light for WATCH_LOSE seconds, the foe is let go.
+   */
+  updateWatch(t: Tank) {
+    const w = t.watch!;
+    w.flipT -= DT;
+    let foe = w.foe ? this.tankById(w.foe) : undefined;
+    if (foe && (!foe.alive || under(foe))) { foe = undefined; w.foe = 0; }
+    if (!foe) {
+      // sweeping: the first foe in the light is caught
+      for (const o of this.tanks) if (this.lit(t, o)) { foe = o; break; }
+      // a foe's shell flying through the light: it swings round to the shooter
+      if (!foe) for (const b of this.bullets) {
+        if (b.dead) continue;
+        const o = this.tankById(b.owner);
+        if (!o || !o.alive || o.team === t.team || under(o)) continue;
+        if (this.inBeam(t, b.x, b.y, BULLET_R)) { foe = o; break; }
+      }
+      if (foe) {
+        w.foe = foe.id;
+        w.lock = WATCH_LOCK;
+        w.lost = 0;
+        this.events.push(['spot', r2(foe.x), r2(foe.y), t.id, foe.id]);
+      } else {
+        if (w.flipT <= 0) {
+          w.flipT = WATCH_FLIP[0] + Math.random() * (WATCH_FLIP[1] - WATCH_FLIP[0]);
+          if (Math.random() < 0.5) w.dir = -w.dir;
+        }
+        t.turret += w.dir * WATCH_SWEEP * DT;
+        if (t.turret > Math.PI) t.turret -= Math.PI * 2;
+        else if (t.turret < -Math.PI) t.turret += Math.PI * 2;
+        t.alert = false;
+        return;
+      }
+    }
+    t.alert = true;
+    const lit = this.lit(t, foe);
+    w.lost = lit ? 0 : w.lost + DT;
+    if (w.lost > WATCH_LOSE) {
+      // lost it: back to sweeping, the way it was last turning
+      w.dir = angDiff(t.turret, Math.atan2(foe.y - t.y, foe.x - t.x)) >= 0 ? 1 : -1;
+      w.foe = 0;
+      t.alert = false;
+      return;
+    }
+    t.turret = rotateToward(t.turret, Math.atan2(foe.y - t.y, foe.x - t.x), WATCH_TRACK * DT);
+    if (lit && this.night) foe.reveal = Math.max(foe.reveal, WATCH_REVEAL); // the whole table knows where it is
+    if (w.lock > 0) { w.lock -= DT; return; }
+    if (!lit || t.fireCd > 0 || this.ownBullets(t) >= t.spec.maxBullets) return;
+    if (Math.abs(angDiff(t.turret, Math.atan2(foe.y - t.y, foe.x - t.x))) > 0.12) return;
+    const res = this.traceShot(t, t.turret, 0);
+    if (res.hit && res.hit.team === t.team) return; // never through a friend
+    this.tryFire(t);
+  }
+
   /** Where the Mortier would land its next cannonball (undefined: no foe in range, or only next to its friends). */
   mortarSpot(t: Tank): Pt | undefined {
     const foes = this.tanks.filter((o) => {
@@ -2165,7 +2264,7 @@ export class Game {
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
       | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
-      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0)
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0) | (t.watch && t.watch.foe ? FLAG_SPOT : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
   /**

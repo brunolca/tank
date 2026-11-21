@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
-import { bridgeAxis, tunnelAxis } from '../shared/physics';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateUp, isGate } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
@@ -210,9 +210,26 @@ interface TankView {
   leap?: { x0: number; y0: number; x1: number; y1: number }; // the leap it is in (from its « hop » event)
   leapRing?: THREE.Mesh; // and the ring on the floor where it will land
   squash?: number; // the bounce of its landing, fading out
+  lantern?: LanternView; // « Le Veilleur » (iteration 47): its lighthouse lamp and the beam it throws on the table
   ice?: THREE.Group; // « Gel » (iteration 29): the ice cube it is frozen in (in the scene, not the tank: it gives away invisible tanks)
   iceT?: number; // seconds since it froze
 }
+
+/**
+ * « Le Veilleur » (iteration 47): the glass of its lamp and its lens (they glow yellow, red once it has caught someone),
+ * and the beam: a fan on the floor, cut short by the walls, fading out with distance (in the scene, not the tank).
+ */
+interface LanternView {
+  glass: THREE.MeshStandardMaterial;
+  lens: THREE.MeshBasicMaterial;
+  beam: THREE.Mesh;
+  pos: Float32Array;
+  col: Float32Array;
+  red: number; // 0 sweeping … 1 alarm, eased
+  reach: number; // length of the middle ray (the night spotlight stops there, not through the wall)
+}
+/** Rays of the Veilleur's beam (the fan has BEAM_RAYS + 1 edge points). */
+const BEAM_RAYS = 28;
 
 /** « La Sauterelle » (iteration 41): a hind leg, a thigh rising behind the hull and a shin folded back down to the floor. */
 interface HopperLeg { thigh: THREE.Group; knee: THREE.Group }
@@ -557,6 +574,17 @@ const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 
 const pupilMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1f, roughness: 0.2 });
 const hopRingMat = new THREE.MeshBasicMaterial({ color: 0x4a8a0e, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
 const hopRingGeo = new THREE.RingGeometry(0.66, 1, 48);
+// « Le Veilleur » (iteration 47): a little lighthouse on its turret, striped tower, glass lantern room, brass roof
+const watchGeo = {
+  tower: new THREE.CylinderGeometry(0.15, 0.2, 0.36, 20),
+  band: new THREE.CylinderGeometry(0.172, 0.185, 0.08, 20),
+  deck: new THREE.CylinderGeometry(0.22, 0.22, 0.035, 20),
+  glass: new THREE.CylinderGeometry(0.14, 0.14, 0.17, 16),
+  roof: new THREE.ConeGeometry(0.2, 0.17, 16),
+  knob: new THREE.SphereGeometry(0.045, 10, 8),
+  lens: new THREE.BoxGeometry(0.05, 0.12, 0.15),
+};
+const watchBandMat = new THREE.MeshStandardMaterial({ color: 0xf1e6cf, roughness: 0.5 });
 const lobShadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
 const skateMat = new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.15, metalness: 0.95, emissive: 0x16222c, emissiveIntensity: 0.4 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
@@ -1067,6 +1095,47 @@ function buildTank(info: TankInfo): TankView {
     view.tube = tube;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'watcher') {
+    // a short rocket tube under a lighthouse: the tower, a cream band, the deck, the lantern room and its lens, a brass roof
+    barrel.geometry = geo.tube;
+    barrel.position.x = 0.28;
+    muzzle.visible = false;
+    dome.visible = false;
+    cap.visible = false;
+    const tower = new THREE.Group();
+    const tw = new THREE.Mesh(watchGeo.tower, bodyMat);
+    tw.position.y = 0.2;
+    const band = new THREE.Mesh(watchGeo.band, watchBandMat);
+    band.position.y = 0.2;
+    const deck = new THREE.Mesh(watchGeo.deck, barrelMat);
+    deck.position.y = 0.395;
+    const glass = new THREE.MeshStandardMaterial({ color: 0xfff2b8, emissive: 0xffd860, emissiveIntensity: 1.2, roughness: 0.15, transparent: true, opacity: 0.92 });
+    const room = new THREE.Mesh(watchGeo.glass, glass);
+    room.position.y = 0.495;
+    const roof = new THREE.Mesh(watchGeo.roof, brassMat);
+    roof.position.y = 0.665;
+    const knob = new THREE.Mesh(watchGeo.knob, brassMat);
+    knob.position.y = 0.77;
+    const lensMat = new THREE.MeshBasicMaterial({ color: 0xfff6c8 });
+    const lens = new THREE.Mesh(watchGeo.lens, lensMat);
+    lens.position.set(0.14, 0.495, 0);
+    tower.add(tw, band, deck, room, roof, knob, lens);
+    tower.scale.setScalar(1.2);
+    turret.add(tower);
+    // the beam on the floor: a fan of triangles around the tank, rebuilt each frame (see tankWatcher)
+    const pos = new Float32Array((BEAM_RAYS + 2) * 3), col = new Float32Array((BEAM_RAYS + 2) * 4);
+    const bg = new THREE.BufferGeometry();
+    bg.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    bg.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
+    const idx: number[] = [];
+    for (let i = 1; i <= BEAM_RAYS; i++) idx.push(0, i + 1, i);
+    bg.setIndex(idx);
+    const beam = new THREE.Mesh(bg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+    beam.renderOrder = 3;
+    beam.frustumCulled = false;
+    view.lantern = { glass, lens: lensMat, beam, pos, col, red: 0, reach: WATCH_RANGE };
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o !== room) o.castShadow = o.receiveShadow = true; });
+  }
   if (info.kind === 'hopper') {
     const legMat = new THREE.MeshStandardMaterial({ color: shade(enemyColor('hopper'), -0.28), roughness: 0.5, metalness: 0.1 });
     view.legs = [];
@@ -1295,6 +1364,9 @@ export class Renderer {
   private sun: THREE.DirectionalLight;
   private rim: THREE.DirectionalLight;
   private heads: THREE.SpotLight[] = [];
+  private beamLights: THREE.SpotLight[] = [];
+  /** The live map (main.ts and the demo keep it up to date in place): the Veilleur's beam stops at its walls. */
+  private beamTiles: ArrayLike<number> = [];
   private shellLights: THREE.PointLight[] = [];
   private night = 0;
   private nightTarget = 0;
@@ -1374,6 +1446,13 @@ export class Renderer {
       sp.visible = false;
       this.scene.add(sp, sp.target);
       this.heads.push(sp);
+    }
+    // « Le Veilleur » (iteration 47): two more spotlights for its beam at night
+    for (let i = 0; i < 2; i++) {
+      const sp = new THREE.SpotLight(0xfff0c0, 0, WATCH_RANGE + 1, WATCH_HALF * 1.1, 0.35, 1.1);
+      sp.visible = false;
+      this.scene.add(sp, sp.target);
+      this.beamLights.push(sp);
     }
     for (let i = 0; i < 3; i++) {
       const pl = new THREE.PointLight(0xffd9a0, 0, 3, 1.5);
@@ -1690,7 +1769,7 @@ export class Renderer {
     this.nightTarget = on ? 1 : 0;
     this.nightStart = performance.now() - this.night * 1200;
     if (!on) this.night = 0;
-    for (const l of [...this.heads, ...this.shellLights]) l.visible = on;
+    for (const l of [...this.heads, ...this.shellLights, ...this.beamLights]) l.visible = on;
   }
   get isNight() { return this.nightTarget > 0; }
 
@@ -1730,6 +1809,7 @@ export class Renderer {
   }
 
   setLevel(tiles: number[], infos: TankInfo[], belts: number[] = []) {
+    this.beamTiles = tiles;
     this.nightApplied = -1; // the new tanks' lamps follow the current light
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
@@ -1742,7 +1822,7 @@ export class Renderer {
     this.switches = [];
     for (const f of this.falling) this.levelGroup.remove(f.obj);
     this.falling = [];
-    for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); }
+    for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); if (t.lantern) this.scene.remove(t.lantern.beam); }
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
     this.bullets.clear();
@@ -1798,6 +1878,7 @@ export class Renderer {
       const v = buildTank(info);
       this.tanks.set(info.id, v);
       this.scene.add(v.root);
+      if (v.lantern) this.scene.add(v.lantern.beam);
     }
   }
 
@@ -2911,9 +2992,11 @@ export class Renderer {
       // a lightning flash shows invisible tanks for an instant
       // and, in the fog (iteration 26), the tanks lost in a bank of mist far from you and your teammates
       if (v.seenT) v.seenT = Math.max(0, v.seenT - dt);
-      const visible = t.alive && !(t.invisible && t.id !== myId && this.lightning < 0.45) && !this.lostInFog(t, v);
+      // « Le Veilleur » (iteration 47): its beam lights up the invisible tanks too
+      const visible = t.alive && !(t.invisible && t.id !== myId && this.lightning < 0.45 && !this.inLight(list, t)) && !this.lostInFog(t, v);
       v.root.visible = visible;
       this.tankIce(v, t, dt);
+      if (v.lantern) this.tankWatcher(v, t, dt);
       if (!t.alive) {
         if (v.wasAlive) this.deathMark(t.x, t.y, v.info);
         v.wasAlive = false;
@@ -3005,6 +3088,7 @@ export class Renderer {
       }
     }
     this.headlights(list);
+    this.watchLights(list);
   }
 
   /**
@@ -3012,6 +3096,84 @@ export class Renderer {
    * that marks its landing (the height comes from how far along its leap it is), legs stretched out, nose up then down.
    * Returns true in the air (no tread marks).
    */
+  /**
+   * « Le Veilleur » (iteration 47): its beam fans out on the floor from the lens, each ray stopped by the first wall,
+   * warm yellow while it sweeps, red once it has caught someone (FLAG_SPOT); the lantern glows the same colour.
+   */
+  private tankWatcher(v: TankView, t: RTank, dt: number) {
+    const L = v.lantern!;
+    const on = t.alive && !(t.fx && t.fx & FLAG_FROZEN);
+    L.beam.visible = on;
+    const spot = !!((t.fx ?? 0) & FLAG_SPOT);
+    L.red += ((spot ? 1 : 0) - L.red) * Math.min(1, dt * (spot ? 14 : 4));
+    const r = L.red, pulse = spot ? 0.75 + Math.sin(this.time * 22) * 0.25 : 1;
+    const c = this.tmpColor.setHex(0xffd648).lerp(new THREE.Color(0xff3a26), r);
+    L.glass.emissive.copy(c);
+    L.glass.emissiveIntensity = (1 + this.night * 1.2) * pulse;
+    L.lens.color.copy(c).lerp(new THREE.Color(0xffffff), 0.35 * (1 - r));
+    if (!on) return;
+    const pos = L.pos, col = L.col, tiles = this.beamTiles;
+    const ox = t.x + Math.cos(t.turret) * 0.18, oy = t.y + Math.sin(t.turret) * 0.18;
+    const yb = 0.035;
+    pos[0] = ox; pos[1] = yb; pos[2] = oy;
+    // brighter by night, and much stronger once it has caught someone
+    const a0 = (0.5 + 0.2 * r) * (1 + this.night * 0.3), a1 = 0.06 + 0.08 * r;
+    col[0] = c.r; col[1] = c.g; col[2] = c.b; col[3] = Math.min(0.85, a0);
+    for (let i = 0; i <= BEAM_RAYS; i++) {
+      const ang = t.turret - WATCH_HALF + (i / BEAM_RAYS) * WATCH_HALF * 2;
+      let len = WATCH_RANGE;
+      if (tiles.length) {
+        const seg = castRicochet(tiles, ox, oy, ang, 0, WATCH_RANGE)[0];
+        if (seg) len = Math.min(WATCH_RANGE, Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0) + 0.08);
+      }
+      if (i === BEAM_RAYS >> 1) L.reach = len;
+      const k = (i + 1) * 3, kc = (i + 1) * 4;
+      pos[k] = ox + Math.cos(ang) * len; pos[k + 1] = yb; pos[k + 2] = oy + Math.sin(ang) * len;
+      // the light fades with distance: a ray cut short by a wall ends brighter
+      const f = len / WATCH_RANGE;
+      col[kc] = c.r; col[kc + 1] = c.g; col[kc + 2] = c.b; col[kc + 3] = a0 + (a1 - a0) * f;
+    }
+    const g = L.beam.geometry;
+    g.attributes.position.needsUpdate = true;
+    g.attributes.color.needsUpdate = true;
+  }
+
+  /** Is this tank in the beam of a Veilleur (any of them, whatever its side)? */
+  private inLight(list: RTank[], o: RTank): boolean {
+    for (const t of list) {
+      if (t === o || !t.alive || !this.tanks.get(t.id)?.lantern) continue;
+      const dx = o.x - t.x, dy = o.y - t.y, d = Math.hypot(dx, dy);
+      if (d > WATCH_RANGE + 0.3 || d < 0.3) continue;
+      let a = Math.atan2(dy, dx) - t.turret;
+      a = Math.atan2(Math.sin(a), Math.cos(a));
+      if (Math.abs(a) > WATCH_HALF + Math.asin(Math.min(1, 0.4 / d))) continue;
+      const seg = this.beamTiles.length ? castRicochet(this.beamTiles, t.x, t.y, Math.atan2(dy, dx), 0, d)[0] : undefined;
+      if (!seg || Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0) >= d - 0.4) return true;
+    }
+    return false;
+  }
+
+  /** At night the Veilleurs' beams light the table for real (two spotlights, for the first two of them). */
+  private watchLights(list: RTank[]) {
+    let n = 0;
+    if (this.night > 0) {
+      for (const t of list) {
+        if (n >= this.beamLights.length) break;
+        const v = this.tanks.get(t.id);
+        if (!v?.lantern || !t.alive || !v.lantern.beam.visible) continue;
+        const sp = this.beamLights[n++];
+        const dx = Math.cos(t.turret), dy = Math.sin(t.turret);
+        sp.position.set(t.x + dx * 0.2, 0.9, t.y + dy * 0.2);
+        const reach = v.lantern.reach;
+        sp.target.position.set(t.x + dx * reach, 0, t.y + dy * reach);
+        sp.distance = reach + 1.2; // the light stops at the wall it hits
+        sp.color.setHex(0xfff0c0).lerp(this.tmpColor.setHex(0xff4a30), v.lantern.red);
+        sp.intensity = 26 * this.night;
+      }
+    }
+    for (let i = n; i < this.beamLights.length; i++) this.beamLights[i].intensity = 0;
+  }
+
   private tankHopper(v: TankView, t: RTank, dt: number): boolean {
     const fx = t.fx ?? 0, air = !!(fx & FLAG_AIR), crouch = !!(fx & FLAG_CHARGING);
     let z = 0, p = 0;

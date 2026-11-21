@@ -72,6 +72,8 @@ export const BRUSHES: Brush[] = [
   { ch: 'h', label: 'Sauterelle', group: 'tank' },
   // iteration 42: « La neige » (share-code letter q)
   { ch: '&', label: 'Neige', group: 'sol' },
+  // iteration 47: « Le Veilleur » (share-code letter r)
+  { ch: 'L', label: 'Veilleur', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

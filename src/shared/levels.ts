@@ -11,9 +11,9 @@ import { BELT_CHARS, BLUE_GATE_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, SWITCH_CHAR, H,
 //         % [ ] « Les interrupteurs » (iteration 40): a switch block (a shell on it flips every gate), a red gate (raised at the
 //           start) and a blue gate (lowered at the start); a raised gate stops tanks and shells, a lowered one is floor
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher',
 };
 
 export interface LevelDef {
@@ -1076,6 +1076,55 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 47: « Le Veilleur ». A lighthouse on an island in the middle (out of reach: shoot it from the shore when its
+  // beam looks away), a second one in a corner, and tall fences to hide behind while the light sweeps past
+  64: {
+    name: 'Le phare',
+    map: [
+      '......................',
+      '.........H.....H......',
+      '..1......H.....H...t..',
+      '.........H.....H......',
+      '...##..............##.',
+      '......................',
+      '..2.....o.____.o......',
+      '........o._L._.o...r..',
+      '........o.____.o......',
+      '......................',
+      '...##..............##.',
+      '.........H.....H......',
+      '.........H.....H...L..',
+      '.........H.....H......',
+      '......................',
+      '..............a.......',
+      '......................',
+    ],
+  },
+  // iteration 47: a night patrol. Three Veilleurs light the courtyard: whoever they catch in their beam is given away to
+  // the black and grey tanks prowling in the dark
+  61: {
+    name: 'La ronde de nuit',
+    night: true,
+    map: [
+      '......................',
+      '..1.....#......#....L.',
+      '........#......#......',
+      '..2.....#..oo..#..a...',
+      '........#......#......',
+      '......................',
+      '.####.......L.....###.',
+      '......................',
+      '...........HH.....k...',
+      '...........HH.........',
+      '......................',
+      '.####.............###.',
+      '........#......#......',
+      '...a....#..oo..#..L...',
+      '........#......#......',
+      '....................p.',
+      '......................',
+    ],
+  },
   // iteration 41: « La Sauterelle ». Two tall fences cut the table: the Sauterelles leap over them to take the
   // players from behind, a pink and a grey tank hold the far side
   52: {
@@ -1444,6 +1493,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 51) {
       const rh = rng(mission * 6271 + 89);
       for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'violet') && rh() < 0.2) { e.kind = 'hopper'; break; }
+    }
+    // the Veilleur (iteration 47) keeps watch from the 65th: one more stream, at most one of them, in place of a slow or a plain tank
+    if (opt.seed === undefined && mission > 64) {
+      const rl = rng(mission * 7193 + 97);
+      for (const e of enemies) if ((e.kind === 'brown' || e.kind === 'ash' || e.kind === 'marine' || e.kind === 'violet' || e.kind === 'green') && rl() < 0.18) { e.kind = 'watcher'; break; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

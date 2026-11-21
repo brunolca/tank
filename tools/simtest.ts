@@ -6,7 +6,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
+import { FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -2040,6 +2040,110 @@ console.log('total', Date.now() - t0, 'ms');
   if (cleared === 0) fail('l’IA ne vient jamais à bout des Sauterelles');
   if (leaps < 8) fail(`les Sauterelles ne sautent presque pas (${leaps} sauts)`);
   if (process.exitCode !== 1) console.log(`sauterelle OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${leaps} sauts, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le Veilleur » (iteration 47): its beam sweeps round, whoever it lights up gets the alarm, then a rocket down the beam
+{
+  const fail = (m: string) => { console.error('VEILLEUR:', m); process.exitCode = 1; };
+  {
+    // open table: the beam comes round to a still player, the alarm rings, a rocket follows, the player is down
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const w = g.addTank('watcher', 99, 11.5, 8.5, 0);
+    w.turret = 0; w.watch!.dir = 1; // looking away from the player, turning
+    g.frozen = false;
+    let spot: unknown[] | undefined, spotTick = -1, ko: unknown[] | undefined, firstShot = -1, x0 = w.x, y0 = w.y;
+    for (let i = 0; i < 30 * 20 && p.alive; i++) {
+      g.step(new Map());
+      for (const e of g.events) {
+        if (e[0] === 'spot' && !spot) { spot = e; spotTick = i; }
+        if (e[0] === 'shot' && e[5] === w.id && firstShot < 0) firstShot = i;
+        if (e[0] === 'ko') ko = e;
+      }
+      if (spot && !(g.buffFlags(w) & FLAG_SPOT) && w.alive && p.alive) fail('le faisceau ne reste pas rouge sur sa proie');
+      g.events = [];
+    }
+    if (!spot) fail('le faisceau ne trouve jamais le joueur');
+    else if (spot[4] !== p.id) fail('mauvaise proie');
+    if (firstShot >= 0 && firstShot - spotTick < 12) fail(`tir trop tôt après l’alarme (${firstShot - spotTick} ticks)`);
+    if (p.alive || !ko || ko[2] !== w.id) fail('le Veilleur ne vient pas à bout d’un joueur immobile');
+    if (Math.hypot(w.x - x0, w.y - y0) > 0.01) fail('le Veilleur s’est déplacé');
+  }
+  {
+    // blind outside its light: behind a wall, out of range, or in a tunnel, it never fires
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    for (let y = 4; y < 13; y++) tiles[y * W + 8] = Tile.Wall;
+    const g = new Game(tiles);
+    const hid = g.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const far = g.addTank('player', 0, 11.5 + WATCH_RANGE + 2, 2.5, 0x3d7bff, 'p2', 'Q');
+    if (far.x > W - 1) far.x = W - 1.5;
+    const w = g.addTank('watcher', 99, 11.5, 8.5, 0);
+    if (Math.hypot(far.x - w.x, far.y - w.y) <= WATCH_RANGE + 0.5) far.y = 15.5;
+    g.frozen = false;
+    let shots = 0, spots = 0;
+    for (let i = 0; i < 30 * 15; i++) {
+      g.step(new Map());
+      for (const e of g.events) { if (e[0] === 'shot' && e[5] === w.id) shots++; if (e[0] === 'spot') spots++; }
+      g.events = [];
+    }
+    if (Math.hypot(far.x - w.x, far.y - w.y) <= WATCH_RANGE + 0.5) fail('test mal placé');
+    else if (shots || spots || !hid.alive || !far.alive) fail(`il voit à travers les murs ou trop loin (${spots} alarmes, ${shots} tirs)`);
+  }
+  {
+    // a shell flying through its light: it swings round to the shooter
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    const p = g.addTank('player', 0, 11.5, 2.5, 0x3d7bff, 'p1', 'P');
+    p.ai = undefined;
+    const w = g.addTank('watcher', 99, 11.5, 8.5, 0);
+    w.turret = 0; w.watch!.dir = 1; w.watch!.flipT = 99;
+    g.frozen = false;
+    // the player is above it, the beam looks right: a shell crossing the beam on its right gives the player away
+    g.bullets.push({ id: 900, owner: p.id, x: 15.5, y: 8, vx: 0, vy: -4, bounces: 0, rocket: false, dead: false });
+    g.step(new Map());
+    const e = g.events.find((x) => x[0] === 'spot');
+    if (!e || e[4] !== p.id) fail('un obus qui traverse le faisceau passe inaperçu');
+    g.events = [];
+  }
+  // missions: handmade 61 (at night) and 64, then some generated ones; never in the daily challenge nor the mole; the workshop
+  const mm: number[] = [];
+  for (let mission = 1; mission <= 200; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'watcher')) mm.push(mission);
+  if (!mm.includes(61) || !mm.includes(64)) fail('missions 61 et 64 sans Veilleur');
+  if (!getMission(61).night) fail('la ronde de nuit se joue de jour');
+  if (mm.some((x) => x < 61)) fail('Veilleur avant la 61ᵉ mission');
+  if (mm.length < 8) fail(`trop peu de missions avec des Veilleurs (${mm.length})`);
+  for (let day = 1; day < 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'watcher')) fail('Veilleur dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'watcher')) fail('Veilleur dans la taupe');
+  const map = blankMap();
+  map[8] = map[8].slice(0, 15) + 'L' + map[8].slice(16);
+  if (checkAtelier(map)) fail(`atelier : Veilleur refusé (${checkAtelier(map)})`);
+  const back = decodeAtelier(encodeAtelier({ name: 'Phare', map }));
+  if (back?.map[8][15] !== 'L') fail('atelier : le Veilleur se perd dans le code');
+  if (killXp('watcher') !== 2) fail('galons du Veilleur');
+  // duos of AI players clear the Veilleur missions, and it stays cheap
+  let cleared = 0, spent = 0, steps = 0, alarms = 0;
+  for (const mission of [61, 64, mm.find((x) => x > 64)!]) {
+    for (let run = 0; run < 2 || (cleared === 0 && run < 5); run++) {
+      const lvl = getMission(mission);
+      const s2 = new Game(lvl.tiles, lvl.belts);
+      s2.night = !!lvl.night;
+      for (const [sx, sy] of lvl.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+      for (const en of lvl.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+      s2.frozen = false;
+      for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+        const t1 = performance.now();
+        s2.step(new Map());
+        spent += performance.now() - t1; steps++;
+        alarms += s2.events.filter((e) => e[0] === 'spot').length;
+        s2.events = [];
+      }
+      if (s2.aliveCount(99) === 0) cleared++;
+    }
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des Veilleurs');
+  if (alarms < 4) fail(`les Veilleurs ne repèrent presque personne (${alarms} alarmes)`);
+  if (process.exitCode !== 1) console.log(`veilleur OK (missions : ${mm.slice(0, 12).join(', ')}…, ${cleared}/6 parties gagnées par l’IA, ${alarms} alarmes, ${per.toFixed(3)} ms/tick)`);
 }
 
 // the Givré (iteration 31): it frosts the floor it drives over, everyone else slides there; frost melts, blasts melt it

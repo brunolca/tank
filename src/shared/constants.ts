@@ -60,7 +60,8 @@ export type TankKind =
   | 'frost'
   | 'mortar'
   | 'bombard'
-  | 'hopper';
+  | 'hopper'
+  | 'watcher';
 
 export interface TankSpec {
   speed: number;
@@ -115,6 +116,9 @@ export const SPECS: Record<TankKind, TankSpec> = {
   bombard: { speed: 0.9, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.5, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.5, aimError: 0.07, hp: 8, size: BOMBARD_R, label: 'Bombardier' },
   // iteration 41: it crouches, then leaps over walls, holes and shells to land where it has a clear shot at its prey (see HOP_*)
   hopper: { speed: 1.5, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.3, turretSpeed: 3, mines: 0, skill: 1, reaction: 0.35, aimError: 0.07, label: 'Sauterelle' },
+  // iteration 47: « Le Veilleur », a lighthouse on tracks that never moves: its beam sweeps the table, and whatever it
+  // lights up gets a rocket straight down the beam (see WATCH_*). Outside its light it is blind.
+  watcher: { speed: 0, maxBullets: 1, bounces: 0, rocket: true, fireCd: 1.5, turretSpeed: 1.9, mines: 0, skill: 1, reaction: 0.5, aimError: 0.02, label: 'Veilleur' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -153,6 +157,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   mortar: 0xc9a66b,
   bombard: 0x5e3f7f,
   hopper: 0xa8d02c,
+  watcher: 0x3b3577,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -417,6 +422,24 @@ export const HOP_FLIGHT_PER = 0.07;
 export const HOP_HEIGHT = 1.5;
 /** Tank flag: in the air (a leap of the Sauterelle). */
 export const FLAG_AIR = 65536;
+
+// ------------------------------------------------------------------ « Le Veilleur » (iteration 47): the lighthouse tank
+/** Reach of its beam (tiles) and half its width (radians): walls stop the light, fog and tunnels hide from it. */
+export const WATCH_RANGE = 8.5;
+export const WATCH_HALF = 0.3;
+/** How fast the beam sweeps round (rad/s) while nobody is lit, and how often it may turn back the other way (s). */
+export const WATCH_SWEEP = 0.85;
+export const WATCH_FLIP: [number, number] = [3.5, 7];
+/** How fast the beam follows the foe it caught (rad/s): quick enough at range, a dash across it up close gets away. */
+export const WATCH_TRACK = 1.9;
+/** Seconds between catching a foe in the light (the alarm) and the first rocket: time to get out of the beam. */
+export const WATCH_LOCK = 0.55;
+/** Seconds a foe may stay out of the light before it lets go and sweeps again. */
+export const WATCH_LOSE = 0.8;
+/** At night, a foe in its light is given away to every enemy for this long (refreshed while lit). */
+export const WATCH_REVEAL = 0.5;
+/** Tank flag: the Veilleur has caught someone in its light (the beam turns red). */
+export const FLAG_SPOT = 131072;
 /** Bullet field 5 (rocket) gets this bit for a « Gros calibre » shell (old tabs just see a rocket). */
 export const SHELL_HEAVY = 2;
 export const TURBO_MULT = 1.45;

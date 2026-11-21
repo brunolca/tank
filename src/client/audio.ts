@@ -487,6 +487,16 @@ export const sfx = {
     noise(t, 0.12, 500, 1.2, 0.35, 'bandpass', 220);
     tone(t + 0.08, 0.7, 900, 1500, 0.05, 'sine');
   },
+  /** « Le Veilleur » (iteration 47) caught someone in its light: a little two-tone alarm bell (louder when it is you). */
+  spot(me = false) {
+    if (!ctx) return;
+    const t = ctx.currentTime, v = me ? 0.16 : 0.08;
+    for (let i = 0; i < 2; i++) {
+      tone(t + i * 0.16, 0.14, 1320, 1300, v, 'triangle');
+      tone(t + i * 0.16 + 0.08, 0.12, 990, 980, v * 0.85, 'triangle');
+    }
+    noise(t, 0.04, 3000, 1.5, 0.05, 'bandpass', 2600);
+  },
   /** « La Sauterelle » (iteration 41) leaps: a toy spring going « boing », rising. */
   hop() {
     if (!ctx) return;

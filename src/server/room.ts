@@ -548,6 +548,8 @@ export class Room extends DurableObject<Env> {
     if (!att?.v || att.v < 35) tanks = tanks.map((t) => (t.kind === 'bombard' ? { ...t, kind: 'boss' } : t));
     // tabs older than iteration 41 draw the Sauterelle as a plain grey tank (it just seems to glide over the walls)
     if (!att?.v || att.v < 41) tanks = tanks.map((t) => (t.kind === 'hopper' ? { ...t, kind: 'ash' } : t));
+    // tabs older than iteration 47 draw the Veilleur as a plain brown tank (it never moves either, its beam just does not show)
+    if (!att?.v || att.v < 47) tanks = tanks.map((t) => (t.kind === 'watcher' ? { ...t, kind: 'brown' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,

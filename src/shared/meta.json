@@ -1,7 +1,7 @@
 {
-  "iteration": 46,
-  "date": "2026-11-20",
-  "title": "Les finitions",
+  "iteration": 47,
+  "date": "2026-11-21",
+  "title": "Le Veilleur",
   "journal": [
     {
       "iteration": 1,
@@ -559,6 +559,18 @@
         "La caméra vole entre les écrans : derrière les menus, la table recule et se balance doucement comme un jouet en vitrine, puis elle plonge sur la partie quand tu joues.",
         "Les menus ont leurs bruits : un froissement de papier quand un tableau s’ouvre ou se range, une page qui tourne dans le manuel, un déclic pour chaque réglage.",
         "Deux nouveaux réglages dans les options : couper les mouvements de caméra, et choisir si le clic droit maintenu ouvre la roue ou pose seulement une mine."
+      ]
+    },
+    {
+      "iteration": 47,
+      "date": "2026-11-21",
+      "title": "Le Veilleur",
+      "notes": [
+        "Nouvel ennemi : le Veilleur, un petit phare indigo sur chenilles. Il ne bouge jamais, mais son faisceau balaie la table sans relâche.",
+        "S’il t’éclaire, la lumière vire au rouge, l’alarme sonne et le faisceau te suit : une fusée part droit dans la lumière. Sors du faisceau ou cache-toi derrière un mur, qui arrête sa lumière !",
+        "Hors de son faisceau, il ne voit rien… mais un obus qui traverse sa lumière le fait se retourner vers le tireur.",
+        "De nuit, son faisceau éclaire vraiment la table, et quiconque s’y fait prendre est aussitôt repéré par tous les ennemis. Sa lumière trahit aussi les chars blancs invisibles.",
+        "Deux nouvelles missions, « La ronde de nuit » (61) et « Le phare » (64), un phare sur son îlot au milieu d’une fosse. Ensuite, il monte la garde dans les missions générées, et l’atelier le propose dans sa palette."
       ]
     }
   ]

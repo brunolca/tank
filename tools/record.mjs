@@ -7,12 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 3, arms: ['canon', 'ricochet'], hud: true, seconds: 15, wheels: [[3.5, 0], [9.5, 4]], caption: 'Itération 46 : les finitions', sub: 'Clic droit maintenu : la roue des bulles' },
-  { home: 6, seconds: 6, caption: 'La caméra vole entre les écrans', sub: 'Derrière les menus, la table se balance comme en vitrine' },
-  { mission: 23, arms: ['canon', 'sapeur'], hud: true, seconds: 13, wheels: [[2.5, 1], [8, 3]], caption: 'Puis elle plonge sur la partie', sub: 'Chaque bulle a sa petite icône' },
-  { manual: [8, ['modes', 'commandes']], seconds: 8, caption: 'Des icônes dessinées à la main', sub: 'Les mêmes sur tous les écrans, et des pages qui tournent' },
-  { options: 6, seconds: 6, caption: 'Deux nouveaux réglages', sub: 'La caméra qui vole, et le clic droit' },
-  { mission: 10, bilan: true, arms: ['canon', 'ricochet'], hud: true, bossHp: 3, seconds: 16, wheels: [[12, 5]], caption: 'Et toujours le briefing', sub: 'Avant de plonger sur le Colosse' },
+  { mission: 64, arms: ['canon', 'ricochet'], hud: true, seconds: 16, watches: [3, 9.5], newcomers: [[1.2, ['watcher']]], caption: 'Itération 47 : le Veilleur', sub: 'Un phare sur chenilles : son faisceau balaie la table' },
+  { mission: 61, night: true, arms: ['canon', 'fusee'], hud: true, seconds: 16, watches: [2.5, 8.5], caption: 'La ronde de nuit', sub: 'Éclairé ? L’alarme sonne, et tous les ennemis savent où tu es' },
+  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Une nouvelle fiche au bestiaire', sub: 'Hors de sa lumière, il ne voit rien' },
+  { mission: 66, arms: ['canon', 'sapeur'], hud: true, seconds: 14, watches: [3, 9], caption: 'Puis il monte la garde', sub: 'Dans les missions générées, et dans l’atelier' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -94,6 +92,7 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.watches ?? []) setTimeout(() => d.watch?.(), s * 1000); // « Le Veilleur » (iteration 47): every beam swings onto a hero
       for (const s of shot.hops ?? []) setTimeout(() => d.hop?.(), s * 1000); // « La Sauterelle » (iteration 41): every Sauterelle leaps at once
       for (const s of shot.lobs ?? []) setTimeout(() => d.lob?.(), s * 1000); // « Le Mortier » (iteration 34): every Mortier fires at once
       for (const s of shot.frostMines ?? []) setTimeout(() => d.frostMine?.(), s * 1000); // a blast melts the Givré's frost (iteration 31)
