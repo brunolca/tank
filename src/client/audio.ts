@@ -488,6 +488,36 @@ export const sfx = {
       noise(t + 0.5, 0.6, 3000, 0.6, 0.2, 'highpass');
     }
   },
+  /**
+   * « La couronne » (iteration 50): 0 the crown is put on (a bright little trumpet call, prouder when it is yours), 1 it is
+   * knocked off (a tumbling clatter), 2 it flies back to its cushion (a harp glissando), 3 a reign completed (a royal fanfare),
+   * 4 five seconds from the throne (a drum roll).
+   */
+  crown(what: number, mine: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (what === 0) {
+      const v = mine ? 0.15 : 0.08;
+      [784, 988, 1175].forEach((f, i) => tone(t + i * 0.07, 0.14, f, f, v, 'square'));
+      tone(t + 0.21, 0.32, 1568, 1568, v, 'square');
+      tone(t + 0.21, 0.4, 3136, 3136, v * 0.2, 'sine');
+    } else if (what === 1) {
+      [1319, 1047, 880, 698, 523].forEach((f, i) => tone(t + i * 0.05, 0.1, f, f * 0.95, 0.07, 'triangle'));
+      noise(t, 0.12, 5000, 1.5, 0.12, 'highpass');
+      noise(t + 0.18, 0.1, 3000, 2, 0.1, 'bandpass');
+    } else if (what === 2) {
+      [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(t + i * 0.04, 0.3, f, f, 0.05, 'sine'));
+    } else if (what === 3) {
+      [[523, 0], [523, 0.12], [523, 0.24], [659, 0.36], [784, 0.6], [659, 0.84], [784, 0.96], [1047, 1.1]].forEach(([f, d]) => {
+        tone(t + d, d >= 1.1 ? 0.7 : 0.2, f, f, 0.14, 'square');
+        tone(t + d, d >= 1.1 ? 0.7 : 0.2, f / 2, f / 2, 0.08, 'triangle');
+      });
+      noise(t + 1.1, 0.8, 4000, 0.6, 0.18, 'highpass');
+    } else {
+      for (let i = 0; i < 12; i++) noise(t + i * 0.045, 0.05, 900, 1.2, 0.12 + i * 0.012, 'bandpass', 400);
+      tone(t + 0.55, 0.25, 98, 60, 0.4, 'sine');
+    }
+  },
   /** The Semeur sows (iteration 25): a creak of the hopper, then one hollow « plop » per seed thrown. */
   sow(n: number) {
     if (!ctx) return;

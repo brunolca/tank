@@ -11,6 +11,7 @@ import { SHEET_EXTRA, TallyCount, parSeconds, shotBudget } from '../shared/bilan
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRival, randomWeapon, rivalMode } from '../shared/rivals';
 import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
 import { HUNT_CRATES, HUNT_ROUND, HUNT_TARGET, huntArena, huntLeader, newHunt } from '../shared/caisses';
+import { CROWN_HOLD, CROWN_ROUND, CROWN_TARGET, crownArena, crownLeader, newCrown } from '../shared/couronne';
 import { CTF_ROUND, CTF_TARGET, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags } from '../shared/drapeau';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
@@ -55,7 +56,9 @@ const VERSUS_TARGET = 5;
 /** Modes played in rounds between players and rivals: free-for-all versus, and « Drapeaux » in two teams (iteration 24). */
 /** Seconds between the end of a mission (or round) and what comes next: room for « Le ralenti » (iteration 32, was 3.5). */
 const END_PAUSE = 4.5;
-const pvp = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses'; // « La chasse aux caisses » (iteration 37) too
+const pvp = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne'; // « La chasse aux caisses » (iteration 37) and « La couronne » (iteration 50) too
+/** Free-for-all modes played in rounds on the versus arenas: one team per tank. */
+const ffa = (m: Mode) => m === 'versus' || m === 'caisses' || m === 'couronne';
 const EMPTY_INPUT: Input = { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 };
 
 export class Room extends DurableObject<Env> {
@@ -94,6 +97,7 @@ export class Room extends DurableObject<Env> {
   private teams: [number, number] = [0, 0]; // « Drapeaux »: rounds won by the Bleus and the Rouges
   private caps = new Map<string, number>(); // « Drapeaux »: flags each entrant brought home
   private crates = new Map<string, number>(); // « La chasse aux caisses » (iteration 37): crates each entrant picked up, all rounds
+  private reigns = new Map<string, number>(); // « La couronne » (iteration 50): seconds each entrant wore the crown, all rounds
   private bases?: [number, number][]; // « Drapeaux »: the bases of the round
   private roundWin = 0; // « Drapeaux »: the team that took the last round
   private training = new Set<string>(); // coop, end of a mission: players still picking skills (iteration 19)
@@ -231,7 +235,7 @@ export class Room extends DurableObject<Env> {
         }
         break;
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush' || msg.mode === 'caisses')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush' || msg.mode === 'caisses' || msg.mode === 'couronne')) {
           this.mode = msg.mode;
           if (!rivalMode(this.mode)) this.rivals = [];
           await this.ctx.storage.put('mode', this.mode);
@@ -394,7 +398,7 @@ export class Room extends DurableObject<Env> {
   private startGame() {
     const active = [...this.players.values()].filter((p) => p.ws);
     if (pvp(this.mode) && active.length + this.versusRivals().length < 2) {
-      for (const p of active) this.send(p.ws!, { t: 'error', msg: this.mode === 'drapeau' ? 'Il faut au moins 2 tanks pour jouer aux drapeaux : invite un ami ou ajoute un rival.' : this.mode === 'caisses' ? 'Il faut au moins 2 tanks pour la chasse aux caisses : invite un ami ou ajoute un rival.' : 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
+      for (const p of active) this.send(p.ws!, { t: 'error', msg: this.mode === 'drapeau' ? 'Il faut au moins 2 tanks pour jouer aux drapeaux : invite un ami ou ajoute un rival.' : this.mode === 'caisses' ? 'Il faut au moins 2 tanks pour la chasse aux caisses : invite un ami ou ajoute un rival.' : this.mode === 'couronne' ? 'Il faut au moins 2 tanks pour se disputer la couronne : invite un ami ou ajoute un rival.' : 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
       return;
     }
     if (this.mode === 'atelier' && !this.atelier) {
@@ -423,6 +427,7 @@ export class Room extends DurableObject<Env> {
     this.teams = [0, 0];
     this.caps.clear();
     this.crates.clear();
+    this.reigns.clear();
     this.day = dayNumber();
     this.week = weekNumber(this.day);
     this.splits = [];
@@ -453,6 +458,7 @@ export class Room extends DurableObject<Env> {
       : this.mode === 'atelier' && this.atelier ? atelierLevel(this.atelier)
       : this.mode === 'drapeau' ? ctfArena(this.round)
       : this.mode === 'caisses' ? huntArena(this.round)
+      : this.mode === 'couronne' ? crownArena(this.round)
       : versusArena(this.arenaBase + this.round);
     this.bases = this.mode === 'drapeau' ? (this.level as ReturnType<typeof ctfArena>).bases : undefined;
     this.council = undefined;
@@ -473,7 +479,7 @@ export class Room extends DurableObject<Env> {
         pos = nearestFree(this.level!.tiles, Math.floor(base[0]), Math.floor(base[1]) + (i >= 2 ? 2 : -2), [...spawns, ...used]);
       }
       used.push(pos);
-      const team = this.mode === 'versus' || this.mode === 'caisses' ? i + 1 : this.mode === 'drapeau' ? ctfTeam(i) : 0;
+      const team = ffa(this.mode) ? i + 1 : this.mode === 'drapeau' ? ctfTeam(i) : 0;
       // « Drapeaux »: tanks wear their team's colours (blue and cyan, red and orange)
       const color = this.mode === 'drapeau' ? TEAM_TANK_COLORS[team - 1][Math.floor(i / 2) % 2] : p.color;
       const t = game.addTank('player', team, pos[0], pos[1], color, p.pid, p.name);
@@ -513,6 +519,10 @@ export class Room extends DurableObject<Env> {
     if (this.mode === 'caisses') {
       game.hunt = newHunt();
       game.bonusNext = HUNT_CRATES.first; game.bonusEvery = HUNT_CRATES.every; game.bonusCap = HUNT_CRATES.cap;
+    }
+    if (this.mode === 'couronne') {
+      const [cx, cy] = (this.level as ReturnType<typeof crownArena>).crown;
+      game.crown = newCrown(cx, cy);
     }
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
@@ -557,7 +567,7 @@ export class Room extends DurableObject<Env> {
       t: 'level',
       mode: this.mode,
       mission: pvp(this.mode) ? this.round + 1 : this.mission,
-      name: this.mode === 'versus' || this.mode === 'caisses' ? `Manche ${this.round + 1}` : this.level.name,
+      name: ffa(this.mode) ? `Manche ${this.round + 1}` : this.level.name,
       tiles: this.game.tiles,
       tanks,
       lives: this.lives,
@@ -570,6 +580,7 @@ export class Room extends DurableObject<Env> {
       daily: this.dailyState(),
       rush: this.rushState(),
       bases: this.bases?.flat(),
+      crown: this.game.crown ? [this.game.crown.hx, this.game.crown.hy] : undefined,
       rail: this.level.rail,
     });
     if (this.mode === 'taupe') {
@@ -674,7 +685,8 @@ export class Room extends DurableObject<Env> {
       teams: this.mode === 'drapeau' ? [this.teams[0], this.teams[1]] : undefined,
       win: this.mode === 'drapeau' && this.phase === 'roundEnd' ? this.roundWin : undefined,
       left: this.mode === 'drapeau' && this.game ? Math.max(0, +(CTF_ROUND - this.game.ctfTime).toFixed(1))
-        : this.mode === 'caisses' && this.game?.hunt ? Math.max(0, +(HUNT_ROUND - this.game.hunt.time).toFixed(1)) : undefined,
+        : this.mode === 'caisses' && this.game?.hunt ? Math.max(0, +(HUNT_ROUND - this.game.hunt.time).toFixed(1))
+        : this.mode === 'couronne' && this.game?.crown ? Math.max(0, +(CROWN_ROUND - this.game.crown.time).toFixed(1)) : undefined,
     };
   }
 
@@ -743,13 +755,17 @@ export class Room extends DurableObject<Env> {
       for (const pl of players) pl.crates = this.crates.get(pl.id) ?? 0;
       players.sort((a, b) => b.score - a.score || (b.crates ?? 0) - (a.crates ?? 0));
     }
+    if (this.mode === 'couronne') {
+      for (const pl of players) pl.crown = Math.round(this.reigns.get(pl.id) ?? 0);
+      players.sort((a, b) => b.score - a.score || (b.crown ?? 0) - (a.crown ?? 0));
+    }
     const daily = this.mode === 'daily' ? { state: this.dailyState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
     const rush = this.mode === 'rush' ? { state: this.rushState()!, cleared: this.dailyCleared(), board: this.board } : undefined;
     const taupe = this.mode === 'taupe' && this.taupeEnd
       ? { ...this.taupeEnd, cleared: this.taupeEnd.why === 'missions' ? TAUPE_STAGES : this.mission - 1, stages: TAUPE_STAGES }
       : undefined;
     const atelier = this.mode === 'atelier' && this.atelier ? { name: this.atelier.name, won: this.atelierWon } : undefined;
-    return { mode: this.mode, mission: this.mode === 'drapeau' || this.mode === 'caisses' ? this.round + 1 : this.mission, players, winner: pvp(this.mode) ? players[0]?.id : undefined, daily, rush, taupe, atelier, drapeau };
+    return { mode: this.mode, mission: this.mode === 'drapeau' || this.mode === 'caisses' || this.mode === 'couronne' ? this.round + 1 : this.mission, players, winner: pvp(this.mode) ? players[0]?.id : undefined, daily, rush, taupe, atelier, drapeau };
   }
 
   private tick() {
@@ -783,10 +799,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C });
     }
 
     this.phaseTimer -= DT;
@@ -832,7 +848,7 @@ export class Room extends DurableObject<Env> {
       case 'roundEnd':
         if (this.phaseTimer <= 0) {
           const best = Math.max(...[...this.players.values(), ...this.versusRivals()].map((p) => p.score));
-          if (this.mode === 'drapeau' ? Math.max(...this.teams) >= CTF_TARGET : best >= (this.mode === 'caisses' ? HUNT_TARGET : VERSUS_TARGET)) { this.setPhase('gameover', 8); this.broadcastPhase(); }
+          if (this.mode === 'drapeau' ? Math.max(...this.teams) >= CTF_TARGET : best >= (this.mode === 'caisses' ? HUNT_TARGET : this.mode === 'couronne' ? CROWN_TARGET : VERSUS_TARGET)) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else { this.round++; this.loadStage(); }
         }
         break;
@@ -900,6 +916,7 @@ export class Room extends DurableObject<Env> {
   private checkEnd(game: Game) {
     if (this.mode === 'drapeau') { this.checkFlags(game); return; }
     if (this.mode === 'caisses') { this.checkHunt(game); return; }
+    if (this.mode === 'couronne') { this.checkCrown(game); return; }
     if (this.mode !== 'versus') {
       const playersAlive = game.aliveCount(0);
       const enemiesAlive = game.aliveCount(99);
@@ -973,6 +990,26 @@ export class Room extends DurableObject<Env> {
     const top = Math.max(0, ...h.got.values());
     this.setPhase('roundEnd', END_PAUSE);
     this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: w ? `${w.name} gagne la manche avec ${n} caisse${n > 1 ? 's' : ''} !` : top ? `Égalité à ${top} caisse${top > 1 ? 's' : ''} : personne ne marque.` : 'Aucune caisse ramassée : égalité !' });
+  }
+
+  /** « La couronne » (iteration 50): a reign of CROWN_HOLD seconds takes the round at once; otherwise the clock does. */
+  private checkCrown(game: Game) {
+    const c = game.crown;
+    if (!c || (!c.winner && c.time < CROWN_ROUND)) return;
+    for (const t of game.tanks) {
+      const s = c.held.get(t.id) ?? 0;
+      if (t.pid && s) this.reigns.set(t.pid, (this.reigns.get(t.pid) ?? 0) + s);
+    }
+    const lead = game.tanks.find((t) => t.id === (c.winner || crownLeader(c.held)));
+    const w = this.entrant(lead?.pid);
+    if (w) w.score++;
+    if (lead) game.cheer(lead.team);
+    const s = lead ? Math.floor(c.held.get(lead.id) ?? 0) : 0;
+    const top = Math.floor(Math.max(0, ...c.held.values()));
+    this.setPhase('roundEnd', END_PAUSE);
+    this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: c.winner && w ? `${w.name} règne ${CROWN_HOLD} secondes et gagne la manche !`
+      : w ? `Temps écoulé : ${w.name} a porté la couronne le plus longtemps (${s} s) et gagne la manche !`
+      : top ? 'Temps écoulé : égalité au sommet, personne ne marque.' : 'Personne n’a porté la couronne : égalité !' });
   }
 
   private endFlagRound(game: Game, win: number, text: string) {

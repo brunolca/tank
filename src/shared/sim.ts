@@ -7,6 +7,7 @@ import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
+import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
 import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
@@ -385,6 +386,8 @@ export class Game {
   private ctfBack = new Map<number, number>();
   /** « La chasse aux caisses » (iteration 37): the crates of the round (undefined in every other mode). */
   hunt?: HuntState;
+  /** « La couronne » (iteration 50): the crown of the round (undefined in every other mode). */
+  crown?: CrownState;
   /**
    * « Les interrupteurs » (iteration 40): the table has switch blocks. A shell hitting one flips every gate: the red
    * ones sink into the floor and the blue ones rise, or the other way round. A gate never rises onto a tank, a mine or
@@ -556,6 +559,7 @@ export class Game {
     if (this.bonusOn) this.stepBonuses(DT);
     if (this.flags) this.stepFlags(DT);
     if (this.hunt) this.stepHunt(DT);
+    if (this.crown) this.stepCrown(DT);
   }
 
   // -------------------------------------------------------------- « Les interrupteurs » (iteration 40)
@@ -661,6 +665,79 @@ export class Game {
     if (!this.hunt) return undefined;
     const out: number[] = [];
     for (const t of this.tanks) if (t.kind === 'player') out.push(t.id, this.hunt.got.get(t.id) ?? 0);
+    return out;
+  }
+
+  // -------------------------------------------------------------- « La couronne » (iteration 50)
+
+  /**
+   * The crown follows the one who wears it (and falls with it), its reign counts; a dropped crown flies home after a
+   * while; any tank driving over a free crown puts it on. Destroyed tanks come back at their corner.
+   */
+  stepCrown(dt: number) {
+    const c = this.crown!;
+    c.time += dt;
+    this.ctfRespawn(dt, CROWN_RESPAWN);
+    if (c.cool > 0) c.cool -= dt;
+    if (c.state === 1) {
+      const t = this.tankById(c.holder);
+      if (!t || !t.alive) {
+        // hit while crowned: it rolls off where the tank fell
+        c.state = 2; c.dropT = 0; c.cool = CROWN_COOL; c.holder = 0;
+        this.events.push(['crown', r2(c.x), r2(c.y), t?.id ?? 0, 1]);
+      } else {
+        c.x = t.x; c.y = t.y;
+        if (!c.winner) {
+          const n = (c.held.get(t.id) ?? 0) + dt;
+          c.held.set(t.id, n);
+          if (!c.warned && n >= CROWN_HOLD - CROWN_WARN) {
+            c.warned = true;
+            this.events.push(['crown', r2(t.x), r2(t.y), t.id, 4]); // five seconds from the throne: everyone at it!
+          }
+          if (n >= CROWN_HOLD) {
+            c.winner = t.id;
+            this.events.push(['crown', r2(t.x), r2(t.y), t.id, 3]);
+          }
+        }
+      }
+    } else if (c.state === 2) {
+      c.dropT += dt;
+      if (c.dropT >= CROWN_RETURN) {
+        c.state = 0; c.dropT = 0; c.x = c.hx; c.y = c.hy;
+        this.events.push(['crown', r2(c.hx), r2(c.hy), 0, 2]);
+      }
+    }
+    if (c.state !== 1 && c.cool <= 0 && !c.winner) {
+      for (const t of this.tanks) {
+        if (!t.alive || t.kind !== 'player' || under(t) || Math.hypot(t.x - c.x, t.y - c.y) > CROWN_GRAB + t.r * 0.4) continue;
+        c.state = 1; c.holder = t.id; c.dropT = 0; c.x = t.x; c.y = t.y;
+        c.warned = (c.held.get(t.id) ?? 0) >= CROWN_HOLD - CROWN_WARN;
+        this.events.push(['crown', r2(t.x), r2(t.y), t.id, 0]);
+        this.botSay(t, EMOTE_HEHE); // a rival that grabs the crown gloats
+        break;
+      }
+    }
+    this.crownBrains();
+  }
+
+  /** AI tanks of a crown round: a free crown draws them all, a crowned tank is hunted down; the one wearing it just fights. */
+  private crownBrains() {
+    const c = this.crown!;
+    const king = c.state === 1 ? this.tankById(c.holder) : undefined;
+    for (const t of this.tanks) {
+      if (!t.alive || !t.ai || t.kind !== 'player') continue;
+      const goal = c.state !== 1 ? c : king && king !== t ? king : undefined;
+      const cell = goal ? Math.floor(goal.y) * W + Math.floor(goal.x) : undefined;
+      if (cell !== t.ai.goal) { t.ai.goal = cell; t.ai.path = []; t.ai.pathT = 0; }
+    }
+  }
+
+  /** The crown for the snapshots: [x, y, holder, state, tenths before it flies home, then pairs (tankId, tenths of reign)]. */
+  netCrown(): number[] | undefined {
+    const c = this.crown;
+    if (!c) return undefined;
+    const out = [r2(c.x), r2(c.y), c.holder, c.state, c.state === 2 ? Math.max(0, Math.ceil((CROWN_RETURN - c.dropT) * 10)) : 0];
+    for (const t of this.tanks) if (t.kind === 'player') out.push(t.id, Math.floor((c.held.get(t.id) ?? 0) * 10));
     return out;
   }
 

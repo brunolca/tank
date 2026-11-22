@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 60, bilan: true, arms: ['canon', 'ricochet'], hud: true, seconds: 21, trainMines: [9.5], caption: 'Itération 49 : le Tortillard', sub: 'Un sixième boss fait le tour de la table sur ses rails' },
-  { mission: 60, arms: ['ricochet', 'fusee'], bossHp: 4, hud: true, seconds: 15, reverses: [4.5], caption: 'Gare à la voie !', sub: 'Il écrase tout ce qui traîne devant lui… et repart en marche arrière' },
-  { mission: 160, arms: ['canon', 'sapeur'], hud: true, seconds: 12, trainMines: [5], caption: 'Le Tortillard de nuit', sub: 'Une mine sur les rails, et ses wagons sautent un à un' },
-  { manual: [7, ['bestiaire'], 'train'], seconds: 7, caption: 'Au bestiaire', sub: 'Vise ses flancs : de face, son chasse-pierres renvoie les obus' },
+  { couronne: [0, [2, 2, 2, 2], 75, 0], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 22, caption: 'Itération 50 : la couronne', sub: 'Un nouveau mode : une seule couronne, et tout le monde la veut' },
+  { couronne: [4, [2, 2, 2, 2], 45, 19, true], arms: ['ricochet', 'canon', 'sapeur', 'fusee'], crowns: [1], seconds: 20, caption: 'Garde-la 25 secondes', sub: 'Touché ? Elle tombe de ta tête… et le premier qui passe la ramasse' },
+  { couronne: [2, [2, 2, 2, 2], 60, 6], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], crowns: [1.5], seconds: 14, caption: 'La couronne brille de nuit', sub: 'Impossible de cacher qui règne' },
+  { manual: [7, ['modes']], seconds: 7, caption: 'Au manuel', sub: 'Premier à trois manches, seul contre les rivaux ou entre amis' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -64,6 +64,7 @@ try {
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
+      else if (shot.couronne) d.couronne(shot.couronne[0], shot.couronne[1], shot.arms, shot.couronne[2], !!shot.couronne[4], shot.couronne[3]); // « La couronne » (iteration 50)
       else if (shot.caisses) d.caisses(shot.caisses[0], shot.caisses[1], shot.arms, shot.caisses[2], !!shot.caisses[3]); // « La chasse aux caisses » (iteration 37)
       else if (shot.drapeau) d.drapeau(shot.drapeau[0], shot.drapeau[1], shot.arms, true, !!shot.drapeau[2]); // « Drapeaux » (iteration 24)
       else if (shot.rivals) d.rivals(shot.rivals * 1000, shot.lobby); // the game goes on behind the lobby (versus, or coop teammates)
@@ -92,6 +93,7 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.crowns ?? []) setTimeout(() => d.crown?.(), s * 1000); // « La couronne » (iteration 50): the crown onto the nearest rival's head
       for (const s of shot.trainMines ?? []) setTimeout(() => d.trainMine?.(), s * 1000); // « Le Tortillard » (iteration 49): a mine on the track ahead of the train
       for (const s of shot.reverses ?? []) setTimeout(() => d.reverse?.(), s * 1000); // and it stops whistling, then backs up
       for (const s of shot.watches ?? []) setTimeout(() => d.watch?.(), s * 1000); // « Le Veilleur » (iteration 47): every beam swings onto a hero

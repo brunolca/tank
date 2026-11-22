@@ -182,6 +182,30 @@ try {
   if (hs.moved < 0.3) fail(`chasse aux caisses : les rivaux ne bougent pas (${hs.moved})`);
   await hunt.context().close();
 
+  // « La couronne » (iteration 50): alone against two rivals, the crown on its cushion, a scoreboard of 3 reigns and a clock
+  const king = await page('couronne', server.url + '/');
+  await sleep(1500);
+  await king.click('#btn-create');
+  await king.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1000);
+  await king.click('#mode-select button[data-mode="couronne"]');
+  await king.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  await king.click('#btn-rival');
+  await sleep(500);
+  await king.click('#btn-rival');
+  await sleep(1000);
+  await king.click('#btn-start');
+  await sleep(12000); // intro, then the rivals race for the crown
+  const ks = await state(king);
+  if (!ks.online || ks.myTankId < 0) fail(`couronne : pas en partie (écran ${ks.screen}, phase ${ks.phase})`);
+  if (ks.tanks !== 3) fail(`couronne : ${ks.tanks} tank(s) au lieu de 3`);
+  if (!ks.crown?.home || Object.keys(ks.crown.held ?? {}).length !== 3) fail(`couronne : couronne ou règnes absents (${JSON.stringify(ks.crown)})`);
+  if (ks.crown?.board !== 3) fail('couronne : le tableau ne montre pas les 3 tanks');
+  if (ks.crown && ks.crown.state === 0 && !Object.values(ks.crown.held).some((v) => v > 0)) fail('couronne : personne n’a pris la couronne en 8 secondes');
+  if (!/⏱/.test(await king.locator('#hud-enemies').innerText())) fail('couronne : pas de chrono');
+  if (ks.moved < 0.3) fail(`couronne : les rivaux ne bougent pas (${ks.moved})`);
+  await king.context().close();
+
   // coop campaign alone with an AI teammate (iteration 20): add one, start, call it with T
   const mate = await page('coéquipier', server.url + '/');
   await sleep(1500);
@@ -236,5 +260,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, coop avec un coéquipier, ronde des boss, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, couronne, coop avec un coéquipier, ronde des boss, mode démo).');
 process.exit(0);

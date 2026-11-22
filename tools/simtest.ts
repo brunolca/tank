@@ -12,6 +12,7 @@ import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { HUNT_CRATES, HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, huntArena, huntLeader, newHunt } from '../src/shared/caisses';
+import { CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, crownArena, crownLeader, newCrown } from '../src/shared/couronne';
 import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
 
@@ -2767,6 +2768,83 @@ console.log('total', Date.now() - t0, 'ms');
   if (total < 8 * 6) fail(`les rivaux ne ramassent presque rien (${total} caisses en 8 manches)`);
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`chasse aux caisses OK (${total} caisses en 8 manches, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
+}
+
+// « La couronne » (iteration 50): the crown is put on, counts its reign, falls with its wearer, flies home, takes the round;
+// AI rivals fight over it on every arena, cheaply, and rounds get decided
+{
+  const fail = (m: string) => { console.error('couronne : ' + m); process.exitCode = 1; };
+  {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    g.crown = newCrown(11.5, 8.5);
+    const a = g.addTank('player', 1, 3.5, 3.5, 0, 'a', 'A');
+    const b = g.addTank('player', 2, 18.5, 13.5, 0, 'b', 'B');
+    g.frozen = false;
+    g.step(new Map());
+    if (g.crown.state !== 0 || g.crown.holder) fail('la couronne ne reste pas sur son coussin');
+    a.x = 11.6; a.y = 8.4;
+    g.step(new Map());
+    if (g.crown.state !== 1 || g.crown.holder !== a.id) fail('la couronne ne se met pas');
+    if (!g.events.some((e) => e[0] === 'crown' && e[3] === a.id && e[4] === 0)) fail('pas d’événement « couronne prise »');
+    for (let i = 0; i < 30; i++) g.step(new Map());
+    const s = g.crown.held.get(a.id) ?? 0;
+    if (s < 0.9 || s > 1.2) fail(`une seconde de règne compte ${s}`);
+    // b drives over it: nothing, a keeps it
+    b.x = a.x + 0.3; b.y = a.y;
+    g.step(new Map());
+    if (g.crown.holder !== a.id) fail('la couronne change de tête sans tir');
+    b.x = 18.5; b.y = 13.5;
+    // hit: it drops where a fell, b cannot pick it up at once, then can
+    a.x = 6.5; a.y = 8.5;
+    g.step(new Map());
+    g.events = [];
+    g.killTank(a, b);
+    g.step(new Map());
+    if (g.crown.state !== 2 || Math.hypot(g.crown.x - 6.5, g.crown.y - 8.5) > 0.2) fail('la couronne ne tombe pas sur place');
+    if (!g.events.some((e) => e[0] === 'crown' && e[4] === 1)) fail('pas d’événement « couronne lâchée »');
+    const nc = g.netCrown()!;
+    if (nc[3] !== 2 || nc[4] <= 0 || nc.length !== 9) fail(`vue réseau inattendue ${JSON.stringify(nc)}`);
+    // nobody takes it: it flies home
+    for (let i = 0; i < 30 * CROWN_RETURN + 2; i++) g.step(new Map());
+    if (g.crown.state !== 0 || g.crown.x !== 11.5) fail('la couronne lâchée ne rentre pas sur son coussin');
+    if (!a.alive || Math.hypot(a.x - 3.5, a.y - 3.5) > 0.01) fail(`un tank détruit ne revient pas dans son coin (${CROWN_RESPAWN} s)`);
+    // a long reign takes the round
+    b.x = 11.5; b.y = 8.5;
+    g.step(new Map());
+    if (g.crown.holder !== b.id) fail('b ne prend pas la couronne');
+    g.crown.held.set(b.id, CROWN_HOLD - 0.5);
+    for (let i = 0; i < 20; i++) g.step(new Map());
+    if (g.crown.winner !== b.id) fail('un règne complet ne gagne pas la manche');
+    if (crownLeader(new Map([[1, 2], [2, 2]])) !== 0 || crownLeader(new Map([[1, 1], [2, 3]])) !== 2 || crownLeader(new Map([[1, 0]])) !== 0) fail('mauvais gagnant au temps');
+  }
+  let decided = 0, reigns = 0, worst = 0, spent = 0, steps = 0;
+  for (let round = 0; round < 8; round++) {
+    const lvl = crownArena(round);
+    if (lvl.storm || lvl.fog !== undefined) fail(`${lvl.name} : orage ou brouillard dans l’arène`);
+    const [cx, cy] = lvl.crown;
+    if (lvl.tiles[Math.floor(cy) * W + Math.floor(cx)] !== Tile.Empty || Math.hypot(cx - W / 2, cy - H / 2) > 5) fail(`manche ${round} : coussin mal placé (${cx}, ${cy})`);
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.setRail(lvl.rail);
+    g.bonusOn = true; g.bonusNext = 5; g.bonusEvery = [8, 12];
+    g.night = !!lvl.night; g.wind = lvl.wind;
+    g.crown = newCrown(cx, cy);
+    lvl.spawns.slice(0, 4).forEach(([x, y], i) => makeRival(g, g.addTank('player', i + 1, x, y, 0, `ia:${i + 1}`, `R${i}`), 2));
+    g.frozen = false;
+    while (g.crown.time < CROWN_ROUND && !g.crown.winner) {
+      const t1 = performance.now();
+      g.step(new Map());
+      const dt = performance.now() - t1;
+      spent += dt; steps++; worst = Math.max(worst, dt);
+      g.events = [];
+    }
+    if (g.crown.winner || crownLeader(g.crown.held)) decided++;
+    reigns += [...g.crown.held.values()].reduce((n, v) => n + v, 0);
+  }
+  const per = spent / Math.max(1, steps);
+  if (decided < 6) fail(`trop de manches sans vainqueur (${decided} sur 8)`);
+  if (reigns < 8 * 15) fail(`les rivaux ne portent presque pas la couronne (${reigns.toFixed(0)} s en 8 manches)`);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`couronne OK (${decided}/8 manches décidées, ${reigns.toFixed(0)} s de règne, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
 }
 
 // « Les interrupteurs » (iteration 40): a shell on a switch flips every gate, gates never rise onto a tank, the AI copes

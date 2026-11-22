@@ -1,7 +1,7 @@
 {
-  "iteration": 49,
+  "iteration": 50,
   "date": "2026-11-22",
-  "title": "Le Tortillard",
+  "title": "La couronne",
   "journal": [
     {
       "iteration": 1,
@@ -596,6 +596,18 @@
         "De face, son chasse-pierres renvoie les obus : vise ses flancs, son dos… ou pose une mine sur la voie et laisse-le rouler dessus. Une fois la locomotive détruite, ses wagons déraillent avec elle.",
         "Il attend à la mission 60, puis revient toutes les cent missions (160, 260…), en alternance avec le Colosse. La nuit, sa lanterne éclaire les rails devant lui.",
         "Le ralenti nomme mieux les ennemis : « Le tank gris est détruit », « l’Aimant », « la Sauterelle »… Et le bestiaire accueille la locomotive et son wagon."
+      ]
+    },
+    {
+      "iteration": 50,
+      "date": "2026-11-22",
+      "title": "La couronne",
+      "notes": [
+        "Nouveau mode : « La couronne ». Une seule couronne dorée trône sur son coussin rouge au milieu de la table… et tout le monde la veut.",
+        "Roule dessus pour la mettre : chaque seconde passée couronné compte. Garde-la 25 secondes en tout et la manche est à toi ; au bout d’une minute et demie, c’est le plus long règne qui l’emporte.",
+        "Touché ? La couronne tombe là où tu es, et le premier qui passe la ramasse. Laissée à terre, elle rentre sur son coussin au bout de 7 secondes. Les tanks touchés reviennent dans leur coin.",
+        "Le tableau de bord suit chaque règne avec une jauge dorée, le roi du moment a sa petite couronne, et une roulette de tambour prévient quand il n’est plus qu’à 5 secondes du trône.",
+        "Seul ? Les rivaux pilotés par l’ordinateur foncent sur la couronne libre et pourchassent celui qui la porte. Premier à 3 manches ; la couronne a aussi sa ligne au manuel et passe parfois en fond d’accueil."
       ]
     }
   ]

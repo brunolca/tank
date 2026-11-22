@@ -1018,6 +1018,15 @@ body.replaying #toast { bottom: calc(11vh + 16px); }
 /* « La chasse aux caisses » (iteration 37) */
 .sb-row.hunt .crates { margin-left: auto; font-size: 12px; font-weight: 900; letter-spacing: 0; color: #ffd45a; text-transform: none; }
 .sb-row.hunt.mine { box-shadow: inset 0 0 0 2px rgba(255, 212, 90, 0.6); }
+/* « La couronne » (iteration 50): a golden gauge of the reign, up to the throne; the crowned tank's row glows */
+.sb-row.crown .reign { position: relative; margin-left: auto; min-width: 54px; padding: 1px 6px; border-radius: 6px; overflow: hidden; background: rgba(255, 212, 90, 0.12);
+  font-size: 12px; font-weight: 900; letter-spacing: 0; color: #ffd45a; text-transform: none; text-align: right; }
+.sb-row.crown .reign u { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(255, 201, 58, 0.25), rgba(255, 201, 58, 0.55)); transition: width 0.4s; }
+.sb-row.crown.mine { box-shadow: inset 0 0 0 2px rgba(255, 212, 90, 0.6); }
+.sb-row.crown.king { background: linear-gradient(90deg, rgba(255, 201, 58, 0.28), transparent 75%); }
+.sb-row.crown.king span::after { content: ''; display: inline-block; width: 1em; height: 1em; margin-left: 0.35em; vertical-align: -0.14em; background: #ffc93a;
+  -webkit-mask: var(--ico-crown) center / contain no-repeat; mask: var(--ico-crown) center / contain no-repeat; }
+#banner.crown .b-title { color: #ffd45a; text-shadow: 0 0 24px rgba(255, 190, 40, 0.55); }
 #banner.hunt .b-kicker::before { content: '▣ '; color: #ffc93a; }
 #banner.hunt .b-title { color: #ffd45a; text-shadow: 0 0 24px rgba(255, 190, 40, 0.55); }
 
@@ -1678,7 +1687,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #boss-bar.bombard .boss-top b::before, #boss-bar.duo .boss-top b::before,
 #banner.night .b-kicker::before, #banner.storm .b-kicker::before, #banner.storm.night .b-kicker::before,
 #banner.wind:not(.storm):not(.night) .b-kicker::before, #banner.fog:not(.storm):not(.wind) .b-kicker::before,
-#banner.ctf .b-kicker::before, #banner.hunt .b-kicker::before {
+#banner.ctf .b-kicker::before, #banner.hunt .b-kicker::before, #banner.crown .b-kicker::before {
   content: ''; display: inline-block; width: 1.05em; height: 1.05em; margin-right: 0.4em; vertical-align: -0.16em;
   background: currentColor; -webkit-mask: var(--pi) center / contain no-repeat; mask: var(--pi) center / contain no-repeat;
 }
@@ -1692,6 +1701,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #banner.fog:not(.storm):not(.wind) .b-kicker::before { --pi: var(--ico-fog); }
 #banner.ctf .b-kicker::before { --pi: var(--ico-flag); }
 #banner.hunt .b-kicker::before { --pi: var(--ico-crate); }
+#banner.crown .b-kicker::before { --pi: var(--ico-crown); color: #ffc93a; }
 .bubble span svg.ico { width: 17px; height: 17px; vertical-align: -0.18em; }
 #emote-pad button svg.ico { width: 15px; height: 15px; vertical-align: -0.2em; }
 

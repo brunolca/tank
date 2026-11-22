@@ -8,6 +8,7 @@ import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } fr
 import { isRivalId } from '../shared/rivals';
 import { CTF_RETURN, TEAM_COLORS } from '../shared/drapeau';
 import { GOLD_COLOR as GOLD } from '../shared/caisses';
+import { CROWN_RETURN } from '../shared/couronne';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
@@ -18,6 +19,8 @@ export interface RMine { id: number; x: number; y: number; blink: boolean; seed?
 /** « Le Mortier » (iteration 34): a cannonball in the air, from (x0, y0) to (x1, y1), t seconds into its dur-second flight. */
 export interface RLob { id: number; x0: number; y0: number; x1: number; y1: number; t: number; dur: number }
 export interface RFlag { team: number; x: number; y: number; carrier: number; state: number; left: number }
+/** « La couronne » (iteration 50): where the crown is, who wears it (0: nobody), 0 on its cushion / 1 worn / 2 dropped, seconds before it flies home. */
+export interface RCrown { x: number; y: number; holder: number; state: number; left: number }
 
 const PX = 64; // floor texture pixels per tile
 const SPX = 32; // skate scratch texture pixels per tile (iteration 38)
@@ -1959,6 +1962,7 @@ export class Renderer {
     this.glow.clear(); this.smoke.clear(); this.debris.clear();
     for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
     this.setCtf(undefined);
+    this.setCrown(undefined);
 
     this.sandCells = new Set(belts.flatMap((b, i) => (b === SAND && tiles[i] === Tile.Empty ? [i] : [])));
     this.paintFloor(tiles);
@@ -4450,6 +4454,7 @@ export class Renderer {
     this.animateWind(dt);
     this.animateFog(dt);
     this.animateFlags(dt);
+    this.animateCrown(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
@@ -4528,6 +4533,126 @@ export class Renderer {
       this.camera.position.z += (Math.random() - 0.5) * this.shake * this.shakeScale;
     }
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // -------------------------------------------------------------- « La couronne » (iteration 50)
+
+  private crown?: { group: THREE.Group; cushion: THREE.Group; jewel: THREE.Group; halo: THREE.Mesh; aura: THREE.Mesh; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; hx: number; hy: number; state: number; spin: number; pop: number; tilt: number };
+
+  /** The crown on its red cushion at (x, y) (undefined: no crown on this table). */
+  setCrown(home: [number, number] | undefined) {
+    if (this.crown) {
+      this.scene.remove(this.crown.group);
+      for (const m of this.crown.mats) m.dispose();
+      for (const g of this.crown.geos) g.dispose();
+      this.crown = undefined;
+    }
+    if (!home) return;
+    const [hx, hy] = home;
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc93a, roughness: 0.25, metalness: 0.7, emissive: 0xb07800, emissiveIntensity: 0.9, side: THREE.DoubleSide }); // it glows a little: seen at night too
+    const velvet = new THREE.MeshStandardMaterial({ color: 0xc0283a, roughness: 0.95 });
+    const ruby = new THREE.MeshStandardMaterial({ color: 0xff3b5c, roughness: 0.15, metalness: 0.2, emissive: 0x7a0018, emissiveIntensity: 0.6 });
+    const sapphire = new THREE.MeshStandardMaterial({ color: 0x3d7bff, roughness: 0.15, metalness: 0.2, emissive: 0x0a2a80, emissiveIntensity: 0.6 });
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xffd45a, transparent: true, opacity: 0, depthWrite: false });
+    const auraMat = new THREE.MeshBasicMaterial({ color: 0xffd45a, transparent: true, opacity: 0.55, depthWrite: false });
+    const geos: THREE.BufferGeometry[] = [
+      new THREE.CylinderGeometry(0.17, 0.155, 0.1, 24, 1, true),
+      new THREE.ConeGeometry(0.045, 0.13, 8),
+      new THREE.SphereGeometry(0.03, 10, 8),
+      new THREE.SphereGeometry(0.038, 10, 8),
+      new RoundedBoxGeometry(0.72, 0.16, 0.72, 3, 0.07),
+      new THREE.SphereGeometry(0.045, 8, 6),
+      new THREE.RingGeometry(0.5, 0.6, 40).rotateX(-Math.PI / 2),
+      new THREE.RingGeometry(0.42, 0.56, 40).rotateX(-Math.PI / 2),
+      new THREE.TorusGeometry(0.16, 0.018, 6, 24),
+    ];
+    const [bandG, spikeG, tipG, gemG, padG, tasselG, haloG, auraG, rimG] = geos;
+    const jewel = new THREE.Group();
+    const band = new THREE.Mesh(bandG, gold);
+    band.position.y = 0.05;
+    const rim = new THREE.Mesh(rimG, gold);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.005;
+    jewel.add(band, rim);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const sp = new THREE.Mesh(spikeG, gold);
+      sp.position.set(Math.cos(a) * 0.15, 0.16, Math.sin(a) * 0.15);
+      const tip = new THREE.Mesh(tipG, gold);
+      tip.position.set(Math.cos(a) * 0.15, 0.235, Math.sin(a) * 0.15);
+      const gem = new THREE.Mesh(gemG, i % 2 ? sapphire : ruby);
+      gem.position.set(Math.cos(a + Math.PI / 5) * 0.168, 0.05, Math.sin(a + Math.PI / 5) * 0.168);
+      jewel.add(sp, tip, gem);
+    }
+    jewel.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+    const cushion = new THREE.Group();
+    const pad = new THREE.Mesh(padG, velvet);
+    pad.position.y = 0.09;
+    pad.castShadow = pad.receiveShadow = true;
+    cushion.add(pad);
+    for (const [cx, cz] of [[-0.34, -0.34], [0.34, -0.34], [-0.34, 0.34], [0.34, 0.34]]) {
+      const ts = new THREE.Mesh(tasselG, gold);
+      ts.position.set(cx, 0.1, cz);
+      cushion.add(ts);
+    }
+    cushion.position.set(hx, 0, hy);
+    const halo = new THREE.Mesh(haloG, haloMat);
+    halo.position.y = 0.03;
+    const aura = new THREE.Mesh(auraG, auraMat);
+    aura.position.y = 0.028;
+    const group = new THREE.Group();
+    group.add(cushion, jewel, halo, aura);
+    this.scene.add(group);
+    this.crown = { group, cushion, jewel, halo, aura, mats: [gold, velvet, ruby, sapphire, haloMat, auraMat], geos, hx, hy, state: 0, spin: 0, pop: 0, tilt: 0 };
+    this.syncCrown({ x: hx, y: hy, holder: 0, state: 0, left: 0 });
+  }
+
+  /** Place the crown: on its cushion, on its wearer's turret (as drawn this frame), or dropped on the floor where it fell. */
+  syncCrown(c: RCrown | undefined) {
+    const v = this.crown;
+    if (!v || !c) return;
+    if (c.state !== v.state) { v.pop = 1; v.state = c.state; }
+    const halo = v.halo.material as THREE.MeshBasicMaterial;
+    v.aura.visible = false;
+    if (c.state === 1) {
+      const t = this.tanks.get(c.holder);
+      const shown = !!t && t.root.visible;
+      v.jewel.visible = shown;
+      halo.opacity = 0;
+      if (t && shown) {
+        // on its wearer's head, a little above the turret; a golden ring follows it on the floor
+        v.jewel.position.set(t.root.position.x, t.root.position.y + 0.62 * t.scale + Math.sin(this.time * 3) * 0.03, t.root.position.z);
+        v.jewel.scale.setScalar(1.9 + v.pop * 0.8);
+        v.tilt = 0;
+        v.aura.visible = true;
+        v.aura.position.set(t.root.position.x, 0.028, t.root.position.z);
+        v.aura.scale.setScalar(t.scale * (1 + 0.08 * Math.sin(this.time * 4)));
+      }
+    } else {
+      v.jewel.visible = true;
+      const home = c.state === 0;
+      v.jewel.position.set(c.x, home ? 0.2 + Math.sin(this.time * 2) * 0.03 : 0.03, c.y);
+      v.jewel.scale.setScalar(home ? 2 + v.pop * 0.6 : 1.8);
+      v.tilt = home ? 0 : 0.5;
+      v.halo.position.set(c.x, 0.03, c.y);
+      if (c.state === 2) {
+        // dropped: a ring that blinks faster as it is about to fly home
+        const u = Math.max(0, Math.min(1, c.left / CROWN_RETURN));
+        halo.opacity = 0.35 + 0.45 * (Math.sin(this.time * (6 + (1 - u) * 14)) > 0 ? 1 : 0.2);
+        v.halo.scale.setScalar(0.7 + u * 0.6);
+      } else {
+        halo.opacity = 0.25 + 0.15 * Math.sin(this.time * 2.5);
+        v.halo.scale.setScalar(1);
+      }
+    }
+  }
+
+  private animateCrown(dt: number) {
+    const v = this.crown;
+    if (!v) return;
+    v.spin += dt * (v.state === 1 ? 1.6 : v.state === 0 ? 0.9 : 0);
+    v.pop = Math.max(0, v.pop - dt * 3);
+    v.jewel.rotation.set(v.tilt, v.spin, v.tilt * 0.4);
   }
 
   // -------------------------------------------------------------- « Drapeaux » (iteration 24)

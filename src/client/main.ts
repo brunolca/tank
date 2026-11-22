@@ -4,6 +4,7 @@ import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, 
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags, type NetFlag } from '../shared/drapeau';
 import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROUND, HUNT_TARGET, huntArena, newHunt, HUNT_CRATES } from '../shared/caisses';
+import { CROWN_COLOR, CROWN_HOLD, CROWN_HURRY, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, CROWN_TARGET, crownArena, newCrown } from '../shared/couronne';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep, castRicochet, floorSpeed } from '../shared/physics';
@@ -60,7 +61,9 @@ let bestMission = Math.max(1, Number(localStorage.getItem('tanks.best')) || 1);
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 /** The coop campaign and the daily challenge share their rules (lives, enemies, results). */
-const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses';
+const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses' && m !== 'couronne';
+/** Free-for-all modes that need at least two tanks (rivals count). */
+const needsTwo = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne';
 
 function renderProfile(el: HTMLElement) {
   el.innerHTML = `
@@ -205,7 +208,7 @@ setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 
 // ------------------------------------------------------------------ online game state
 
-interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; at: number }
+interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; C?: number[]; at: number }
 
 let online = false;
 let tiles: number[] = [];
@@ -248,6 +251,12 @@ let ctfLeftAt = 0;
 let huntGot = new Map<number, number>();
 let huntKey = '';
 const HUNT_RESPAWN_TXT = String(HUNT_RESPAWN).replace('.', ','); // « 2,5 »
+/** « La couronne » (iteration 50): its cushion, and each tank's reign this round in tenths of a second (tank id → tenths), from the snapshots. */
+let crownHome: [number, number] | undefined;
+let crownHeld = new Map<number, number>();
+let crownHolder = 0;
+let crownKey = '';
+const CROWN_RESPAWN_TXT = String(CROWN_RESPAWN).replace('.', ',');
 const INTERP = 3;
 let lastTanks: RTank[] = [];
 let lastBullets: RBullet[] = [];
@@ -368,6 +377,12 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   renderer.setFrost(undefined);
   huntGot = new Map(); huntKey = '';
   if (msg.mode === 'caisses') { ctfLeft = HUNT_ROUND; ctfLeftAt = performance.now(); }
+  // « La couronne » (iteration 50): the crown on its cushion
+  const ch = msg.mode === 'couronne' && Array.isArray(msg.crown) && msg.crown.length >= 2 ? [Number(msg.crown[0]), Number(msg.crown[1])] : undefined;
+  crownHome = ch && ch.every(Number.isFinite) ? [ch[0], ch[1]] : undefined;
+  crownHeld = new Map(); crownHolder = 0; crownKey = '';
+  renderer.setCrown(crownHome);
+  if (msg.mode === 'couronne') { ctfLeft = CROWN_ROUND; ctfLeftAt = performance.now(); }
   // « Drapeaux » (iteration 24): the two bases, and a ring of the team's colour under each tank
   const bs = msg.mode === 'drapeau' && Array.isArray(msg.bases) && msg.bases.length >= 4 ? msg.bases.map(Number) : undefined;
   ctfBases = bs && bs.every(Number.isFinite) ? [[bs[0], bs[1]], [bs[2], bs[3]]] : undefined;
@@ -403,6 +418,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     ? `<b>Manche ${msg.mission}</b><span>Drapeaux · premier à ${CTF_TARGET}</span>`
     : msg.mode === 'caisses'
     ? `<b>Manche ${msg.mission}</b><span>Chasse aux caisses · premier à ${HUNT_TARGET}</span>`
+    : msg.mode === 'couronne'
+    ? `<b>Manche ${msg.mission}</b><span>La couronne · premier à ${CROWN_TARGET}</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
@@ -437,6 +454,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   } else if (msg.mode === 'caisses') {
     banner(`Chasse aux caisses · manche ${msg.mission}${wx}`, 'Ramasse un max de caisses !',
       `Chaque caisse vaut un point, la caisse dorée en vaut ${HUNT_GOLD}. Touché ? Tu en lâches une.`, `intro hunt${wxCls}`);
+  } else if (msg.mode === 'couronne') {
+    banner(`La couronne · manche ${msg.mission}${wx}`, 'Prends la couronne et garde-la !',
+      `Porte-la ${CROWN_HOLD} secondes en tout pour gagner la manche. Touché ? Elle tombe de ta tête.`, `intro crown${wxCls}`);
   } else {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
@@ -535,7 +555,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   }
   if (council) { council = undefined; $('#council').hidden = true; }
   if (prev === msg.phase && msg.phase === 'playing') return;
-  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || (msg.phase === 'roundEnd' && currentMode !== 'caisses'))) queueReel();
+  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || (msg.phase === 'roundEnd' && currentMode !== 'caisses' && currentMode !== 'couronne'))) queueReel();
   else if (msg.phase !== 'cleared' && msg.phase !== 'failed' && msg.phase !== 'roundEnd') stopReel();
   switch (msg.phase) {
     case 'intro':
@@ -586,6 +606,10 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
       } else if (currentMode === 'caisses') {
         const mine = huntGot.get(myTankId);
         banner('Temps écoulé !', msg.text ?? '', mine !== undefined ? `Tu as ramassé ${mine} caisse${mine > 1 ? 's' : ''}` : '', 'good hunt');
+      } else if (currentMode === 'couronne') {
+        const mine = crownHeld.get(myTankId);
+        const won = /règne/.test(msg.text ?? '');
+        banner(won ? 'Vive le roi !' : 'Fin du règne', msg.text ?? '', mine !== undefined ? `Tu as porté la couronne ${Math.floor(mine / 10)} s` : '', 'good crown');
       } else banner('Fin de manche', msg.text ?? '', '', 'good');
       break;
     case 'gameover':
@@ -603,7 +627,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
 }
 
 function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
-  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], at: performance.now() };
+  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], C: Array.isArray(msg.C) && msg.C.length >= 5 ? msg.C : undefined, at: performance.now() };
   snaps.push(s);
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
@@ -615,6 +639,17 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
       huntKey = key;
       huntGot = new Map();
       for (let k = 0; k + 1 < msg.H.length; k += 2) huntGot.set(msg.H[k] | 0, Math.max(0, msg.H[k + 1] | 0));
+      renderHud();
+    }
+  }
+  if (s.C) {
+    // « La couronne » (iteration 50): the scoreboard follows the reigns, second by second
+    const key = `${s.C[2]}|${s.C.slice(5).map((v, i) => (i % 2 ? Math.floor(v / 10) : v)).join(',')}`;
+    if (key !== crownKey) {
+      crownKey = key;
+      crownHolder = s.C[3] === 1 ? s.C[2] | 0 : 0;
+      crownHeld = new Map();
+      for (let k = 5; k + 1 < s.C.length; k += 2) crownHeld.set(s.C[k] | 0, Math.max(0, s.C[k + 1] | 0));
       renderHud();
     }
   }
@@ -882,11 +917,11 @@ function onlineFrame(dt: number) {
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
   updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
-  if (currentMode === 'drapeau' || currentMode === 'caisses') {
+  if (currentMode === 'drapeau' || currentMode === 'caisses' || currentMode === 'couronne') {
     // the round clock: it runs while the round is being played (« La chasse aux caisses » too, iteration 37)
     const left = Math.max(0, Math.ceil(phase === 'playing' ? ctfLeft - (performance.now() - ctfLeftAt) / 1000 : ctfLeft));
     $('#hud-enemies').textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-    $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : 30) && phase === 'playing');
+    $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : currentMode === 'couronne' ? CROWN_HURRY : 30) && phase === 'playing');
   } else if (!coopLike(currentMode)) {
     plainEnemies($('#hud-enemies'), '');
     $('#hud-enemies').classList.remove('hurry');
@@ -922,6 +957,7 @@ function onlineFrame(dt: number) {
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = ctfBases ? a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
+  if (crownHome && a.C) renderer.syncCrown({ x: a.C[0], y: a.C[1], holder: a.C[2], state: a.C[3], left: a.C[4] / 10 });
   // the Mortier's cannonballs (iteration 34): their time in the air runs on between two snapshots, like everything else
   const lobs: RLob[] = a.L.map((l) => ({ id: l[0], x0: l[1], y0: l[2], x1: l[3], y1: l[4], t: l[5] + u * DT * (b.k - a.k), dur: l[6] }));
   renderer.syncLobs(lobs);
@@ -953,6 +989,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'boom':
       if (online && audible && currentMode === 'drapeau' && e[3] === myTankId) toast(`Touché ! Retour à la base dans ${CTF_RESPAWN} secondes…`, 2600);
       if (online && audible && currentMode === 'caisses' && e[3] === myTankId) toast(`Touché ! Retour dans ton coin dans ${HUNT_RESPAWN_TXT} secondes…`, 2400);
+      if (online && audible && currentMode === 'couronne' && e[3] === myTankId) toast(`Touché ! Retour dans ton coin dans ${CROWN_RESPAWN_TXT} secondes…`, 2400);
       if (isBossKind(renderer.tankKind(e[3]) ?? '')) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
@@ -1065,6 +1102,40 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (audible) sfx.hunt(pts, me);
       break;
     }
+    case 'crown': {
+      // « La couronne » (iteration 50): [x, y, tankId, what] 0 put on, 1 knocked off, 2 back on its cushion, 3 a full reign, 4 five seconds left
+      const [, x, y, who, what] = e;
+      const me = online && who === myTankId;
+      const demoOn = !!attractCrown && document.body.classList.contains('demo') && screen === 'game';
+      const name = (online ? infos.get(who)?.name : attract?.tankById(who)?.name) ?? '';
+      const color = (online ? infos.get(who)?.color : attract?.tankById(who)?.color) ?? CROWN_COLOR;
+      if (what === 0) {
+        renderer.bonusBurst(x, y, CROWN_COLOR, true);
+        floater(x, y - 0.5, me ? 'À toi la couronne !' : name ? `La couronne pour ${name} !` : 'La couronne est prise !', CROWN_COLOR);
+        if (audible) sfx.crown(0, me);
+        if (online && audible && me) toast(`Tu as la couronne ! Garde-la ${CROWN_HOLD} secondes en tout… tout le monde va te courir après.`, 3200);
+        if (me) controls.rumble(0.4, 120);
+      } else if (what === 1) {
+        renderer.bonusBurst(x, y, color);
+        floater(x, y - 0.4, me ? 'Ta couronne tombe !' : 'La couronne tombe !', 0xff8a5c);
+        if (audible) sfx.crown(1, me);
+      } else if (what === 2) {
+        renderer.bonusBurst(x, y, CROWN_COLOR);
+        floater(x, y - 0.5, 'Retour sur le coussin', CROWN_COLOR);
+        if (audible) sfx.crown(2, false);
+      } else if (what === 3) {
+        renderer.bonusBurst(x, y, CROWN_COLOR, true);
+        renderer.explosion(x, y, false, CROWN_COLOR);
+        floater(x, y - 0.6, 'Vive le roi !', CROWN_COLOR);
+        if (audible) sfx.crown(3, me);
+      } else if (what === 4) {
+        floater(x, y - 0.6, 'Plus que 5 s !', 0xff6a4a);
+        if (audible) sfx.crown(4, me);
+        if ((online && audible) || demoOn) toast(me ? 'Plus que 5 secondes de règne : tiens bon !' : `${name || 'Le roi'} n’est plus qu’à 5 secondes du trône : arrêtez-le !`, 2600);
+      }
+      if (attract) renderAttractCrown();
+      break;
+    }
     case 'bonus': {
       const kind = BONUS_KINDS[e[3]];
       if (!kind) break;
@@ -1120,7 +1191,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
       const color = TEAM_COLORS[team - 1] ?? 0xffffff;
       if (what === 4) {
         // a destroyed tank is back at its base (or its corner, in a hunt)
-        renderer.bonusBurst(x, y, currentMode === 'caisses' || attractHunt ? renderer.tankColor(who) ?? color : color);
+        renderer.bonusBurst(x, y, currentMode === 'caisses' || currentMode === 'couronne' || attractHunt || attractCrown ? renderer.tankColor(who) ?? color : color);
         if (online && who === myTankId) floaterOnMe('De retour !');
         break;
       }
@@ -1676,6 +1747,11 @@ function renderHud() {
       .sort((a, b) => b.n - a.n)
       .map(({ t, n }) => `<div class="sb-row hunt${t.id === myTankId ? ' mine' : ''}"><i style="--c:${hex(t.color)}"></i><span>${escapeHtml(t.name ?? '?')}${isRivalId(t.pid ?? '') ? ' <em>IA</em>' : ''}</span><em class="crates" title="Caisses de la manche">▣ ${n}</em><b title="Manches gagnées">${scores[t.pid ?? ''] ?? 0}</b></div>`)
       .join('');
+  } else if (currentMode === 'couronne') {
+    // « La couronne » (iteration 50): the reign of each tank this round (a gauge up to the throne), then rounds won
+    sb.innerHTML = crownRows([...infos.values()].filter((t) => t.kind === 'player').map((t) => ({
+      id: t.id, name: t.name ?? '?', color: t.color, bot: isRivalId(t.pid ?? ''), tenths: crownHeld.get(t.id) ?? 0, rounds: scores[t.pid ?? ''] ?? 0, mine: t.id === myTankId, king: t.id === crownHolder,
+    })));
   } else if (currentMode === 'versus') {
     sb.innerHTML = lobbyPlayers
       .filter((p) => scores[p.id] !== undefined)
@@ -1685,6 +1761,13 @@ function renderHud() {
   } else sb.innerHTML = '';
   const isHost = lobbyPlayers.find((p) => p.id === pid)?.host;
   $('#menu-lobby').hidden = !isHost;
+}
+
+/** « La couronne » (iteration 50): the scoreboard rows, longest reign first; the crowned tank's row glows. */
+function crownRows(rows: { id: number; name: string; color: number; bot: boolean; tenths: number; rounds: number; mine: boolean; king: boolean }[]) {
+  return rows.sort((a, b) => b.tenths - a.tenths)
+    .map((r) => `<div class="sb-row crown${r.mine ? ' mine' : ''}${r.king ? ' king' : ''}"><i style="--c:${hex(r.color)}"></i><span>${escapeHtml(r.name)}${r.bot ? ' <em>IA</em>' : ''}</span><em class="reign" title="Secondes de règne (${CROWN_HOLD} pour gagner la manche)"><u style="width:${Math.min(100, r.tenths / (CROWN_HOLD * 10) * 100).toFixed(1)}%"></u>${Math.floor(r.tenths / 10)} s</em><b title="Manches gagnées">${r.rounds}</b></div>`)
+    .join('');
 }
 
 function renderLobby() {
@@ -1727,10 +1810,10 @@ function renderLobby() {
   start.hidden = !isHost;
   $('#lobby-wait').hidden = isHost;
   const n = lobbyPlayers.filter((p) => p.connected).length;
-  const need = lobbyMode === 'versus' || lobbyMode === 'drapeau' || lobbyMode === 'caisses' ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
+  const need = needsTwo(lobbyMode) ? 2 : lobbyMode === 'taupe' ? TAUPE_MIN_PLAYERS : 1;
   const noMap = lobbyMode === 'atelier' && !lobbyAtelier;
   start.disabled = n < need || noMap;
-  start.textContent = n < need ? (lobbyMode === 'versus' || lobbyMode === 'drapeau' || lobbyMode === 'caisses' ? 'Ajoute un rival ou invite un ami' : `Il faut ${need} joueurs`) : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
+  start.textContent = n < need ? (needsTwo(lobbyMode) ? 'Ajoute un rival ou invite un ami' : `Il faut ${need} joueurs`) : noMap ? 'Dessine d’abord ta mission' : phase === 'lobby' ? 'Lancer la partie' : 'Partie en cours…';
   renderLobbyAtelier(isHost);
   const today = dayNumber();
   $('#mode-desc').textContent = lobbyMode === 'daily'
@@ -1749,6 +1832,8 @@ function renderLobby() {
     ? `Drapeaux : les Bleus contre les Rouges (les tanks de la liste sont répartis un sur deux). Chaque équipe a son drapeau planté à sa base : file prendre celui d’en face et rapporte-le chez toi pour gagner la manche. Un tank touché revient à sa base ${CTF_RESPAWN} secondes plus tard ; le porteur touché lâche le drapeau, et un coéquipier le renvoie à la base d’un simple contact. Sans drapeau rapporté en ${Math.floor(CTF_ROUND / 60)} min ${CTF_ROUND % 60}, c’est l’égalité. Première équipe à ${CTF_TARGET} manches. Les rivaux pilotés par l’ordinateur complètent les équipes.`
     : lobbyMode === 'caisses'
     ? `La chasse aux caisses : chacun pour soi, ${HUNT_ROUND} secondes par manche, et les caisses pleuvent. Chaque caisse ramassée vaut un point (et son bonus). Un tank touché lâche une de ses caisses et revient dans son coin ${HUNT_RESPAWN_TXT} secondes plus tard. À ${HUNT_GOLD_AT} secondes de la fin tombe la caisse dorée : ${HUNT_GOLD} points d’un coup ! Le plus gros tas gagne la manche, premier à ${HUNT_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
+    : lobbyMode === 'couronne'
+    ? `La couronne : chacun pour soi, et une seule couronne posée sur son coussin au milieu de la table. Roule dessus pour la mettre : chaque seconde passée couronné compte, et ${CROWN_HOLD} secondes en tout font gagner la manche. Touché ? Elle tombe là où tu es, et le premier qui passe la ramasse ; laissée à terre ${CROWN_RETURN} secondes, elle rentre sur son coussin. Un tank touché revient dans son coin ${CROWN_RESPAWN_TXT} secondes plus tard. Au bout de ${Math.floor(CROWN_ROUND / 60)} min ${CROWN_ROUND % 60}, le plus long règne l’emporte. Premier à ${CROWN_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
   renderWeapons();
   renderCheckpoints(isHost);
@@ -2002,23 +2087,25 @@ function showResults(r: Results) {
     : r.atelier ? (r.atelier.won ? `« ${r.atelier.name} » réussie !` : `« ${r.atelier.name} » : plus de vies…`)
     : r.drapeau ? (r.drapeau.winner ? `Les ${TEAM_NAMES[r.drapeau.winner - 1]} remportent les drapeaux ! (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})` : `Égalité aux drapeaux (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})`)
     : r.mode === 'caisses' ? `${r.players[0]?.name ?? ''} remporte la chasse aux caisses !`
+    : r.mode === 'couronne' ? `${r.players[0]?.name ?? ''} règne sur la table !`
     : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
   const ctf = !!r.drapeau;
   const hunt = r.mode === 'caisses';
+  const reign = r.mode === 'couronne';
   const coop = coopLike(r.mode);
   const ff = coop && r.players.some((p) => p.ff !== undefined);
   const gal = r.players.some((p) => p.g !== undefined);
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? '<th title="Drapeaux rapportés à la base">Drapeaux</th>' : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? '<th title="Drapeaux rapportés à la base">Drapeaux</th>' : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}${reign ? '<th title="Secondes passées couronné pendant la partie">Règne</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
           const team = ctf && (p.team === 1 || p.team === 2) ? ` <em class="ia" style="color:${hex(TEAM_COLORS[p.team - 1])}">${TEAM_NAMES[p.team - 1]}</em>` : '';
           return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}${team}${p.bot !== undefined ? ` <em class="ia">IA ${RIVAL_LEVELS[rivalLevel(p.bot)].label.toLowerCase()}</em>` : ''}</td>${
             coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
-          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}${hunt ? `<td>${p.crates || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
+          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}${hunt ? `<td>${p.crates || '·'}</td>` : ''}${reign ? `<td>${p.crown ? `${p.crown} s` : '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
     </table>${coop && runStars.missions ? starsResultHtml(r.mode === 'coop') : ''}${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
@@ -2047,7 +2134,9 @@ interface AttractVersus { round: number; levels?: number[]; scores?: number[]; c
 interface AttractFlags { round: number; levels?: number[]; teams?: [number, number]; chain?: boolean; carry?: boolean } // carry: the round opens with a Bleu already holding the red flag, by the Rouges' base (videos)
 /** « La chasse aux caisses » (iteration 37): four AI rivals racing for the crates, for the videos and the home-screen background. */
 interface AttractHunt { round: number; levels?: number[]; scores?: number[]; chain?: boolean; seconds?: number } // seconds: how long the round lasts (videos)
-interface AttractOpts { caisses?: AttractHunt; drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
+/** « La couronne » (iteration 50): four AI rivals fighting over the crown, for the videos and the home-screen background. */
+interface AttractCrown { round: number; levels?: number[]; scores?: number[]; chain?: boolean; seconds?: number; head?: number } // seconds: how long the round lasts at most (videos); head: seconds of reign every rival starts with
+interface AttractOpts { couronne?: AttractCrown; caisses?: AttractHunt; drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -2069,12 +2158,16 @@ function startAttract(opts: AttractOpts = attractOpts) {
   clearBubbles();
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
-  if (!opts.versus && !opts.drapeau && !opts.caisses && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
+  if (!opts.versus && !opts.drapeau && !opts.caisses && !opts.couronne && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
     const r = Math.random();
     if (r < 0.1) { startAttractVersus({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; }
     if (r < 0.2) { startAttractFlags({ round: Math.floor(Math.random() * 12), levels: [1, 2, 2, 1] }); return; } // and, from iteration 24, a flag round
     if (r < 0.3) { startAttractHunt({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 37, a crate hunt
+    if (r < 0.4) { startAttractCrown({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 50, a fight over the crown
   }
+  if (opts.couronne) { startAttractCrown(opts.couronne, opts.arms); return; }
+  attractCrown = undefined;
+  renderer.setCrown(undefined);
   if (opts.caisses) { startAttractHunt(opts.caisses, opts.arms); return; }
   attractHunt = undefined;
   if (opts.versus) { attractHunt = undefined; startAttractVersus(opts.versus, opts.arms); return; }
@@ -2142,6 +2235,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
 }
 function stopAttract() {
   attract = undefined;
+  attractCrown = undefined;
 }
 
 const VS_ARMS: Weapon[] = ['ricochet', 'canon', 'fusee', 'sapeur'];
@@ -2252,6 +2346,87 @@ function endAttractHunt(g: Game) {
   renderAttractHunt();
   if (document.body.classList.contains('demo') && screen === 'game') {
     banner(`Chasse aux caisses · manche ${h.round + 1}`, w >= 0 ? `${h.names[w]} gagne la manche !` : 'Égalité !', w >= 0 ? `${best} caisse${best > 1 ? 's' : ''} ramassée${best > 1 ? 's' : ''}` : '', 'intro hunt');
+    setTimeout(hideBanner, 2400);
+  }
+}
+
+let attractCrown: (AttractCrown & { scores: number[]; names: string[] }) | undefined;
+
+/** « La couronne » (iteration 50): four rivals, one per corner, and the crown on its cushion in the middle. */
+function startAttractCrown(c: AttractCrown, arms?: Weapon[]) {
+  const lvl = crownArena(c.round);
+  const g = new Game(lvl.tiles, lvl.belts);
+  g.setRail(lvl.rail);
+  g.bonusOn = true;
+  g.bonusNext = 4; g.bonusEvery = [7, 10];
+  g.night = !!lvl.night;
+  g.wind = lvl.wind;
+  g.crown = newCrown(lvl.crown[0], lvl.crown[1]);
+  g.crown.time = Math.max(0, CROWN_ROUND - (c.seconds ?? CROWN_ROUND)); // a shorter round for the videos
+  const names = [0, 1, 2, 3].map((i) => RIVAL_NAMES[(c.round + i * 3 + 2) % RIVAL_NAMES.length]);
+  lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
+    const t = g.addTank('player', i + 1, x, y, PLAYER_COLORS[i], `ia:${i + 1}`, names[i]);
+    g.arm(t, (arms?.length ? arms : VS_ARMS)[i % (arms?.length || VS_ARMS.length)]);
+    t.body = t.turret = Math.atan2(8.5 - y, 11 - x);
+    makeRival(g, t, c.levels?.[i] ?? 2);
+  });
+  if (c.head) for (const t of g.tanks) g.crown.held.set(t.id, Math.min(CROWN_HOLD - 1, c.head)); // the videos: a reign that ends within the shot
+  g.frozen = false;
+  attract = g;
+  attractOpts = { couronne: c, arms };
+  attractVs = undefined;
+  attractCtf = undefined;
+  attractHunt = undefined;
+  attractCrown = { ...c, scores: c.scores ?? [0, 0, 0, 0], names };
+  attractEnd = 0;
+  attractPrev.clear();
+  renderer.setLevel(g.tiles, g.tankInfos(), g.belts, lvl.rail);
+  renderer.setCrown(lvl.crown);
+  renderer.setNight(g.night);
+  renderer.setStorm(false);
+  renderer.setWind(g.wind);
+  renderer.fogAlly = () => true;
+  renderer.setFog(undefined);
+  renderAttractCrown();
+}
+
+function renderAttractCrown() {
+  const c = attractCrown, g = attract;
+  if (!c || !g?.crown || !document.body.classList.contains('demo') || screen !== 'game') return;
+  document.body.classList.add('vs-demo');
+  $('#hud').hidden = false;
+  const cr = g.crown;
+  $('#scoreboard').innerHTML = crownRows(g.tanks.filter((t) => t.kind === 'player').map((t, i) => ({
+    id: t.id, name: t.name ?? '', color: t.color, bot: true, tenths: Math.floor((cr.held.get(t.id) ?? 0) * 10), rounds: c.scores[i], mine: false, king: cr.state === 1 && cr.holder === t.id,
+  })));
+}
+
+/** The crown's clock in the demo (and the scoreboard, once a second). */
+let attractCrownSec = -1;
+function attractCrownClock(g: Game) {
+  const left = Math.max(0, Math.ceil(CROWN_ROUND - (g.crown?.time ?? 0)));
+  const el = $('#hud-enemies');
+  el.textContent = `La couronne · ⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  el.classList.toggle('hurry', left <= CROWN_HURRY && !attractEnd);
+  const sec = Math.floor(g.crown?.time ?? 0);
+  if (sec !== attractCrownSec) { attractCrownSec = sec; renderAttractCrown(); }
+}
+
+function endAttractCrown(g: Game) {
+  const c = attractCrown!, cr = g.crown!;
+  const tanks = g.tanks.filter((t) => t.kind === 'player');
+  let best = 0, w = -1, tie = false;
+  tanks.forEach((t, i) => {
+    const n = Math.floor((cr.held.get(t.id) ?? 0) * 10);
+    if (cr.winner === t.id) { best = n; w = i; tie = false; return; }
+    if (cr.winner) return;
+    if (n > best) { best = n; w = i; tie = false; } else if (n === best && n > 0) tie = true;
+  });
+  if (tie) w = -1;
+  if (w >= 0) { c.scores[w]++; g.cheer(tanks[w].team); }
+  renderAttractCrown();
+  if (document.body.classList.contains('demo') && screen === 'game') {
+    banner(`La couronne · manche ${c.round + 1}`, w >= 0 ? (cr.winner ? `${c.names[w]} règne ${CROWN_HOLD} secondes !` : `${c.names[w]} gagne la manche !`) : 'Égalité !', w >= 0 ? `${Math.floor(best / 10)} secondes de règne` : '', 'intro crown');
     setTimeout(hideBanner, 2400);
   }
 }
@@ -2453,6 +2628,7 @@ function attractFrame(dt: number) {
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = g.flags ? g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
+  if (g.crown) renderer.syncCrown({ x: g.crown.x, y: g.crown.y, holder: g.crown.holder, state: g.crown.state, left: CROWN_RETURN - g.crown.dropT });
   const lobs: RLob[] = g.lobs.map((l) => ({ id: l.id, x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1, t: l.t + u * DT, dur: l.dur }));
   renderer.syncLobs(lobs);
   film.frame(dt, tanks, bullets, mines, bonuses, flags, lobs);
@@ -2466,6 +2642,15 @@ function attractFrame(dt: number) {
       attract = undefined;
       if (c.chain && Math.max(...c.teams) < CTF_TARGET) startAttract({ drapeau: { ...c, round: c.round + 1, teams: c.teams, carry: false }, arms: attractOpts.arms });
       else { attractOpts = {}; startAttract({}); }
+    }
+  } else if (attractOpts.couronne && attractCrown) {
+    attractCrownClock(g);
+    if (!attractEnd && (g.crown?.winner || (g.crown?.time ?? 0) >= CROWN_ROUND)) { attractEnd = g.tick + TICK_RATE * 3; endAttractCrown(g); }
+    if (attractEnd && g.tick > attractEnd) {
+      const c = attractCrown;
+      attract = undefined;
+      if (c.chain && Math.max(...c.scores) < CROWN_TARGET) startAttract({ couronne: { ...c, round: c.round + 1, scores: c.scores, head: 0 }, arms: attractOpts.arms });
+      else { attractOpts = {}; attractCrown = undefined; startAttract({}); }
     }
   } else if (attractOpts.caisses && attractHunt) {
     attractHuntClock(g);
@@ -2496,7 +2681,7 @@ function attractFrame(dt: number) {
     }
     if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
   }
-  if (!ended && attractEnd && attract === g) queueReel();
+  if (!ended && attractEnd && attract === g && !attractOpts.couronne) queueReel(); // a crown round does not end on a shot: no replay
   attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission, flags: g.flags?.map((f) => f.state), teams: attractCtf?.teams, replays };
 }
 
@@ -2927,6 +3112,7 @@ const MODES: [string, string, string, string][] = [
   ['swords', 'Versus', '2 à 4', 'Chacun pour soi : le dernier tank debout marque un point, premier à 5 manches. Seul ? Ajoute des rivaux pilotés par l’ordinateur.'],
   ['flag', 'Drapeaux', '2 à 4', `Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi. Première équipe à ${CTF_TARGET} manches.`],
   ['crate', 'La chasse aux caisses', '2 à 4', `Les caisses pleuvent, chacune vaut un point, et la caisse dorée en vaut ${HUNT_GOLD}. Premier à ${HUNT_TARGET} manches.`],
+  ['crown', 'La couronne', '2 à 4', `Une seule couronne au milieu de la table : mets-la et garde-la ${CROWN_HOLD} secondes. Touché ? Elle tombe de ta tête. Premier à ${CROWN_TARGET} manches.`],
   ['mask', 'La taupe', `${TAUPE_MIN_PLAYERS} ou 4`, 'Une campagne coop… avec un traître tiré au sort en secret. Après chaque mission, le conseil vote pour le démasquer.'],
   ['hammer', 'L’atelier', '1 à 4', 'Dessine ta mission case par case (murs, liège, tunnels, portails, ennemis, météo), puis jouez-la ensemble.'],
 ];
@@ -3272,7 +3458,7 @@ setupFeedback({
         level: online ? currentLevelName : undefined,
         lives: online && coopLike(currentMode) ? lives : undefined,
         daily: online ? dailyState : undefined,
-        scores: online && (currentMode === 'versus' || currentMode === 'drapeau' || currentMode === 'caisses') ? scores : undefined,
+        scores: online && needsTwo(currentMode) ? scores : undefined,
         teams: online && currentMode === 'drapeau' ? teamScores : undefined,
         players: lobbyPlayers.map((p) => ({ name: p.name, host: p.host, connected: p.connected, me: p.id === pid || undefined })),
         me: me ? { x: r2(me.x), y: r2(me.y), alive: me.alive, pendingInputs: pending.length } : undefined,
@@ -3320,7 +3506,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, crown: currentMode === 'couronne' || attractCrown ? { home: !!crownHome || !!attract?.crown, holder: attract?.crown ? attract.crown.holder : crownHolder, state: attract?.crown ? attract.crown.state : snaps[snaps.length - 1]?.C?.[3], held: Object.fromEntries(attract?.crown ? [...attract.crown.held].map(([k, v]) => [k, Math.floor(v * 10)]) : crownHeld), board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -3377,6 +3563,26 @@ if (params.has('demo')) {
       return huntArena(round).name;
     },
     /**
+     * « La couronne » (iteration 50): four AI rivals fighting over the crown on the arena of that round. `seconds`: how
+     * long the round lasts at most (shorter for the videos), `head`: seconds of reign every rival starts with,
+     * `chain`: the next rounds follow, with the scores.
+     */
+    couronne(round = 0, levels?: number[], arms?: Weapon[], seconds?: number, chain = false, head = 0) {
+      show('game');
+      attract = undefined;
+      startAttract({ couronne: { round, levels, chain, seconds, head }, arms: arms?.filter(isWeapon) });
+      return attractCrown?.names;
+    },
+    /** « La couronne »: the crown goes straight onto the head of the rival nearest to it (for the videos). */
+    crown() {
+      const g = attract;
+      if (!g?.crown || g.crown.state === 1) return 0;
+      const t = g.tanks.filter((o) => o.alive && o.kind === 'player').sort((a, b) => Math.hypot(a.x - g.crown!.x, a.y - g.crown!.y) - Math.hypot(b.x - g.crown!.x, b.y - g.crown!.y))[0];
+      if (!t) return 0;
+      g.crown.x = t.x; g.crown.y = t.y; g.crown.cool = 0;
+      return t.id;
+    },
+    /**
      * « Suis-moi ! » (iteration 20): the first hero of the demo calls the others, who drop everything and come along
      * (they become AI teammates for the occasion). Returns how many answered.
      */
@@ -3413,7 +3619,7 @@ if (params.has('demo')) {
       const me: PlayerInfo = { id: pid, name: myName, color: PLAYER_COLORS[0], host: true, connected: true, score: 0, weapon: myWeapon };
       const bots: PlayerInfo[] = [0, 1, 2].map((i) => ({ id: `ia:${i + 1}`, name: RIVAL_NAMES[i * 3], color: PLAYER_COLORS[i + 1], host: false, connected: true, score: 0, weapon: VS_ARMS[i], bot: i }));
       lobbyPlayers = [me];
-      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' ? mode : 'versus';
+      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' || mode === 'couronne' ? mode : 'versus';
       roomCode = 'SOLO7';
       phase = 'lobby';
       renderLobby();
@@ -3423,7 +3629,7 @@ if (params.has('demo')) {
       setTimeout(() => {
         lobbyPlayers = keep.players; lobbyMode = keep.mode; roomCode = keep.room; phase = keep.phase;
         show('game');
-        if (attractOpts.versus) renderVsBoard(); else if (attractOpts.drapeau) renderCtfBoard(); else if (attractOpts.caisses) renderAttractHunt(); else $('#hud').hidden = true;
+        if (attractOpts.versus) renderVsBoard(); else if (attractOpts.drapeau) renderCtfBoard(); else if (attractOpts.caisses) renderAttractHunt(); else if (attractOpts.couronne) renderAttractCrown(); else $('#hud').hidden = true;
       }, ms);
     },
     /** « Le réticule » (iteration 44): the coop HUD and the reticle over the demo mission (the first hero is « me »). */
