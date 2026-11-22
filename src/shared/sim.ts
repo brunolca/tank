@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -52,6 +52,33 @@ export interface Tank {
   mortar?: MortarState; // the Mortier (iteration 34)
   hop?: HopState; // « La Sauterelle » (iteration 41)
   watch?: WatchState; // « Le Veilleur » (iteration 47)
+  rail?: RailState; // « Le Tortillard » (iteration 49): the locomotive
+  car?: CarState; // and each of its wagons
+}
+
+/**
+ * The Tortillard's locomotive (iteration 49): where it is along the rails (`s`, arc length), the way it is heading
+ * (1 forward, -1 backing up), its speed now (signed), and seconds until it stops to reverse.
+ */
+export interface RailState {
+  s: number;
+  dir: number;
+  v: number;
+  next: number;
+}
+
+/** A wagon: the locomotive it is hooked to, its rank behind it, and its rail distance behind the locomotive now. */
+export interface CarState {
+  loco: number;
+  k: number;
+  off: number;
+}
+
+/** A closed loop of rails: its points, the arc length at each point, and the whole length. */
+export interface Rail {
+  pts: number[];
+  cum: number[];
+  len: number;
 }
 
 /**
@@ -370,6 +397,8 @@ export class Game {
   switchCd = 0;
   /** Lowered gates waiting to rise (cell indices). */
   gateWait = new Set<number>();
+  /** « Le Tortillard » (iteration 49): the loop of rails its train runs on (undefined on every other table). */
+  rail?: Rail;
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -399,6 +428,8 @@ export class Game {
     if (kind === 'mortar') t.mortar = { t: MORTAR_FIRST + Math.random() * 1.2, warn: 0, x: x, y: y };
     if (kind === 'hopper') t.hop = { t: HOP_FIRST + Math.random() * 1.5, warn: 0, air: -1, dur: 1, x0: x, y0: y, x1: x, y1: y, foe: 0 };
     if (kind === 'watcher') t.watch = { dir: Math.random() < 0.5 ? 1 : -1, flipT: WATCH_FLIP[0] + Math.random() * (WATCH_FLIP[1] - WATCH_FLIP[0]), foe: 0, lock: 0, lost: 0 };
+    if (kind === 'train') this.putOnRail(t);
+    if (kind === 'wagon') this.hookWagon(t);
     if (kind === 'frost') {
       // its frost turns any table into an ice table: momentum for everyone (and their speed in the snapshots)
       this.ice = true;
@@ -488,6 +519,8 @@ export class Game {
         if (t.chill <= 0) { t.chill = undefined; this.events.push(['thaw', r2(t.x), r2(t.y), t.id]); }
         else { t.vx = t.vy = 0; this.rideBelt(t); continue; }
       }
+      if (t.rail) { this.updateTrain(t); continue; } // « Le Tortillard » (iteration 49): the rails drive it, wagons and all
+      if (t.car) this.placeWagon(t); // a wagon still in its slot behind the locomotive (it only aims and fires)
       if (t.boss && t.kind === 'drill') {
         if (this.updateDrill(t)) continue; // spinning up or under the table: no driving, no shooting
       } else if (t.boss) this.updateBoss(t);
@@ -1001,6 +1034,7 @@ export class Game {
   // -------------------------------------------------------------- boss
 
   updateBoss(t: Tank) {
+    if (t.kind === 'train') return; // the Tortillard off its rails (no rails on this table): no volleys, just a tough target
     const bs = t.boss!;
     const thunder = t.kind === 'thunder', sower = t.kind === 'sower', bombard = t.kind === 'bombard';
     if (bs.warn > 0) {
@@ -1848,6 +1882,145 @@ export class Game {
     return true;
   }
 
+  // -------------------------------------------------------------- « Le Tortillard » (iteration 49)
+
+  /** Lay the loop of rails (flat closed [x, y…] points) before the train is put on the table. */
+  setRail(pts?: number[]) {
+    if (!pts || pts.length < 6) { this.rail = undefined; return; }
+    const cum = [0];
+    const n = pts.length / 2;
+    for (let i = 1; i <= n; i++) {
+      const a = (i - 1) % n, b = i % n;
+      cum.push(cum[i - 1] + Math.hypot(pts[b * 2] - pts[a * 2], pts[b * 2 + 1] - pts[a * 2 + 1]));
+    }
+    this.rail = { pts: pts.slice(), cum, len: cum[n] };
+  }
+
+  /** The point at arc length s along the rails (any s: it wraps round). */
+  railAt(s: number): [number, number] {
+    const r = this.rail!;
+    const n = r.pts.length / 2;
+    s = ((s % r.len) + r.len) % r.len;
+    let lo = 0, hi = n; // last i with cum[i] <= s
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (r.cum[mid] <= s) lo = mid; else hi = mid; }
+    const a = lo, b = (lo + 1) % n;
+    const seg = r.cum[lo + 1] - r.cum[lo] || 1, u = (s - r.cum[lo]) / seg;
+    return [r.pts[a * 2] + (r.pts[b * 2] - r.pts[a * 2]) * u, r.pts[a * 2 + 1] + (r.pts[b * 2 + 1] - r.pts[a * 2 + 1]) * u];
+  }
+
+  /** Which way the rails run at arc length s (radians), smoothed over the corners. */
+  railAngle(s: number): number {
+    const [x0, y0] = this.railAt(s - 0.3), [x1, y1] = this.railAt(s + 0.3);
+    return Math.atan2(y1 - y0, x1 - x0);
+  }
+
+  /** The locomotive is set on the rails at the spot nearest to where it was put. */
+  putOnRail(t: Tank) {
+    if (!this.rail) return; // no rails on this table: it stands still, a plain (if tough) target
+    const r = this.rail;
+    let best = 0, bd = Infinity;
+    for (let s = 0; s < r.len; s += 0.1) {
+      const [x, y] = this.railAt(s);
+      const d = (x - t.x) ** 2 + (y - t.y) ** 2;
+      if (d < bd) { bd = d; best = s; }
+    }
+    t.rail = { s: best, dir: 1, v: 0, next: TRAIN_REVERSE_FIRST + Math.random() * 3 };
+    [t.x, t.y] = this.railAt(best);
+    t.body = t.turret = this.railAngle(best);
+    if (t.boss) t.boss.warn = 0.9; // a whistle, and off it goes
+  }
+
+  /** A wagon hooks up behind the last car of the latest locomotive. */
+  hookWagon(t: Tank) {
+    const loco = [...this.tanks].reverse().find((o) => o.rail);
+    if (!loco) return;
+    const k = this.tanks.filter((o) => o.car?.loco === loco.id).length;
+    t.car = { loco: loco.id, k, off: TRAIN_GAP + k * WAGON_GAP };
+    this.placeWagon(t);
+    t.turret = t.body + Math.PI / 2 * (k % 2 ? 1 : -1); // their little cannons look out on either side
+  }
+
+  /** Put a wagon in its slot behind its locomotive (once the locomotive is gone, it stays where it is). */
+  placeWagon(t: Tank) {
+    const loco = this.tankById(t.car!.loco);
+    if (!loco?.rail || !this.rail) return;
+    [t.x, t.y] = this.railAt(loco.rail.s - t.car!.off);
+    t.body = this.railAngle(loco.rail.s - t.car!.off);
+    t.vx = t.vy = 0;
+  }
+
+  /** The car at the head of the train the way it is going: the locomotive, or backing up, its last wagon (and the heading). */
+  trainLead(loco: Tank): [Tank, number, number] {
+    let lead = loco;
+    if (loco.rail!.v < 0) {
+      for (const o of this.tanks) if (o.alive && o.car?.loco === loco.id && o.car.off > (lead.car?.off ?? 0)) lead = o;
+    }
+    const a = lead.body + (loco.rail!.v < 0 ? Math.PI : 0);
+    return [lead, Math.cos(a), Math.sin(a)];
+  }
+
+  /**
+   * The Tortillard runs round its rails: it speeds up to its cruising speed, now and then stops whistling and sets off
+   * the other way (more often once enraged), pulls its wagons behind it (they close up when one is destroyed) and
+   * runs over any foe standing in front of its leading car.
+   */
+  updateTrain(t: Tank) {
+    const rs = t.rail!, bs = t.boss!;
+    t.vx = t.vy = 0;
+    if (!this.rail) return;
+    const rage = bs.rage ? 1 : 0;
+    if (bs.warn > 0) {
+      // stopped, whistling: once the steam is up, off the other way (or, at the start, forward)
+      rs.v = Math.sign(rs.v) * Math.max(0, Math.abs(rs.v) - TRAIN_ACCEL * 2 * DT);
+      bs.warn -= DT;
+      if (bs.warn <= 0) this.events.push(['toot', r2(t.x), r2(t.y), t.id]);
+    } else {
+      rs.next -= DT;
+      if (rs.next <= 0) {
+        // time to reverse: brake and whistle first
+        const [a, b] = TRAIN_REVERSE_EVERY[rage];
+        rs.next = a + Math.random() * (b - a);
+        rs.dir = -rs.dir;
+        bs.warn = TRAIN_STOP;
+        this.events.push(['toot', r2(t.x), r2(t.y), t.id]);
+      } else {
+        const want = rs.dir * TRAIN_SPEED[rage];
+        rs.v += Math.max(-TRAIN_ACCEL * DT, Math.min(TRAIN_ACCEL * DT, want - rs.v));
+      }
+    }
+    rs.s = ((rs.s + rs.v * DT) % this.rail.len + this.rail.len) % this.rail.len;
+    [t.x, t.y] = this.railAt(rs.s);
+    t.body = t.turret = this.railAngle(rs.s);
+    // the wagons follow: the ones left close the gaps
+    const cars = this.tanks.filter((o) => o.alive && o.car?.loco === t.id).sort((a, b) => a.car!.k - b.car!.k);
+    cars.forEach((c, i) => {
+      const want = TRAIN_GAP + i * WAGON_GAP;
+      if (c.car!.off > want) c.car!.off = Math.max(want, c.car!.off - WAGON_CLOSE * DT);
+      this.placeWagon(c);
+    });
+    // and whoever stands on the track in front of it is run over
+    if (Math.abs(rs.v) < TRAIN_RAM_SPEED) return;
+    const [lead, hx, hy] = this.trainLead(t);
+    for (const o of this.tanks) {
+      if (!o.alive || o.team === t.team || under(o)) continue;
+      const rx = o.x - lead.x, ry = o.y - lead.y;
+      const d = Math.hypot(rx, ry);
+      if (d >= lead.r + o.r - 0.04 || rx * hx + ry * hy < d * 0.3) continue;
+      this.killTank(o, t, KO_TRAIN);
+    }
+  }
+
+  /** The locomotive is destroyed: its wagons come off the rails with it (credited to the same shooter). */
+  derail(t: Tank, killer: Tank | undefined) {
+    for (const o of this.tanks) {
+      if (!o.alive || o.car?.loco !== t.id) continue;
+      o.buffs.invuln = 0;
+      o.buffs.shield = false;
+      o.hp = 1;
+      this.killTank(o, killer);
+    }
+  }
+
   separateTanks() {
     const alive = this.tanks.filter((t) => t.alive && !under(t));
     for (let i = 0; i < alive.length; i++) {
@@ -1915,7 +2088,7 @@ export class Game {
         if (!t.alive || under(t)) continue;
         const rr = t.r + BULLET_R;
         if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
-          if (t.kind === 'rampart' && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22)
+          if ((t.kind === 'rampart' || t.kind === 'train') && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22), and the Tortillard's cowcatcher (iteration 49)
           if (t.mag?.on && b.owner !== t.id) { this.catchShell(t, b); break; } // the Aimant catches it (iteration 27)
           b.dead = true;
           this.killTank(t, this.tankById(b.owner), KO_SHELL, b.hits ?? 0);
@@ -1966,6 +2139,7 @@ export class Game {
 
   /** Is the point (x, y) in front of the Rempart's shield (within RAMPART_ARC of where its turret points)? */
   shieldFaces(t: Tank, x: number, y: number) {
+    if (t.kind === 'train') return Math.abs(angDiff(t.body, Math.atan2(y - t.y, x - t.x))) <= TRAIN_ARC; // its cowcatcher (iteration 49)
     return t.kind === 'rampart' && Math.abs(angDiff(t.turret, Math.atan2(y - t.y, x - t.x))) <= RAMPART_ARC;
   }
 
@@ -2104,6 +2278,7 @@ export class Game {
       this.events.push(['shield', r2(t.x), r2(t.y), t.id]);
       return;
     }
+    if (t.rail) this.derail(t, killer); // first, so the locomotive's own blast is the last one (the replay shows it)
     t.alive = false;
     t.chill = undefined;
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
@@ -2333,7 +2508,7 @@ export class Game {
         const u = segCircle(s, o.x, o.y, o.r + 0.9);
         if (u >= 0 && u < bestT) return { len: acc + segLen * u };
       }
-      if (best && best.kind === 'rampart' && best !== t) {
+      if (best && (best.kind === 'rampart' || best.kind === 'train') && best !== t) {
         // the shield would send it back: no use (and the AI-driven players learn to go round it)
         const hx = s.x0 + (s.x1 - s.x0) * bestT, hy = s.y0 + (s.y1 - s.y0) * bestT;
         if (this.shieldFaces(best, hx, hy)) return { len: acc + segLen * bestT };
@@ -2581,6 +2756,19 @@ export class Game {
       const dx = t.x - lb.x1, dy = t.y - lb.y1;
       const d = Math.hypot(dx, dy);
       if (d < MORTAR_BLAST + t.r + 0.5) { threat = true; ax += dx / (d + 0.01) * 2; ay += dy / (d + 0.01) * 2; }
+    }
+    // the Tortillard is coming (iteration 49): off the track, sideways, before the leading car gets there
+    if (this.rail && t.kind !== 'wagon' && t.kind !== 'train') {
+      for (const o of this.tanks) {
+        if (!o.alive || !o.rail || Math.abs(o.rail.v) < TRAIN_RAM_SPEED) continue;
+        const [lead, hx, hy] = this.trainLead(o);
+        const rx = t.x - lead.x, ry = t.y - lead.y;
+        const along = rx * hx + ry * hy, lat = rx * -hy + ry * hx;
+        if (along < -0.3 || along > TRAIN_LOOK || Math.abs(lat) > lead.r + t.r + 0.4) continue;
+        threat = true;
+        const side = lat >= 0 ? 1 : -1;
+        ax += -hy * side * 2.4; ay += hx * side * 2.4;
+      }
     }
     // the ground shakes where the Foreur is about to burst out: everyone clears the spot
     for (const o of this.tanks) {

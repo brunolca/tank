@@ -6,7 +6,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
+import { KO_TRAIN, TRAIN_SPEED, FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -231,8 +231,8 @@ console.log('total', Date.now() - t0, 'ms');
   const fail = (m: string) => { console.error('NUIT:', m); process.exitCode = 1; };
   if (!getMission(LEVELS.length).night) fail('la dernière mission faite main devrait être de nuit');
   const nights = [];
-  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).night) nights.push(mission);
-  if (nights.length < 10) fail(`trop peu de missions de nuit (${nights.length})`);
+  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).night) nights.push(mission); // (9 since iteration 49: the Tortillard of the 60th runs by day)
+  if (nights.length < 9) fail(`trop peu de missions de nuit (${nights.length})`);
   const tiles = new Array(W * H).fill(Tile.Empty);
   const g = new Game(tiles);
   g.night = true;
@@ -510,11 +510,11 @@ console.log('total', Date.now() - t0, 'ms');
 // the Foreur (iteration 11): the boss of even tens; it digs, burrows toward a foe, shakes the ground, then bursts out
 {
   const fail = (m: string) => { console.error('FOREUR:', m); process.exitCode = 1; };
-  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'bombard'], [60, 'boss'], [70, 'drill'], [80, 'thunder'], [90, 'sower'], [100, 'bombard'], [110, 'boss'], [160, 'boss']] as const) {
+  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'bombard'], [60, 'train'], [70, 'drill'], [80, 'thunder'], [90, 'sower'], [100, 'bombard'], [110, 'boss'], [160, 'train'], [210, 'boss']] as const) {
     if (!getMission(mission).enemies.some((e) => e.kind === kind)) fail(`la mission ${mission} devrait opposer ${kind}`);
   }
   if (getMission(20).night || getMission(70).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
-  if (!getMission(60).night || getMission(110).night || getMission(10).night || !getMission(160).night) fail('un Colosse sur deux se bat de nuit, à partir du 60ᵉ');
+  if (!getMission(110).night || getMission(210).night || getMission(10).night || !getMission(310).night) fail('un Colosse sur deux se bat de nuit, à partir du 110ᵉ');
   // the daily « Le Colosse attend » keeps its Colosse
   for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 14; day++) {
     if (dailyTwist(day) === 'colosse' && !dailyLevel(day, DAILY_STAGES).enemies.some((e) => e.kind === 'boss')) fail('le défi « Le Colosse attend » a perdu son Colosse');
@@ -2937,4 +2937,139 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions à ponts-levis');
   if (process.exitCode !== 1) console.log(`ponts-levis OK (${cleared} partie(s) gagnée(s) par l’IA, ${flips} bascule(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le Tortillard » (iteration 49): the sixth boss runs round its rails pulling three gun wagons; it runs over whoever
+// stands on the track, its cowcatcher sends head-on shells back, and its wagons come off the rails with it
+{
+  const fail = (m: string) => { console.error('TORTILLARD :', m); process.exitCode = 1; };
+  for (const m of [60, 160, 260, 360]) {
+    const lvl = getMission(m);
+    if (lvl.enemies.filter((e) => e.kind === 'train').length !== 1 || lvl.enemies.filter((e) => e.kind === 'wagon').length !== 3) fail(`la mission ${m} devrait opposer le Tortillard et ses trois wagons`);
+    if (!lvl.rail || lvl.rail.length < 12) fail(`mission ${m} : pas de rails`);
+    // the track keeps clear of every wall: nothing can get pinned against the train
+    const g0 = new Game(lvl.tiles); g0.setRail(lvl.rail);
+    for (let d = 0; d < g0.rail!.len; d += 0.2) {
+      const [x, y] = g0.railAt(d);
+      for (let cy = Math.floor(y - 1.2); cy <= Math.floor(y + 1.2); cy++) for (let cx = Math.floor(x - 1.2); cx <= Math.floor(x + 1.2); cx++) {
+        const tl = lvl.tiles[cy * W + cx];
+        if (cx < 0 || cy < 0 || cx >= W || cy >= H || (tl !== Tile.Empty && Math.hypot(Math.max(cx - x, 0, x - cx - 1), Math.max(cy - y, 0, y - cy - 1)) < 1.15)) fail(`mission ${m} : un mur trop près des rails en (${cx}, ${cy})`);
+      }
+    }
+    for (const [sx, sy] of lvl.spawns) {
+      let near = Infinity;
+      for (let d = 0; d < g0.rail!.len; d += 0.2) { const [x, y] = g0.railAt(d); near = Math.min(near, Math.hypot(x - sx, y - sy)); }
+      if (near < 2) fail(`mission ${m} : un départ de joueur sur la voie`);
+    }
+  }
+  if (getMission(60).night || !getMission(160).night || getMission(260).night) fail('un Tortillard sur deux roule de nuit, à partir du 160ᵉ');
+  if (!isBossKind('train') || killXp('train') !== 8 || SPECS.train.hp !== 8 || isBossKind('wagon')) fail('le Tortillard devrait être un boss à 8 PV (pas ses wagons)');
+  if (RUSH_BOSSES.includes('train' as never)) fail('la ronde des boss a changé en cours de semaine');
+  const lvl = getMission(60);
+  {
+    // it sets off, its wagons follow on the rails in order, and it reverses now and then
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.setRail(lvl.rail);
+    const loco = g.addTank('train', 99, 17.5, 9, 0);
+    const cars = [0, 1, 2].map(() => g.addTank('wagon', 99, 17.5, 9, 0));
+    for (const c of cars) { c.ai = undefined; }
+    g.frozen = false;
+    const x0 = loco.x, y0 = loco.y;
+    let toots = 0, maxV = 0, backed = false;
+    for (let i = 0; i < 30 * 30; i++) {
+      g.step(new Map());
+      toots += g.events.filter((e) => e[0] === 'toot').length;
+      maxV = Math.max(maxV, Math.abs(loco.rail!.v));
+      if (loco.rail!.v < -0.5) backed = true;
+      g.events = [];
+      for (let k = 0; k < cars.length; k++) {
+        const ahead = k ? cars[k - 1] : loco, gap = Math.hypot(cars[k].x - ahead.x, cars[k].y - ahead.y);
+        if (gap < 0.85 || gap > 1.5) { fail(`wagon ${k} mal attelé (écart ${gap.toFixed(2)})`); i = 1e9; break; }
+      }
+    }
+    if (Math.hypot(loco.x - x0, loco.y - y0) < 0.01 && maxV < 1) fail('le Tortillard ne roule pas');
+    if (maxV > TRAIN_SPEED[0] + 0.05) fail(`trop rapide au calme (${maxV.toFixed(2)})`);
+    if (!backed) fail('il ne fait jamais marche arrière');
+    if (toots < 2) fail(`pas de coup de sifflet (${toots})`);
+    // a wagon destroyed: the ones behind close up
+    g.killTank(cars[1], undefined);
+    for (let i = 0; i < 30 * 3; i++) { g.step(new Map()); g.events = []; }
+    const gap = Math.hypot(cars[2].x - cars[0].x, cars[2].y - cars[0].y);
+    if (gap > 1.4) fail(`les wagons ne se raccrochent pas (écart ${gap.toFixed(2)})`);
+  }
+  {
+    // a tank on the track in front of it is run over; one beside it is only nudged
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.setRail(lvl.rail);
+    const loco = g.addTank('train', 99, 17.5, 9, 0);
+    loco.ai = undefined;
+    loco.boss!.warn = 0; loco.rail!.v = TRAIN_SPEED[0]; loco.rail!.next = 99;
+    const p = g.addTank('player', 0, 17.5, 11.5, 0x3d7bff, 'p1', 'P');
+    const q = g.addTank('player', 0, 18.45, 10, 0xff3d3d, 'p2', 'Q');
+    g.frozen = false;
+    let ko = false;
+    for (let i = 0; i < 30 * 2; i++) { g.step(new Map()); if (g.events.some((e) => e[0] === 'ko' && e[1] === p.id && e[3] === KO_TRAIN)) ko = true; g.events = []; }
+    if (p.alive || !ko) fail('un tank sur la voie n’est pas écrasé');
+    if (!q.alive) fail('un tank à côté de la voie est écrasé');
+    // its cowcatcher sends a shell fired at its nose back; one from behind hurts it
+    const g2 = new Game(new Array(W * H).fill(Tile.Empty));
+    g2.setRail([3, 8.5, 19, 8.5, 19, 8.6, 3, 8.6]);
+    const l2 = g2.addTank('train', 99, 11, 8.5, 0);
+    l2.boss!.warn = 99; // stands still, whistling
+    const s1 = g2.addTank('player', 0, 15.5, 8.5, 0x3d7bff, 'p1', 'P');
+    g2.frozen = false;
+    s1.turret = Math.PI; s1.fireCd = 0;
+    g2.tryFire(s1);
+    for (let i = 0; i < 60; i++) { g2.step(new Map()); g2.events = []; }
+    if (l2.hp !== 8) fail('le chasse-pierres ne renvoie pas les obus de face');
+    if (s1.alive) fail('l’obus renvoyé ne revient pas sur le tireur');
+    const s2 = g2.addTank('player', 0, 6.5, 8.5, 0x3d7bff, 'p2', 'Q');
+    s2.turret = 0; s2.fireCd = 0;
+    g2.tryFire(s2);
+    for (let i = 0; i < 30; i++) { g2.step(new Map()); g2.events = []; }
+    if (l2.hp !== 7) fail(`un obus par l’arrière ne le blesse pas (PV ${l2.hp})`);
+  }
+  {
+    // the locomotive destroyed: its wagons come off the rails with it
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.setRail(lvl.rail);
+    const loco = g.addTank('train', 99, 17.5, 9, 0);
+    const cars = [0, 1, 2].map(() => g.addTank('wagon', 99, 17.5, 9, 0));
+    const p = g.addTank('player', 0, 1.5, 1.5, 0x3d7bff, 'p1', 'P');
+    let kos = 0;
+    g.onKill = (v, k) => { if (v.kind === 'wagon' && k === p) kos++; };
+    loco.hp = 1;
+    g.killTank(loco, p);
+    if (cars.some((c) => c.alive) || kos !== 3) fail('les wagons survivent à la locomotive');
+    // with no rails (an old room, a workshop), it is just a tough target that stands still
+    const g3 = new Game(new Array(W * H).fill(Tile.Empty));
+    const l3 = g3.addTank('train', 99, 11, 8.5, 0);
+    g3.addTank('wagon', 99, 11, 8.5, 0);
+    g3.frozen = false;
+    for (let i = 0; i < 60; i++) g3.step(new Map());
+    if (l3.x !== 11 || l3.y !== 8.5) fail('sans rails, il bouge quand même');
+  }
+  // AI duos beat it now and then (they learn to clear the track), and the fight stays cheap
+  let cleared = 0, spent = 0, steps = 0, rams = 0;
+  for (let run = 0; run < 4 || (cleared === 0 && run < 8); run++) {
+    const l = getMission(run % 2 ? 160 : 60);
+    const s2 = new Game(l.tiles, l.belts);
+    s2.setRail(l.rail);
+    if (l.night) s2.night = true;
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      rams += s2.events.filter((e) => e[0] === 'ko' && e[3] === KO_TRAIN).length;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout du Tortillard');
+  if (process.exitCode !== 1) console.log(`Tortillard OK (${cleared} partie(s) gagnée(s) par l’IA, ${rams} écrasé(s), ${per.toFixed(3)} ms/tick)`);
 }

@@ -1326,6 +1326,8 @@ export interface ParsedLevel {
   fog?: number;
   /** Floor layer: conveyor belts (iteration 16), ice (iteration 21) and sand (iteration 36), one code per cell (0 none, 1 right, 2 left, 3 up, 4 down, 5 ice, 6 sand), only when the map has some. */
   belts?: number[];
+  /** « Le Tortillard » (iteration 49): the loop of rails its train runs round, flat [x0, y0, x1, y1…] (closed: the last point joins the first). */
+  rail?: number[];
 }
 
 export function parseLevel(def: LevelDef): ParsedLevel {
@@ -1823,19 +1825,108 @@ const BOMBARD_ARENAS: string[][] = [
   ],
 ];
 
-export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower' | 'bombard';
 /**
- * Which boss holds a boss mission, in turn: the Colosse (10, 60, 110…), the Foreur (20, 70, 120…), the Grondeur
- * (30, 80, 130…), the Semeur (40, 90, 140…) and, since iteration 35, the Bombardier (50, 100, 150…).
+ * A closed loop of rails (iteration 49): a rectangle from (x0, y0) to (x1, y1) with rounded corners of radius r,
+ * run clockwise on screen (along the top to the right first), as flat [x, y…] points.
+ */
+export function railLoop(x0: number, y0: number, x1: number, y1: number, r: number): number[] {
+  const out: number[] = [];
+  const arc = (cx: number, cy: number, a0: number) => {
+    for (let i = 0; i <= 6; i++) {
+      const a = a0 + (i / 6) * (Math.PI / 2);
+      out.push(Math.round((cx + Math.cos(a) * r) * 100) / 100, Math.round((cy + Math.sin(a) * r) * 100) / 100);
+    }
+  };
+  arc(x1 - r, y0 + r, -Math.PI / 2); // top right
+  arc(x1 - r, y1 - r, 0); // bottom right
+  arc(x0 + r, y1 - r, Math.PI / 2); // bottom left
+  arc(x0 + r, y0 + r, Math.PI); // top left
+  return out;
+}
+
+/**
+ * « Le Tortillard » (iteration 49): its stations. The rails run round the table, a cell clear of any wall on both
+ * sides; the players start outside the loop and must cross the track to reach the middle, where the cover is.
+ */
+const TRAIN_ARENAS: string[][] = [
+  [
+    '......................',
+    '.1........HH..........',
+    '......................',
+    '......................',
+    '......................',
+    '##..................##',
+    '......##......##......',
+    '......#..oooo..#......',
+    '.........o..o.........',
+    '......#..oooo..#......',
+    '......##......##......',
+    '##..................##',
+    '......................',
+    '......................',
+    '......................',
+    '.2........HH..........',
+    '......................',
+  ],
+  [
+    '......................',
+    '.1.......o..o.........',
+    '......................',
+    '......................',
+    '......................',
+    'H....................H',
+    '.......o......o.......',
+    '......HH..##..HH......',
+    '..........##..........',
+    '......HH..##..HH......',
+    '.......o......o.......',
+    'H....................H',
+    '......................',
+    '......................',
+    '......................',
+    '.2.......o..o.........',
+    '......................',
+  ],
+];
+/** The rails of every station, and where the locomotive starts (halfway down the right-hand side, heading down). */
+export const TRAIN_RAIL = railLoop(4.5, 3.5, 17.5, 13.5, 2);
+export const TRAIN_START: [number, number] = [17.5, 9];
+/** Wagons behind the locomotive. */
+export const TRAIN_WAGONS = 3;
+
+export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower' | 'bombard' | 'train';
+/**
+ * Which boss holds a boss mission, in turn: the Colosse (10, 110, 210…), the Foreur (20, 70, 120…), the Grondeur
+ * (30, 80, 130…), the Semeur (40, 90, 140…), since iteration 35 the Bombardier (50, 100, 150…) and, since
+ * iteration 49, the Tortillard, which took over every other Colosse (60, 160, 260…).
  */
 export function bossOf(mission: number): BossKind {
   const k = Math.round(mission / 10) % 5;
+  if (k === 1 && Math.floor(mission / 50) % 2 === 1) return 'train';
   return k === 2 ? 'drill' : k === 3 ? 'thunder' : k === 4 ? 'sower' : k === 0 ? 'bombard' : 'boss';
+}
+
+/** The Tortillard's station for a boss mission (or the boss round): the train on its rails, and two escorts. */
+export function trainLevel(mission: number, arena = 0): ParsedLevel {
+  const lvl = parseLevel({ name: `Le Tortillard · ${mission}`, map: TRAIN_ARENAS[arena % TRAIN_ARENAS.length] });
+  lvl.rail = TRAIN_RAIL.slice();
+  const [x, y] = TRAIN_START;
+  lvl.enemies.push({ kind: 'train', x, y });
+  for (let i = 0; i < TRAIN_WAGONS; i++) lvl.enemies.push({ kind: 'wagon', x, y }); // the rails place them behind it
+  const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
+  lvl.enemies.push({ kind: esc[0], x: 20.5, y: 2.5 }, { kind: esc[1], x: 20.5, y: 14.5 });
+  return lvl;
 }
 
 /** Endless-mode boss fights: an open arena, the boss and two escorts that get nastier. */
 export function bossLevel(mission: number, who: BossKind = bossOf(mission)): ParsedLevel {
   const cycle = Math.floor(mission / 50); // how many times the five bosses came round already
+  if (who === 'train') {
+    // the second station is the night one (160, 360…): only the locomotive's lamp and the wagons' lanterns show the way
+    const lvl = trainLevel(mission, cycle % 4 === 3 ? 1 : 0);
+    if (cycle % 4 === 3) { lvl.night = true; lvl.name = `Le Tortillard de nuit · ${mission}`; }
+    return lvl;
+  }
   if (who === 'bombard') {
     const lvl = parseLevel({ name: `Le Bombardier · ${mission}`, map: BOMBARD_ARENAS[Math.max(0, cycle - 1) % BOMBARD_ARENAS.length] });
     const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
@@ -1867,8 +1958,8 @@ export function bossLevel(mission: number, who: BossKind = bossOf(mission)): Par
   const lvl = parseLevel({ name: `Le Colosse · ${mission}`, map: BOSS_ARENAS[(mission / 10) % BOSS_ARENAS.length] });
   const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
   lvl.enemies.push({ kind: esc[0], x: 18.5, y: 3.5 }, { kind: esc[1], x: 18.5, y: 13.5 });
-  // every other Colosse from the 60th fights at night (60, 160, 260…)
-  if (mission >= 60 && cycle % 2 === 1) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
+  // every other Colosse from the 110th fights at night (110, 310…: since iteration 49, the Tortillard holds 60, 160…)
+  if (cycle % 4 === 2) { lvl.night = true; lvl.name = `Le Colosse de nuit · ${mission}`; }
   return lvl;
 }
 

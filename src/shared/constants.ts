@@ -10,6 +10,8 @@ export const DRILL_R = 0.56;
 export const THUNDER_R = 0.58;
 export const SOWER_R = 0.6;
 export const BOMBARD_R = 0.64;
+export const TRAIN_R = 0.6;
+export const WAGON_R = 0.46;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
 export const MINE_BLAST = 1.55;
@@ -67,7 +69,9 @@ export type TankKind =
   | 'mortar'
   | 'bombard'
   | 'hopper'
-  | 'watcher';
+  | 'watcher'
+  | 'train'
+  | 'wagon';
 
 export interface TankSpec {
   speed: number;
@@ -125,6 +129,12 @@ export const SPECS: Record<TankKind, TankSpec> = {
   // iteration 47: « Le Veilleur », a lighthouse on tracks that never moves: its beam sweeps the table, and whatever it
   // lights up gets a rocket straight down the beam (see WATCH_*). Outside its light it is blind.
   watcher: { speed: 0, maxBullets: 1, bounces: 0, rocket: true, fireCd: 1.5, turretSpeed: 1.9, mines: 0, skill: 1, reaction: 0.5, aimError: 0.02, label: 'Veilleur' },
+  // iteration 49: the sixth boss, « le Tortillard », a toy locomotive that runs round its rails pulling gun wagons
+  // (see TRAIN_*): it runs over whatever stands on the track, and its cowcatcher sends head-on shells back. The rails
+  // drive it, never the AI (speed 0 here: nothing pushes it about either).
+  train: { speed: 0, maxBullets: 0, bounces: 0, rocket: false, fireCd: 9, turretSpeed: 0, mines: 0, skill: 0, reaction: 0.5, aimError: 0.1, hp: 8, size: TRAIN_R, label: 'Tortillard' },
+  // its wagons: a little cannon on a flat car, hooked behind the locomotive (one hit each)
+  wagon: { speed: 0, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.7, turretSpeed: 1.7, mines: 0, skill: 1, reaction: 0.6, aimError: 0.09, size: WAGON_R, label: 'Wagon' },
 };
 
 /** The steel tank once its armour is blown off: lighter, faster, angrier. */
@@ -164,6 +174,8 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   bombard: 0x5e3f7f,
   hopper: 0xa8d02c,
   watcher: 0x3b3577,
+  train: 0x2f7a4d,
+  wagon: 0xd9a63a,
 };
 
 /** Hull radius of a tank kind (the boss is much bigger than everyone else). */
@@ -199,7 +211,28 @@ export const DRILL_RING_SHOTS = 8;
 /** Flags bit: the Foreur is under the table (nothing can touch it, it touches nothing). */
 export const FLAG_BURROW = 512;
 /** The five bosses that take turns every ten missions (the Bombardier since iteration 35). */
-export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower' || k === 'bombard';
+export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower' || k === 'bombard' || k === 'train';
+
+// ------------------------------------------------------------------ « Le Tortillard » (iteration 49): the boss on rails
+/** Cruising speed along the rails, tiles per second (calm, then enraged), and how fast it speeds up or brakes. */
+export const TRAIN_SPEED: [number, number] = [1.75, 2.45];
+export const TRAIN_ACCEL = 2.6;
+/** Seconds between two reversals (min, max; calm, then enraged); the first one comes later. */
+export const TRAIN_REVERSE_EVERY: [[number, number], [number, number]] = [[12, 16], [6.5, 9]];
+export const TRAIN_REVERSE_FIRST = 11;
+/** Seconds it stands still whistling (flag FLAG_CHARGING) before it sets off the other way. */
+export const TRAIN_STOP = 1.1;
+/** Rail distance from the locomotive's centre to its first wagon, then from one wagon to the next. */
+export const TRAIN_GAP = 1.32;
+export const WAGON_GAP = 1.08;
+/** Wagons left behind by a destroyed one close the gap at this speed (tiles/s). */
+export const WAGON_CLOSE = 1.3;
+/** Half-width (radians) of the cowcatcher's arc, centred on the locomotive's nose: shells hitting it bounce back. */
+export const TRAIN_ARC = 0.8;
+/** Below this speed it runs nobody over (it only nudges). */
+export const TRAIN_RAM_SPEED = 0.45;
+/** How far ahead of the leading car (tiles) a tank driven by the AI starts to clear the track. */
+export const TRAIN_LOOK = 2.6;
 
 // ------------------------------------------------------------------ the Grondeur (iteration 18): the boss that calls the lightning
 /** Seconds between two calls (calm, then enraged). */
@@ -532,6 +565,7 @@ export const KO_FALL = 4; // « Les ponts » (iteration 33): the bridge gave way
 export const KO_LOB = 5; // « Le Mortier » (iteration 34): a cannonball fell on it
 export const KO_SAND = 6; // « Les dunes » (iteration 36): a mine buried in the sand
 export const KO_SNOW = 7; // « La neige » (iteration 42): a mine buried in the snow
+export const KO_TRAIN = 8; // « Le Tortillard » (iteration 49): run over by the train
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */

@@ -91,6 +91,7 @@ export type GameEvent =
   | ['loot', number, number, number] // x y bonusKind: a Pilleur is destroyed and drops a crate of what it stole (iteration 15)
   | ['call', number, number, number, number] // x y tankId strikes: the Grondeur calls the lightning (iteration 18; older clients ignore it, the strikes are plain 'zap')
   | ['rally', number, number, number, number] // x y tankId teammates: « Suis-moi ! », AI teammates come along (iteration 20; older clients ignore it)
+  | ['toot', number, number, number] // x y tankId: the Tortillard whistles, setting off or stopping to reverse (iteration 49; older clients ignore it)
   | ['deflect', number, number, number] // x y tankId: a shell bounced off the Rempart's shield (iteration 22; older clients ignore it)
   | ['sow', number, number, number, number] // x y tankId seeds: the Semeur throws its seeds (iteration 25; older clients ignore it, the seeds are plain mines to them)
   | ['catch', number, number, number, number] // x y tankId held: the Aimant's magnet catches a shell (iteration 27; older clients ignore it)
@@ -175,6 +176,7 @@ export type ServerMsg =
       daily?: DailyState;
       rush?: RushState; // « La ronde des boss » (iteration 28)
       bases?: number[]; // « Drapeaux » (iteration 24): x1 y1 x2 y2, the bases of the Bleus (team 1) and the Rouges (team 2)
+      rail?: number[]; // « Le Tortillard » (iteration 49): the loop of rails, flat closed [x, y…] (older tabs see the train glide on bare floor)
     }
   | {
       t: 'phase'; phase: Phase; mission: number; lives: number; enemies: number; text?: string; results?: Results; scores?: Record<string, number>; daily?: DailyState; rush?: RushState;

@@ -316,6 +316,22 @@ export const sfx = {
     tone(t, 0.5, 480, 470, 0.12, 'triangle');
     noise(t, 0.2, 4000, 2, 0.3, 'bandpass', 1500);
   },
+  /**
+   * « Le Tortillard » (iteration 49): a two-tone steam whistle (« tchou-tchou »), a hiss of steam behind it, and a
+   * couple of chugs from the cylinders.
+   */
+  whistle() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const [d, len] of [[0, 0.32], [0.4, 0.5]]) {
+      tone(t + d, len, 740, 735, 0.09, 'triangle');
+      tone(t + d, len, 932, 925, 0.07, 'triangle');
+      tone(t + d, len, 1110, 1100, 0.035, 'sine');
+      noise(t + d, len, 3400, 2.5, 0.08, 'bandpass');
+    }
+    noise(t + 0.95, 0.5, 5000, 0.8, 0.12, 'highpass');
+    for (let i = 0; i < 3; i++) noise(t + 1.0 + i * 0.22, 0.09, 700, 1.2, 0.22, 'lowpass', 120);
+  },
   /** Rising whine while the boss charges its ring of shells. */
   bossCharge() {
     if (!ctx) return;

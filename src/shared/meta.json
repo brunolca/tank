@@ -1,7 +1,7 @@
 {
-  "iteration": 48,
-  "date": "2026-11-21",
-  "title": "Les ponts-levis",
+  "iteration": 49,
+  "date": "2026-11-22",
+  "title": "Le Tortillard",
   "journal": [
     {
       "iteration": 1,
@@ -584,6 +584,18 @@
         "Et les tapis roulants s’en mêlent : à chaque « Clac ! », ils changent tous de sens, avec les tanks, les mines et les caisses qu’ils emportent.",
         "Deux nouvelles missions : « Le pont-levis » (la 65ᵉ), un ravin que seuls les ponts traversent, et « L’usine à bascule » (la 74ᵉ), où ponts et tapis basculent ensemble.",
         "Le manuel explique la nouvelle case, et l’atelier gagne deux pinceaux : le pont-levis rouge et le bleu."
+      ]
+    },
+    {
+      "iteration": 49,
+      "date": "2026-11-22",
+      "title": "Le Tortillard",
+      "notes": [
+        "Nouveau boss : le Tortillard, une locomotive à vapeur en bois qui fait le tour de la table sur ses rails, en tirant trois wagons armés d’un petit canon.",
+        "« Tchou-tchou ! » Ne reste jamais sur la voie devant lui : il écrase tout ce qui traîne sur les rails. Quand il s’arrête en sifflant, il repart en marche arrière, et ce sont alors ses wagons qui ouvrent la route.",
+        "De face, son chasse-pierres renvoie les obus : vise ses flancs, son dos… ou pose une mine sur la voie et laisse-le rouler dessus. Une fois la locomotive détruite, ses wagons déraillent avec elle.",
+        "Il attend à la mission 60, puis revient toutes les cent missions (160, 260…), en alternance avec le Colosse. La nuit, sa lanterne éclaire les rails devant lui.",
+        "Le ralenti nomme mieux les ennemis : « Le tank gris est détruit », « l’Aimant », « la Sauterelle »… Et le bestiaire accueille la locomotive et son wagon."
       ]
     }
   ]

@@ -3,7 +3,7 @@
 // again in slow motion, the camera leaning toward it. Nothing goes through the network: it is only a film of what
 // this screen already showed, so it works the same online, alone against rivals and in the demo.
 import type { GameEvent } from '../shared/protocol';
-import { KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW } from '../shared/constants';
+import { KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_TRAIN } from '../shared/constants';
 import type { RBonus, RBullet, RFlag, RLob, RMine, RTank } from './render';
 
 export interface FilmFrame { dt: number; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; lobs?: RLob[]; events: GameEvent[] } // lobs: the Mortier's cannonballs (iteration 34)
@@ -143,6 +143,7 @@ export function koCaption(r: Reel, name: (id: number) => string | undefined, bos
   else if (cause === KO_BOLT) how = 'Frappé par la foudre !';
   else if (cause === KO_DRILL) how = 'Surgi de sous la table !';
   else if (cause === KO_LOB) how = 'Un boulet tombé du ciel !';
+  else if (cause === KO_TRAIN) how = 'Écrasé par le Tortillard !';
   else if (cause === KO_FALL) how = self ? 'Il a scié son propre pont !' : 'Le pont a cédé !';
   else if (self) how = n > 0 ? 'Son propre ricochet !' : 'Oups !';
   else if (n >= 3) how = `Ricochet ×${n} : chapeau !`;
@@ -150,5 +151,6 @@ export function koCaption(r: Reel, name: (id: number) => string | undefined, bos
   else if (n === 1) how = 'Ricochet !';
   else how = boss(victim) ? 'Le coup de grâce !' : 'Tir direct !';
   const sub = self ? (vName ? `${vName} s’est piégé tout seul` : '') : kName && vName ? `${kName} → ${vName}` : vName ? `${vName} est détruit` : '';
-  return [how, sub];
+  // an enemy named at the start of the line takes a capital (« Le tank gris est détruit », iteration 49)
+  return [how, sub.replace(/^(le |la |l’|un )/, (m) => m[0].toUpperCase() + m.slice(1))];
 }

@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 65, arms: ['canon', 'ricochet'], hud: true, seconds: 17, switchShots: [3.2, 10.5], caption: 'Itération 48 : les ponts-levis', sub: 'Un obus sur l’interrupteur : les ponts rouges et bleus basculent' },
-  { mission: 74, arms: ['canon', 'fusee'], hud: true, seconds: 17, switchShots: [3, 10], caption: 'L’usine à bascule', sub: 'À chaque « Clac ! », les tapis roulants changent de sens' },
-  { manual: [7, ['terrain']], seconds: 7, caption: 'Une nouvelle case au manuel', sub: 'Levé, le pont laisse passer les obus, pas les tanks' },
-  { atelier: 9, atelierMission: 74, seconds: 9, caption: 'Et dans l’atelier', sub: 'Deux pinceaux de plus : le pont-levis rouge et le bleu' },
+  { mission: 60, bilan: true, arms: ['canon', 'ricochet'], hud: true, seconds: 21, trainMines: [9.5], caption: 'Itération 49 : le Tortillard', sub: 'Un sixième boss fait le tour de la table sur ses rails' },
+  { mission: 60, arms: ['ricochet', 'fusee'], bossHp: 4, hud: true, seconds: 15, reverses: [4.5], caption: 'Gare à la voie !', sub: 'Il écrase tout ce qui traîne devant lui… et repart en marche arrière' },
+  { mission: 160, arms: ['canon', 'sapeur'], hud: true, seconds: 12, trainMines: [5], caption: 'Le Tortillard de nuit', sub: 'Une mine sur les rails, et ses wagons sautent un à un' },
+  { manual: [7, ['bestiaire'], 'train'], seconds: 7, caption: 'Au bestiaire', sub: 'Vise ses flancs : de face, son chasse-pierres renvoie les obus' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -55,7 +55,7 @@ try {
       if (shot.still) { /* the table of the previous shot goes on */ }
       else if (shot.home) d.home(shot.home * 1000);
       else if (shot.options) d.options(shot.options * 1000); // « Le nouvel accueil » (iteration 43): the planks, then the options
-      else if (shot.manual) d.manual(shot.manual[0] * 1000, shot.manual[1]); // « Le manuel » (iteration 39): the pages one after the other
+      else if (shot.manual) d.manual(shot.manual[0] * 1000, shot.manual[1], shot.manual[2]); // « Le manuel » (iteration 39): the pages one after the other
       else if (shot.padTour) d.padTour(shot.padTour * 1000); // « Les menus à la manette » (iteration 39)
       else if (shot.journal) d.journal(shot.journal * 1000); // « La boîte à jouets » (iteration 38): the home screen and the journal
       else if (shot.cratesHelp) d.crates(shot.cratesHelp * 1000); // the list of crates on the home screen (iteration 29)
@@ -92,6 +92,8 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.trainMines ?? []) setTimeout(() => d.trainMine?.(), s * 1000); // « Le Tortillard » (iteration 49): a mine on the track ahead of the train
+      for (const s of shot.reverses ?? []) setTimeout(() => d.reverse?.(), s * 1000); // and it stops whistling, then backs up
       for (const s of shot.watches ?? []) setTimeout(() => d.watch?.(), s * 1000); // « Le Veilleur » (iteration 47): every beam swings onto a hero
       for (const s of shot.hops ?? []) setTimeout(() => d.hop?.(), s * 1000); // « La Sauterelle » (iteration 41): every Sauterelle leaps at once
       for (const s of shot.lobs ?? []) setTimeout(() => d.lob?.(), s * 1000); // « Le Mortier » (iteration 34): every Mortier fires at once

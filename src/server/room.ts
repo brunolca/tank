@@ -457,6 +457,7 @@ export class Room extends DurableObject<Env> {
     this.bases = this.mode === 'drapeau' ? (this.level as ReturnType<typeof ctfArena>).bases : undefined;
     this.council = undefined;
     const game = new Game(this.level.tiles, this.level.belts);
+    game.setRail(this.level.rail); // « Le Tortillard » (iteration 49), before its train is put on the table
     const spawns = this.level.spawns.slice();
     const used: [number, number][] = [];
     const rivals = this.versusRivals().slice(0, Math.max(0, MAX_PLAYERS - participants.length));
@@ -550,6 +551,8 @@ export class Room extends DurableObject<Env> {
     if (!att?.v || att.v < 41) tanks = tanks.map((t) => (t.kind === 'hopper' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 47 draw the Veilleur as a plain brown tank (it never moves either, its beam just does not show)
     if (!att?.v || att.v < 47) tanks = tanks.map((t) => (t.kind === 'watcher' ? { ...t, kind: 'brown' } : t));
+    // tabs older than iteration 49 draw the Tortillard as a Colosse and its wagons as grey tanks (gliding round the table)
+    if (!att?.v || att.v < 49) tanks = tanks.map((t) => (t.kind === 'train' ? { ...t, kind: 'boss' } : t.kind === 'wagon' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {
       t: 'level',
       mode: this.mode,
@@ -567,6 +570,7 @@ export class Room extends DurableObject<Env> {
       daily: this.dailyState(),
       rush: this.rushState(),
       bases: this.bases?.flat(),
+      rail: this.level.rail,
     });
     if (this.mode === 'taupe') {
       this.send(ws, { t: 'role', mole: !!att && att.pid === this.mole });

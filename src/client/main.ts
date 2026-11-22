@@ -364,7 +364,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   lives = msg.lives;
   currentMission = msg.mission;
   currentLevelName = msg.name;
-  renderer.setLevel(tiles, msg.tanks, belts);
+  renderer.setLevel(tiles, msg.tanks, belts, msg.rail);
   renderer.setFrost(undefined);
   huntGot = new Map(); huntKey = '';
   if (msg.mode === 'caisses') { ctfLeft = HUNT_ROUND; ctfLeftAt = performance.now(); }
@@ -413,6 +413,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
   const sowerFight = enemies.some((e) => e.kind === 'sower');
   const bombardFight = enemies.some((e) => e.kind === 'bombard');
+  const trainFight = enemies.some((e) => e.kind === 'train');
   if (online && coopLike(msg.mode)) meetEnemies(enemies.map((e) => e.kind));
   if (coopLike(msg.mode)) {
     // « Le bilan » (iteration 45): a full-screen briefing, as in the original, instead of the banner
@@ -421,10 +422,10 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       ? { kicker: 'Défi du jour · étape', big: `${msg.daily.stage}/${msg.daily.stages}`, sub: TWIST_INFO[msg.daily.twist]?.label ?? '', cls: 'daily' }
       : msg.mode === 'rush'
       ? (rushSt >= RUSH_STAGES ? { kicker: 'Ronde des boss · le bouquet final', big: `${rushSt}/${RUSH_STAGES}`, sub: 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !', cls: 'boss rush' }
-        : { kicker: 'Ronde des boss · boss', big: `${rushSt}/${RUSH_STAGES}`, sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight), cls: 'boss rush' })
+        : { kicker: 'Ronde des boss · boss', big: `${rushSt}/${RUSH_STAGES}`, sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight, trainFight), cls: 'boss rush' })
       : msg.mode === 'taupe' ? { kicker: 'La taupe · étape', big: `${msg.mission}/${TAUPE_STAGES}`, sub: '', cls: 'mole' }
       : msg.mode === 'atelier' ? { kicker: 'Atelier · mission maison', big: '', sub: `${ATELIER_LIVES} vies pour en venir à bout`, cls: 'atelier' }
-      : bossFight ? { kicker: 'Mission · Boss', big: String(msg.mission), sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight), cls: 'boss' }
+      : bossFight ? { kicker: 'Mission · Boss', big: String(msg.mission), sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight, trainFight), cls: 'boss' }
       : { kicker: 'Mission', big: String(msg.mission), sub: '', cls: '' };
     hideBanner();
     hideSheet();
@@ -441,6 +442,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
   else if (sowerFight) setTimeout(() => toast('Le Semeur : ses graines mûres l’épargnent, mais une graine touchée par ton obus explose aussitôt… et le blesse s’il est à côté !', 4600), 2200);
+  else if (trainFight) setTimeout(() => toast('Le Tortillard : « Tchou-tchou ! » Ne reste jamais sur les rails devant lui. Son chasse-pierres renvoie les obus de face : vise ses flancs, son dos… ou pose une mine sur la voie ! Quand il siffle à l’arrêt, il repart en marche arrière.', 6000), 2200);
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
   else if (enemies.some((e) => e.kind === 'watcher')) setTimeout(() => toast(msg.night ? 'Le Veilleur balaie la nuit de son faisceau. S’il t’éclaire, l’alarme sonne, tous les ennemis savent où tu es… et sa fusée suit la lumière : sors du faisceau !' : 'Le Veilleur balaie la table de son faisceau. S’il t’éclaire, l’alarme sonne et sa fusée suit la lumière : sors du faisceau ! Hors de sa lumière, il ne voit rien.', 5400), 2200);
@@ -497,8 +499,9 @@ function openSheet(v: SheetView, mission?: number) {
 }
 
 /** One line on how to beat the boss of the table (the intro banner of a boss fight). */
-function bossTip(thunder: boolean, sower: boolean, drill: boolean, bombard = false) {
-  return bombard ? 'Il pilonne des rangées entières de boulets. Ne longe pas la rangée : avance vers lui ou recule !'
+function bossTip(thunder: boolean, sower: boolean, drill: boolean, bombard = false, train = false) {
+  return train ? 'Il fait le tour de la table sur ses rails et écrase tout ce qui traîne sur la voie. Vise-le de côté ou par-derrière !'
+    : bombard ? 'Il pilonne des rangées entières de boulets. Ne longe pas la rangée : avance vers lui ou recule !'
     : thunder ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !'
     : sower ? 'Il sème des graines géantes qui explosent. Tire sur celles qui poussent à ses pieds !'
     : drill ? 'Il creuse sous la table et jaillit sous tes chenilles. Quand le sol tremble, file !'
@@ -954,7 +957,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
         renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
-        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : kind === 'bombard' ? 0xc9a66b : 0xf2c14e), i * 180);
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : kind === 'bombard' ? 0xc9a66b : kind === 'train' ? 0x8a8a8a : 0xf2c14e), i * 180);
         floater(e[1], e[2], `${specOf(kind).label} vaincu !`, 0xf2c14e);
         if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
         if (online && bossFight) setMusicIntensity(1);
@@ -1206,6 +1209,11 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1], e[2], 'Il appelle la foudre !', 0x8fc0ff);
       if (audible) sfx.call();
       break;
+    case 'toot':
+      // « Le Tortillard » (iteration 49): the whistle, written for those playing without the sound
+      floater(e[1], e[2], 'Tchou-tchou !', 0xffffff);
+      if (audible || attract) sfx.whistle();
+      break;
     case 'rage':
       renderer.hurt(e[3], e[1], e[2]);
       floater(e[1], e[2], 'En colère !', 0xff3b2f);
@@ -1285,6 +1293,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   bar.classList.toggle('thunder', bossKind === 'thunder');
   bar.classList.toggle('sower', bossKind === 'sower');
   bar.classList.toggle('bombard', bossKind === 'bombard');
+  bar.classList.toggle('train', bossKind === 'train');
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
@@ -2074,6 +2083,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   if (document.body.classList.contains('vs-demo')) { document.body.classList.remove('vs-demo'); $('#hud').hidden = true; }
   const lvl: ParsedLevel = opts.atelier ? atelierLevel(opts.atelier) : opts.taupe ? taupeLevel(opts.taupe.seed, opts.taupe.stage) : opts.daily ? dailyLevel(opts.daily.day, opts.daily.stage) : opts.rush ? rushLevel(opts.rush.week, opts.rush.stage) : getMission(opts.mission ?? attractMission()); // now and then, the Maçon's building site or the tunnels
   const g = new Game(lvl.tiles, lvl.belts);
+  g.setRail(lvl.rail); // « Le Tortillard » (iteration 49)
   g.bonusOn = true;
   // the home-screen background sometimes plays in the dark, as a teaser
   g.night = opts.night ?? (!!lvl.night || (!opts.heroes && opts.mission === undefined && Math.random() < 0.25));
@@ -2118,12 +2128,12 @@ function startAttract(opts: AttractOpts = attractOpts) {
     g.frozen = true;
     attractBriefUntil = performance.now() + 3000;
     const boss = foes.some((t) => !!t.boss);
-    showBrief({ kicker: boss ? 'Mission · Boss' : 'Mission', big: String(opts.mission ?? 1), name: lvl.name, sub: boss ? bossTip(foes.some((t) => t.kind === 'thunder'), foes.some((t) => t.kind === 'sower'), foes.some((t) => t.kind === 'drill'), foes.some((t) => t.kind === 'bombard')) : '',
+    showBrief({ kicker: boss ? 'Mission · Boss' : 'Mission', big: String(opts.mission ?? 1), name: lvl.name, sub: boss ? bossTip(foes.some((t) => t.kind === 'thunder'), foes.some((t) => t.kind === 'sower'), foes.some((t) => t.kind === 'drill'), foes.some((t) => t.kind === 'bombard'), foes.some((t) => t.kind === 'train')) : '',
       wx: weatherWords(g.night, g.storm, g.belts, g.wind, g.fog), kinds: kindCounts(foes.map((t) => t.kind)), total: foes.length, cls: `${boss ? 'boss' : ''}${g.night ? ' night' : ''}${g.storm ? ' storm' : ''}` }, briefArt, kindLabel);
   }
   attractEnd = 0;
   attractPrev.clear();
-  renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
+  renderer.setLevel(g.tiles, g.tankInfos(), g.belts, lvl.rail);
   renderer.setNight(g.night);
   renderer.setStorm(g.storm);
   renderer.setWind(g.wind);
@@ -2509,11 +2519,22 @@ let reelTries = 0;
 
 function reelName(id: number) {
   const info = infos.get(id);
-  if (online && info) return info.kind === 'player' ? info.name : specOf(info.kind).label;
+  if (online && info) return info.kind === 'player' ? info.name : enemyName(info.kind);
   const t = attract?.tankById(id);
-  if (t) return t.kind === 'player' ? t.name : specOf(t.kind).label;
+  if (t) return t.kind === 'player' ? t.name : enemyName(t.kind);
   const kind = renderer.tankKind(id);
-  return kind ? specOf(kind).label : undefined;
+  return kind ? enemyName(kind) : undefined;
+}
+/** An enemy as the replay names it (iteration 49): « le tank gris », « l’Aimant », « la Sauterelle », « un wagon »… */
+const COLOUR_KINDS = new Set(['brown', 'ash', 'marine', 'yellow', 'pink', 'green', 'violet', 'white', 'black']);
+function enemyName(kind: string) {
+  const label = specOf(kind).label;
+  if (COLOUR_KINDS.has(kind)) return `le tank ${label.toLowerCase()}`;
+  if (kind === 'steel') return 'le tank d’acier';
+  if (kind === 'wagon') return 'un wagon';
+  if (kind === 'hopper') return 'la Sauterelle';
+  if (kind === 'magnet') return 'l’Aimant';
+  return `le ${label}`;
 }
 
 function startReel(force = false) {
@@ -2805,6 +2826,8 @@ const BESTIARY: [TankKind, string][] = [
   ['thunder', 'boss : appelle la foudre sur ta tête'],
   ['sower', 'boss : sème des graines géantes qui explosent'],
   ['bombard', 'boss : pilonne des rangées entières de boulets, d’un bout à l’autre'],
+  ['wagon', 'accroché derrière le Tortillard, son petit canon tire sur les côtés de la voie'],
+  ['train', 'boss : fait le tour de la table sur ses rails et écrase tout ce qui est sur la voie ; de face, son chasse-pierres renvoie les obus'],
 ];
 // the crates (iteration 29): what each bonus does, in its colour
 const CRATES: [BonusKind, string][] = [
@@ -2867,6 +2890,8 @@ function tankSvg(kind: string, known: boolean) {
     : kind === 'rampart' ? '<path d="M37 13 q6 11 0 22" fill="none" stroke="#e8b04a" stroke-width="3" stroke-linecap="round"/>'
     : kind === 'magnet' ? '<path d="M36 17 v-4 h4 v4 m0 14 v4 h-4 v-4" fill="none" stroke="#d8392f" stroke-width="2.4"/>'
     : kind === 'hopper' ? '<path d="M14 9 l-7 -5 l-4 7 M14 39 l-7 5 l-4 -7" fill="none" stroke="#2a1d12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="20" r="2.6" fill="#fff"/><circle cx="29" cy="28" r="2.6" fill="#fff"/>'
+    : kind === 'train' ? '<rect x="10" y="17" width="18" height="14" rx="3" fill="#2a1d12" opacity=".35"/><circle cx="31" cy="24" r="3.4" fill="#2a1d12"/><path d="M40 14 l5 10 l-5 10" fill="none" stroke="#f2c14e" stroke-width="2.6" stroke-linejoin="round"/>'
+    : kind === 'wagon' ? '<rect x="7" y="22" width="4" height="4" fill="#2a1d12"/><rect x="37" y="22" width="4" height="4" fill="#2a1d12"/>'
     : kind === 'watcher' ? '<path d="M24 24 L46 15 L46 33 Z" fill="#ffd648" opacity=".55"/><circle cx="24" cy="24" r="4" fill="#ffe680" stroke="#2a1d12" stroke-width="1.2"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
     : '';
@@ -2879,10 +2904,11 @@ const pips = (n: number, of = 5) => `<span class="pips" aria-label="${n} sur ${o
 /** The sheet of an enemy: what its colour says, in a few pips and labels. */
 function enemySheet(kind: string) {
   const s = specOf(kind);
-  const speed = s.speed <= 0 ? 0 : Math.max(1, Math.min(5, Math.round((s.speed / 3.3) * 5)));
+  const speed = kind === 'train' || kind === 'wagon' ? 3 : s.speed <= 0 ? 0 : Math.max(1, Math.min(5, Math.round((s.speed / 3.3) * 5))); // the Tortillard's rails drive it (iteration 49)
   const rate = Math.max(1, Math.min(5, Math.round(5 - (s.fireCd - 0.65) / 0.6)));
   const tags: string[] = [];
-  if (s.maxBullets === 0) tags.push('Tirs en cloche');
+  if (kind === 'train') tags.push('Pas de canon');
+  else if (s.maxBullets === 0) tags.push('Tirs en cloche');
   else tags.push(`${s.maxBullets} obus à la fois`, s.rocket ? `Fusées${s.bounces ? ` · ${s.bounces} rebond${s.bounces > 1 ? 's' : ''}` : ' sans rebond'}` : `${s.bounces} rebond${s.bounces > 1 ? 's' : ''}`);
   if (s.mines) tags.push(`${s.mines} mine${s.mines > 1 ? 's' : ''}`);
   if (isBossKind(kind)) tags.push(`Boss : ${s.hp ?? 1} coups`);
@@ -2890,6 +2916,8 @@ function enemySheet(kind: string) {
   if (s.invisible) tags.push('Invisible');
   if (kind === 'hopper') tags.push('Saute les murs');
   if (kind === 'watcher') tags.push('Phare tournant');
+  if (kind === 'train') tags.push('Roule sur des rails', 'Chasse-pierres');
+  if (kind === 'wagon') tags.push('Suit la locomotive');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
 }
 const MODES: [string, string, string, string][] = [
@@ -3572,7 +3600,7 @@ if (params.has('demo')) {
       newcomerCards(kinds, 0);
     },
     /** « Le manuel » (iteration 39): the home screen, then the manual opened on `tabs` one after the other (the bestiary page scrolls slowly). */
-    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'watcher') {
+    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'train') {
       clearScene();
       show('home');
       const lead = Math.min(1500, ms / 4), each = (ms - lead - 400) / tabs.length;
@@ -3581,7 +3609,7 @@ if (params.has('demo')) {
         clearInterval(roll);
         openManual(t);
         const page = $('#manual-page');
-        // the bestiary jumps to the newest card (« La Sauterelle », iteration 41), the terrain page rolls down to the weather
+        // the bestiary jumps to the newest card (« Le Tortillard », iteration 49), the terrain page rolls down to the weather
         if (t === 'bestiaire') later(() => page.querySelector(`[data-k="${focusKind}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 900);
         else if (t === 'terrain') {
           // the newest cell (« Les ponts-levis », iteration 48) comes into view; without one, the page rolls down to the weather
@@ -3791,6 +3819,23 @@ if (params.has('demo')) {
      * « Le Veilleur » (iteration 47): every Veilleur still sweeping turns its beam just short of the nearest hero it could
      * light up (so the beam sweeps onto it, turns red and the alarm rings on camera). Returns how many.
      */
+    /** « Le Tortillard » (iteration 49): the train stops whistling, then sets off the other way. */
+    reverse() {
+      for (const t of attract?.tanks ?? []) if (t.alive && t.rail && t.boss && t.boss.warn <= 0) { t.rail.next = 0; return 1; }
+      return 0;
+    },
+    /** And a hero lays a mine on the track a little ahead of the locomotive: the train runs onto it. */
+    trainMine() {
+      const g = attract;
+      const loco = g?.tanks.find((t) => t.alive && t.rail);
+      const hero = g?.tanks.find((t) => t.alive && t.kind === 'player');
+      if (!g || !loco?.rail || !hero) return 0;
+      const ahead = Math.sign(loco.rail.v || loco.rail.dir) * (Math.abs(loco.rail.v) * 1.1 + 1.6);
+      const [x, y] = g.railAt(loco.rail.s + ahead);
+      g.mines.push({ id: 900000 + g.tick, owner: hero.id, team: hero.team, x, y, t: 1, fuse: -1, dead: false });
+      g.events.push(['mineSet', x, y]);
+      return 1;
+    },
     watch() {
       const g = attract;
       if (!g) return 0;

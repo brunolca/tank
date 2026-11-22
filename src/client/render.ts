@@ -211,6 +211,10 @@ interface TankView {
   leapRing?: THREE.Mesh; // and the ring on the floor where it will land
   squash?: number; // the bounce of its landing, fading out
   lantern?: LanternView; // « Le Veilleur » (iteration 47): its lighthouse lamp and the beam it throws on the table
+  wheels?: THREE.Mesh[]; // « Le Tortillard » (iteration 49): the wheels of the locomotive and its wagons (they turn as it runs)
+  chimney?: THREE.Object3D; // and the locomotive's chimney, where the smoke puffs out
+  trainX?: number; // where it was last frame (how far the wheels turned)
+  trainY?: number;
   ice?: THREE.Group; // « Gel » (iteration 29): the ice cube it is frozen in (in the scene, not the tank: it gives away invisible tanks)
   iceT?: number; // seconds since it froze
 }
@@ -585,6 +589,34 @@ const watchGeo = {
   lens: new THREE.BoxGeometry(0.05, 0.12, 0.15),
 };
 const watchBandMat = new THREE.MeshStandardMaterial({ color: 0xf1e6cf, roughness: 0.5 });
+// « Le Tortillard » (iteration 49): a toy steam locomotive (boiler, cab, chimney, cowcatcher, red wheels) and its flat
+// wagons, each with a little cannon; its rails on the floor (sleepers and two steel rails)
+const trainGeo = {
+  chassis: new THREE.BoxGeometry(0.98, 0.08, 0.46),
+  wheel: new THREE.CylinderGeometry(0.11, 0.11, 0.05, 16),
+  hub: new THREE.CylinderGeometry(0.035, 0.035, 0.06, 8),
+  boiler: new THREE.CylinderGeometry(0.17, 0.17, 0.56, 18),
+  band: new THREE.CylinderGeometry(0.178, 0.178, 0.035, 18),
+  front: new THREE.CylinderGeometry(0.15, 0.15, 0.03, 18),
+  chimney: new THREE.CylinderGeometry(0.075, 0.05, 0.2, 12),
+  lip: new THREE.CylinderGeometry(0.095, 0.095, 0.04, 12),
+  dome: new THREE.SphereGeometry(0.075, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+  cab: new THREE.BoxGeometry(0.3, 0.3, 0.44),
+  roof: new THREE.BoxGeometry(0.38, 0.04, 0.5),
+  window: new THREE.BoxGeometry(0.12, 0.1, 0.45),
+  catcher: new THREE.BoxGeometry(0.16, 0.025, 0.44),
+  lampBox: new THREE.CylinderGeometry(0.045, 0.045, 0.07, 10),
+  bed: new THREE.BoxGeometry(0.78, 0.07, 0.46),
+  side: new THREE.BoxGeometry(0.78, 0.08, 0.03),
+  hook: new THREE.BoxGeometry(0.12, 0.03, 0.05),
+  sleeper: new THREE.BoxGeometry(0.11, 0.025, 0.62),
+  rail: new THREE.BoxGeometry(1, 0.03, 0.045),
+};
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0xc8402e, roughness: 0.45, metalness: 0.1 });
+const sootMat = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: 0.6, metalness: 0.3 });
+const cabWindowMat = new THREE.MeshStandardMaterial({ color: 0xfff2c0, roughness: 0.3, emissive: 0xffc860, emissiveIntensity: 0.5 });
+const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: 0.9 });
+const railMat = new THREE.MeshStandardMaterial({ color: 0xaeb6be, roughness: 0.3, metalness: 0.85 });
 const lobShadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
 const skateMat = new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.15, metalness: 0.95, emissive: 0x16222c, emissiveIntensity: 0.4 });
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc94a, roughness: 0.25, metalness: 0.85, emissive: 0x4a3000, emissiveIntensity: 0.5 });
@@ -1219,6 +1251,84 @@ function buildTank(info: TankInfo): TankView {
     view.tube = tube;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'train' || info.kind === 'wagon') {
+    // « Le Tortillard » (iteration 49): no treads, a chassis on red wheels
+    body.visible = false;
+    hull.children.forEach((c) => { if (c !== body) c.visible = false; });
+    view.wheels = [];
+    const loco = info.kind === 'train';
+    for (const x of loco ? [-0.3, 0, 0.3] : [-0.24, 0.24]) {
+      for (const z of [-0.25, 0.25]) {
+        const wh = new THREE.Mesh(trainGeo.wheel, wheelMat);
+        wh.rotation.x = Math.PI / 2;
+        wh.position.set(x, 0.11, z);
+        const hub = new THREE.Mesh(trainGeo.hub, goldMat);
+        hub.position.y = Math.sign(z) * 0.01;
+        wh.add(hub);
+        hull.add(wh);
+        view.wheels.push(wh);
+      }
+    }
+    for (const x of loco ? [-0.52] : [-0.44, 0.44]) {
+      const hk = new THREE.Mesh(trainGeo.hook, sootMat);
+      hk.position.set(x, 0.14, 0);
+      hull.add(hk);
+    }
+    if (loco) {
+      dome.visible = cap.visible = barrel.visible = muzzle.visible = false;
+      const ch = new THREE.Mesh(trainGeo.chassis, sootMat);
+      ch.position.y = 0.17;
+      const boiler = new THREE.Mesh(trainGeo.boiler, bodyMat);
+      boiler.rotation.z = Math.PI / 2;
+      boiler.position.set(0.12, 0.38, 0);
+      const face = new THREE.Mesh(trainGeo.front, sootMat);
+      face.rotation.z = Math.PI / 2;
+      face.position.set(0.41, 0.38, 0);
+      hull.add(ch, boiler, face);
+      for (const x of [-0.04, 0.16, 0.34]) {
+        const b = new THREE.Mesh(trainGeo.band, goldMat);
+        b.rotation.z = Math.PI / 2;
+        b.position.set(x, 0.38, 0);
+        hull.add(b);
+      }
+      const chim = new THREE.Mesh(trainGeo.chimney, sootMat);
+      chim.position.set(0.3, 0.63, 0);
+      const lip = new THREE.Mesh(trainGeo.lip, sootMat);
+      lip.position.set(0.3, 0.74, 0);
+      const steam = new THREE.Mesh(trainGeo.dome, goldMat);
+      steam.position.set(0.08, 0.54, 0);
+      const cab = new THREE.Mesh(trainGeo.cab, bodyMat);
+      cab.position.set(-0.3, 0.42, 0);
+      const win = new THREE.Mesh(trainGeo.window, cabWindowMat);
+      win.position.set(-0.27, 0.48, 0);
+      const roof = new THREE.Mesh(trainGeo.roof, sootMat);
+      roof.position.set(-0.3, 0.59, 0);
+      const catcher = new THREE.Mesh(trainGeo.catcher, goldMat);
+      catcher.rotation.z = -0.75;
+      catcher.position.set(0.5, 0.13, 0);
+      const lampBox = new THREE.Mesh(trainGeo.lampBox, goldMat);
+      lampBox.rotation.z = Math.PI / 2;
+      lampBox.position.set(0.44, 0.54, 0);
+      hull.add(chim, lip, steam, cab, win, roof, catcher, lampBox);
+      view.chimney = lip;
+      // the headlamp sits on the front of the boiler (the turret follows the hull for the locomotive)
+      lamp.position.set(0.49, 0.54 - 0.37, 0);
+    } else {
+      const bed = new THREE.Mesh(trainGeo.bed, bodyMat);
+      bed.position.y = 0.19;
+      hull.add(bed);
+      for (const z of [-0.22, 0.22]) {
+        const sd = new THREE.Mesh(trainGeo.side, barrelMat);
+        sd.position.set(0, 0.26, z);
+        hull.add(sd);
+      }
+      const post = new THREE.Mesh(trainGeo.lip, barrelMat);
+      post.scale.set(1.3, 2.4, 1.3);
+      post.position.y = 0.27;
+      hull.add(post);
+    }
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
   if (armorGroup) {
     view.armor = armorGroup;
     const collar = turret.getObjectByName('collar');
@@ -1808,8 +1918,9 @@ export class Renderer {
     for (let i = n; i < this.heads.length; i++) this.heads[i].intensity = 0;
   }
 
-  setLevel(tiles: number[], infos: TankInfo[], belts: number[] = []) {
+  setLevel(tiles: number[], infos: TankInfo[], belts: number[] = [], rail?: number[]) {
     this.beamTiles = tiles;
+    this.setRail(rail);
     this.nightApplied = -1; // the new tanks' lamps follow the current light
     for (const m of this.blocks.values()) this.levelGroup.remove(m);
     this.blocks.clear();
@@ -1888,6 +1999,57 @@ export class Renderer {
   /** The belt codes the slabs were laid from (iteration 48: a flip of the switches turns them round). */
   private beltCodes: number[] = [];
   /** « Les ponts-levis » (iteration 48): every belt turns round, its chevrons point the other way, with a puff of sawdust. */
+  /** « Le Tortillard » (iteration 49): lay its loop of rails on the floor (sleepers, two steel rails), or take it up. */
+  private railGroup?: THREE.Group;
+  setRail(pts?: number[]) {
+    if (this.railGroup) {
+      this.levelGroup.remove(this.railGroup);
+      this.railGroup.traverse((o) => { if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose(); });
+      this.railGroup = undefined;
+    }
+    if (!pts || pts.length < 6) return;
+    const n = pts.length / 2;
+    const segs: { x0: number; y0: number; x1: number; y1: number; len: number }[] = [];
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const x0 = pts[i * 2], y0 = pts[i * 2 + 1], x1 = pts[j * 2], y1 = pts[j * 2 + 1];
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      if (len < 1e-3) continue;
+      segs.push({ x0, y0, x1, y1, len });
+      total += len;
+    }
+    const g = new THREE.Group();
+    const gap = 0.42, count = Math.floor(total / gap);
+    const sleepers = new THREE.InstancedMesh(trainGeo.sleeper, sleeperMat, count);
+    const rails = new THREE.InstancedMesh(trainGeo.rail, railMat, segs.length * 2);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1);
+    let k = 0, acc = 0, si = 0;
+    for (const sg of segs) {
+      const ang = Math.atan2(sg.y1 - sg.y0, sg.x1 - sg.x0);
+      q.setFromAxisAngle(up, -ang);
+      // sleepers every `gap` along the loop
+      while (k < count && k * gap < acc + sg.len) {
+        const u = (k * gap - acc) / sg.len;
+        pos.set(sg.x0 + (sg.x1 - sg.x0) * u, 0.013, sg.y0 + (sg.y1 - sg.y0) * u);
+        sleepers.setMatrixAt(k++, m.compose(pos, q, sc));
+      }
+      acc += sg.len;
+      // the two rails, a little longer than the segment so the corners join up
+      for (const side of [-1, 1]) {
+        const ox = -Math.sin(ang) * 0.19 * side, oy = Math.cos(ang) * 0.19 * side;
+        pos.set((sg.x0 + sg.x1) / 2 + ox, 0.04, (sg.y0 + sg.y1) / 2 + oy);
+        rails.setMatrixAt(si++, m.compose(pos, q, new THREE.Vector3(sg.len + 0.05, 1, 1)));
+      }
+    }
+    sleepers.count = k;
+    sleepers.receiveShadow = rails.receiveShadow = true;
+    rails.castShadow = true;
+    g.add(sleepers, rails);
+    this.levelGroup.add(g);
+    this.railGroup = g;
+  }
+
   reverseBelts() {
     if (!this.beltMesh) return;
     const b = this.beltCodes.slice();
@@ -3141,6 +3303,7 @@ export class Renderer {
       this.tankBuffs(v, t, visible, dt);
       this.tankAlert(v, t, dt);
       if (v.armor) this.tankArmor(v, t, visible, dt);
+      if (v.wheels) { this.tankTrain(v, t, visible, dt); continue; } // « Le Tortillard »: on rails, no tread marks
       if (v.mound && this.tankDrill(v, t, dt)) continue;
       if (v.legs && this.tankHopper(v, t, dt)) continue;
       // tread marks
@@ -3241,6 +3404,30 @@ export class Renderer {
     g.attributes.color.needsUpdate = true;
   }
 
+  /**
+   * « Le Tortillard » (iteration 49): the wheels turn with the distance run, the chimney puffs smoke (more at speed),
+   * and while it stands whistling (FLAG_CHARGING) clouds of white steam burst out at its feet.
+   */
+  private tankTrain(v: TankView, t: RTank, visible: boolean, dt: number) {
+    if (v.trainX === undefined) { v.trainX = t.x; v.trainY = t.y; }
+    const mx = t.x - v.trainX, my = t.y - (v.trainY ?? t.y);
+    v.trainX = t.x; v.trainY = t.y;
+    const run = (mx * Math.cos(t.body) + my * Math.sin(t.body)) / v.scale;
+    for (const w of v.wheels!) w.rotation.y -= run / 0.11;
+    if (!visible || !v.chimney || dt <= 0) return;
+    const speed = Math.hypot(mx, my) / dt;
+    const fx = t.fx ?? 0;
+    const cx = t.x + Math.cos(t.body) * 0.3 * v.scale, cy = t.y + Math.sin(t.body) * 0.3 * v.scale;
+    if (Math.random() < (2 + speed * 5) * dt) {
+      this.smoke.emit({ x: cx, y: 0.78 * v.scale, z: cy, vx: -Math.cos(t.body) * speed * 0.3 + (Math.random() - 0.5) * 0.2, vy: 0.9 + Math.random() * 0.3, vz: -Math.sin(t.body) * speed * 0.3 + (Math.random() - 0.5) * 0.2, life: 1.1, s0: 0.12, s1: 0.42, c0: 0x9a9a9a, c1: 0xe6e6e6, drag: 1.2 });
+    }
+    if (fx & FLAG_CHARGING && Math.random() < 40 * dt) {
+      const s = Math.random() < 0.5 ? -1 : 1;
+      const px = -Math.sin(t.body) * s, py = Math.cos(t.body) * s;
+      this.smoke.emit({ x: t.x + px * 0.45 + (Math.random() - 0.5) * 0.6, y: 0.12, z: t.y + py * 0.45 + (Math.random() - 0.5) * 0.6, vx: px * 1.6, vy: 0.4 + Math.random() * 0.4, vz: py * 1.6, life: 0.7, s0: 0.1, s1: 0.38, c0: 0xffffff, c1: 0xf2f2f2, drag: 2.4 });
+    }
+  }
+
   /** Is this tank in the beam of a Veilleur (any of them, whatever its side)? */
   private inLight(list: RTank[], o: RTank): boolean {
     for (const t of list) {
@@ -3272,6 +3459,19 @@ export class Renderer {
         sp.distance = reach + 1.2; // the light stops at the wall it hits
         sp.color.setHex(0xfff0c0).lerp(this.tmpColor.setHex(0xff4a30), v.lantern.red);
         sp.intensity = 26 * this.night;
+      }
+      // « Le Tortillard » (iteration 49): the locomotive's headlamp lights the track ahead of it
+      for (const t of list) {
+        if (n >= this.beamLights.length) break;
+        const v = this.tanks.get(t.id);
+        if (!v?.chimney || !t.alive || !v.root.visible) continue;
+        const sp = this.beamLights[n++];
+        const dx = Math.cos(t.body), dy = Math.sin(t.body);
+        sp.position.set(t.x + dx * 0.8, 0.85, t.y + dy * 0.8);
+        sp.target.position.set(t.x + dx * 5, 0, t.y + dy * 5);
+        sp.distance = 7;
+        sp.color.setHex(0xffe2a0);
+        sp.intensity = 24 * this.night;
       }
     }
     for (let i = n; i < this.beamLights.length; i++) this.beamLights[i].intensity = 0;
@@ -3537,8 +3737,9 @@ export class Renderer {
     let glow = v.hit, col = 0xffffff;
     if (fx & FLAG_CHARGING) {
       glow = Math.max(glow, 0.45 + Math.sin(this.time * 30) * 0.35);
-      col = v.legs ? 0xb8e840 : v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : v.tube ? 0xffa040 : 0xff5a20;
-      if (!v.legs && Math.random() < 60 * dt) {
+      col = v.wheels ? 0xfff0d0 : v.legs ? 0xb8e840 : v.cloud ? 0x4f8dff : v.hopper ? 0xffc040 : v.magnet ? 0x5fb0ff : v.tube ? 0xffa040 : 0xff5a20;
+      if (v.wheels) glow *= 0.4; // the Tortillard whistles (its steam is drawn in tankTrain)
+      else if (!v.legs && Math.random() < 60 * dt) {
         // sparks sucked into the hull
         const a = Math.random() * Math.PI * 2, d = 1.4 + Math.random() * 0.6;
         this.glow.emit({ x: t.x + Math.cos(a) * d, y: 0.5, z: t.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.2, vz: -Math.sin(a) * d * 2.2, life: 0.4, s0: 0.03, s1: 0.1, c0: v.cloud ? 0xdcebff : 0xffd060, c1: v.cloud ? 0x3f7dff : 0xff4010 });
