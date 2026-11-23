@@ -515,6 +515,7 @@ export class Room extends DurableObject<Env> {
     game.wind = this.level.wind;
     game.fog = this.level.fog;
     if (pvp(this.mode)) { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
+    if (this.level.crates?.length && !pvp(this.mode)) { game.bonusKinds = this.level.crates; game.bonusNext = 3; game.bonusEvery = [7, 10]; } // a mission's own crates (iteration 52)
     if (this.bases) game.flags = newFlags(this.bases);
     if (this.mode === 'caisses') {
       game.hunt = newHunt();

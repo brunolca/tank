@@ -1,4 +1,4 @@
-import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -779,6 +779,7 @@ function clientTick() {
         localFireCd = mySpec.fireCd;
         localShots.push(performance.now());
         if (meNet[5] & BONUS_INFO.heavy.flag) sfx.heavyShot(); else sfx.shot(mySpec.rocket);
+        if (meNet[5] & BONUS_INFO.ghost.flag) sfx.ghostShot(); // « Passe-muraille » (iteration 52)
         const tip = TANK_R + 0.22;
         renderer.muzzle(px + Math.cos(aimAng) * tip, py + Math.sin(aimAng) * tip, aimAng, mySpec.rocket, myTankId);
       } else dryFire();
@@ -940,18 +941,18 @@ function onlineFrame(dt: number) {
   const ahead = Math.min(0.15, (performance.now() - latest.at) / 1000 + ping / 2000);
   for (const bl of latest.B.values()) {
     if (bl[6] !== myTankId) continue;
-    bullets.push({ id: bl[0], x: bl[1] + bl[3] * ahead, y: bl[2] + bl[4] * ahead, vx: bl[3], vy: bl[4], rocket: !!(bl[5] & 1), heavy: !!(bl[5] & SHELL_HEAVY), color: shellColor(bl[6]) });
+    bullets.push({ id: bl[0], x: bl[1] + bl[3] * ahead, y: bl[2] + bl[4] * ahead, vx: bl[3], vy: bl[4], rocket: !!(bl[5] & 1), heavy: !!(bl[5] & SHELL_HEAVY), ghost: !!(bl[5] & SHELL_GHOST), color: shellColor(bl[6]) });
   }
   for (const ba of a.B.values()) {
     if (ba[6] === myTankId) continue;
     const bb = b.B.get(ba[0]);
-    if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!(ba[5] & 1), heavy: !!(ba[5] & SHELL_HEAVY), color: shellColor(ba[6]) }); continue; }
+    if (!bb) { bullets.push({ id: ba[0], x: ba[1] + ba[3] * u * DT * (b.k - a.k), y: ba[2] + ba[4] * u * DT * (b.k - a.k), vx: ba[3], vy: ba[4], rocket: !!(ba[5] & 1), heavy: !!(ba[5] & SHELL_HEAVY), ghost: !!(ba[5] & SHELL_GHOST), color: shellColor(ba[6]) }); continue; }
     const bw = jumped(ba[1], ba[2], bb[1], bb[2], u);
-    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!(ba[5] & 1), heavy: !!(ba[5] & SHELL_HEAVY), color: shellColor(ba[6]) });
+    bullets.push({ id: ba[0], x: lerp(ba[1], bb[1], bw), y: lerp(ba[2], bb[2], bw), vx: bb[3], vy: bb[4], rocket: !!(ba[5] & 1), heavy: !!(ba[5] & SHELL_HEAVY), ghost: !!(ba[5] & SHELL_GHOST), color: shellColor(ba[6]) });
   }
   renderer.syncBullets(bullets, dt);
   lastBullets = bullets;
-  const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3], seed: m[4] ? (m[4] - 1) / 10 : undefined }));
+  const mines: RMine[] = a.M.map((m) => ({ id: m[0], x: m[1], y: m[2], blink: !!m[3], seed: m[4] ? (m[4] - 1) / 10 : undefined, remote: m[6] === 1 }));
   renderer.syncMines(mines);
   lastMines = mines;
   const bonuses: RBonus[] = a.P.map((c) => ({ id: c[0], x: c[1], y: c[2], kind: c[3], blink: !!c[4], gold: c[5] === 1 }));
@@ -970,6 +971,7 @@ function onlineFrame(dt: number) {
   renderBuffs(myFlags & 1 ? myFlags : 0);
 }
 
+const crateTips = new Set<BonusKind>();
 function handleEvent(e: GameEvent, audible: boolean) {
   if (!reel) film.event(e); // « Le ralenti » (iteration 32): everything that happens goes on film
   if (online) { eventLog.push([Math.round(renderTick), ...e]); if (eventLog.length > 60) eventLog.shift(); }
@@ -977,7 +979,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
     case 'shot':
       if (e[5] === myTankId && online) break;
       renderer.muzzle(e[1], e[2], e[3], !!(e[4] & 1), e[5]);
-      if (audible) { if (e[4] & SHELL_HEAVY) sfx.heavyShot(); else sfx.shot(!!(e[4] & 1)); }
+      if (audible) { if (e[4] & SHELL_HEAVY) sfx.heavyShot(); else sfx.shot(!!(e[4] & 1)); if (e[4] & SHELL_GHOST) sfx.ghostShot(); }
       break;
     case 'bounce':
       renderer.spark(e[1], e[2]);
@@ -1009,7 +1011,15 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (e[1] === reelWanted && !online) { reelWanted = -1; queueReel(true); }
       break;
     case 'mineSet':
-      if (audible) sfx.mineSet();
+      if (audible) { sfx.mineSet(); if (e[3]) sfx.remoteSet(); }
+      break;
+    case 'detonate': // « Détonateur » (iteration 52): its owner pressed the button
+      renderer.detonate(e[1], e[2]);
+      if (audible) sfx.detonate();
+      break;
+    case 'ghost': // « Passe-muraille » (iteration 52): a ghost shell goes into a wall (0), comes out (1) or fades inside (2)
+      renderer.ghostPuff(e[1], e[2], e[3]);
+      if (audible && e[3] === 0) sfx.ghostPass();
       break;
     case 'ff': {
       const victim = tankName(e[3]), killer = tankName(e[4]);
@@ -1161,6 +1171,11 @@ function handleEvent(e: GameEvent, audible: boolean) {
       }
       floater(e[1], e[2], `${info.label} !`, info.color);
       if (audible && kind !== 'freeze') sfx.bonus(); // the frost has its own sound
+      // the two crates of iteration 52 explain themselves the first time one is grabbed
+      if (online && e[4] === myTankId && (kind === 'ghost' || kind === 'remote') && !crateTips.has(kind)) {
+        crateTips.add(kind);
+        toast(kind === 'ghost' ? 'Passe-muraille : pendant 10 secondes, tes obus traversent le premier mur qu’ils touchent !' : 'Détonateur : tes mines ne sautent plus au passage… Rappuie sur la touche des mines pour les faire sauter !', 4200);
+      }
       break;
     }
     case 'freeze': // « Gel » (iteration 29): a wave of frost from the one who grabbed it
@@ -2197,6 +2212,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   g.wind = lvl.wind ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && Math.random() < 0.16 ? Math.floor(Math.random() * 8) * (Math.PI / 4) : undefined);
   // the fog (iteration 26): its own setting, and sometimes on the home screen (on calm, daylit tables)
   g.fog = lvl.fog ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && !g.night && g.wind === undefined && Math.random() < 0.16 ? 1 + Math.floor(Math.random() * 999) : undefined);
+  if (lvl.crates?.length) { g.bonusKinds = lvl.crates; g.bonusNext = 3; g.bonusEvery = [7, 10]; } // a mission's own crates (iteration 52)
   if (opts.rich) { g.bonusNext = 1.2; g.bonusEvery = [2.5, 4]; g.bonusCap = 3; }
   if (opts.daily) applyTwist(g, dailyTwist(opts.daily.day));
   if (opts.heroes) {
@@ -2630,10 +2646,10 @@ function attractFrame(dt: number) {
   updateBoss(tanks, (id) => g.tankById(id)?.hp ?? 0, (id) => g.tankById(id)?.maxHp ?? 0);
   const bullets: RBullet[] = g.bullets.map((b) => {
     const o = g.tankById(b.owner);
-    return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, heavy: b.heavy, color: o?.kind === 'player' ? o.color : undefined };
+    return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, rocket: b.rocket, heavy: b.heavy, ghost: !!b.ghost, color: o?.kind === 'player' ? o.color : undefined };
   });
   renderer.syncBullets(bullets, dt);
-  const mines: RMine[] = g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined }));
+  const mines: RMine[] = g.mines.map((m) => ({ id: m.id, x: m.x, y: m.y, blink: m.fuse >= 0 || (m.seed !== undefined && m.t > m.seed - SEED_BLINK), seed: m.seed !== undefined ? m.t : undefined, remote: !!m.remote }));
   renderer.syncMines(mines);
   const bonuses: RBonus[] = g.bonuses.map((c): RBonus => ({ id: c.id, x: c.x, y: c.y, kind: BONUS_KINDS.indexOf(c.kind), blink: c.t > 13 && !c.gold, gold: c.gold }));
   renderer.syncBonuses(bonuses);
@@ -3035,6 +3051,8 @@ const CRATES: [BonusKind, string][] = [
   ['fan', 'trois obus d’un coup, en éventail'],
   ['freeze', 'tous tes adversaires gèlent sur place, pris dans un cube de glace'],
   ['heavy', 'de gros obus qui traversent le liège et brisent les obus d’en face'],
+  ['ghost', 'tes obus passent à travers le premier mur qu’ils touchent, puis ricochent comme d’habitude'],
+  ['remote', 'tes mines ne sautent plus au passage : elles attendent que tu rappuies sur la touche des mines'],
 ];
 // enemies met in the campaign, the challenges, the boss rush… (iteration 35): the others are greyed out in the bestiary
 const MET_KEY = 'tanks.vus';
@@ -4325,6 +4343,63 @@ if (params.has('demo')) {
     /** « Le ralenti » (iteration 32): play the last destruction again now (true when there was one in the last seconds). */
     replay() { stopReel(); return startReel(true); },
     /** A hero fires a ricochet (two bounces if it can) at a foe it cannot hit straight; its fall plays again in slow motion. */
+    /** « Passe-muraille » (iteration 52): a hero fires a ghost shell straight through a wall at a foe hidden behind it. */
+    ghostShot() {
+      const g = attract;
+      if (!g) return 0;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player') continue;
+        const had = h.buffs.ghost;
+        h.buffs.ghost = undefined;
+        let best: { ang: number; d: number; foe: number } | undefined;
+        for (const f of g.tanks) {
+          if (!f.alive || f.team === h.team || f.kind === 'train') continue;
+          const ang = Math.atan2(f.y - h.y, f.x - h.x), d = Math.hypot(f.x - h.x, f.y - h.y);
+          if (g.traceShot(h, ang, 0).hit === f) continue; // in plain sight: no need for a ghost
+          h.buffs.ghost = 1;
+          const through = g.traceShot(h, ang, 0).hit === f;
+          h.buffs.ghost = undefined;
+          if (through && (!best || d < best.d)) best = { ang, d, foe: f.id };
+        }
+        h.buffs.ghost = Math.max(had ?? 0, 2);
+        if (!best) continue;
+        const keep = h.turret;
+        h.turret = best.ang;
+        h.fireCd = 0;
+        const fired = g.tryFire(h);
+        h.turret = keep;
+        if (fired) { reelWanted = best.foe; return 1; }
+      }
+      return 0;
+    },
+    /** « Détonateur » (iteration 52): a hero's remote mine on the way of the nearest enemy (the hero sets it off when it rolls on). */
+    remoteTrap() {
+      const g = attract;
+      if (!g) return 0;
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      const foes = g.tanks.filter((t) => t.alive && t.team !== heroes[0]?.team && !isBossKind(t.kind) && t.spec.speed > 0 && !t.car);
+      if (!heroes.length || !foes.length) return 0;
+      let best: { x: number; y: number; d: number; foe: number; hero: Tank } | undefined;
+      for (const f of foes) {
+        const cands = (f.ai?.path ?? []).slice(1, 5);
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) cands.push((Math.floor(f.y) + dy) * W + Math.floor(f.x) + dx);
+        for (const c of cands) {
+          if (c < 0 || c >= W * H || g.tiles[c] !== Tile.Empty) continue;
+          const x = (c % W) + 0.5, y = Math.floor(c / W) + 0.5, d = Math.hypot(f.x - x, f.y - y);
+          if (d < 1.3 || d > 2.6 || heroes.some((h) => Math.hypot(h.x - x, h.y - y) < 3.2)) continue;
+          if (g.mines.some((m) => Math.hypot(m.x - x, m.y - y) < 1)) continue;
+          const onWay = (f.ai?.path ?? []).includes(c) ? -2 : 0; // on its planned way first
+          const hero = heroes.reduce((a, b) => (Math.hypot(a.x - x, a.y - y) <= Math.hypot(b.x - x, b.y - y) ? a : b));
+          if (!best || d + onWay < best.d) best = { x, y, d: d + onWay, foe: f.id, hero };
+        }
+      }
+      if (!best) return 0;
+      g.giveBonus(best.hero, 'remote');
+      g.mines.push({ id: 930000 + g.tick, owner: best.hero.id, team: best.hero.team, x: best.x, y: best.y, t: 0.5, fuse: -1, dead: false, remote: true });
+      g.events.push(['mineSet', best.x, best.y, 1]);
+      reelWanted = best.foe;
+      return 1;
+    },
     trickShot() {
       const g = attract;
       if (!g) return 0;

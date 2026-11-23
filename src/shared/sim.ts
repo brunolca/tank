@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -181,6 +181,8 @@ export interface Buffs {
   turbo: number;
   fan: number;
   heavy?: number; // « Gros calibre » (iteration 29)
+  ghost?: number; // « Passe-muraille » (iteration 52)
+  remote?: number; // « Détonateur » (iteration 52)
   invuln: number; // grace period right after a shield breaks
 }
 
@@ -208,6 +210,9 @@ export interface Bullet {
   cork?: boolean; // « Brise-liège » (iteration 19): the shell blows up the cork it hits instead of bouncing off it
   heavy?: boolean; // « Gros calibre » (iteration 29): it goes through cork (blowing it up) and smashes the lighter shells it meets
   hits?: number; // « Le ralenti » (iteration 32): walls it bounced off so far (the replay tells « Ricochet ×2 ! »)
+  ghost?: number; // « Passe-muraille » (iteration 52): 1 the next wall it meets lets it through, 2 inside that wall right now
+  depth?: number; // how far it has flown inside the wall
+  through?: boolean; // it went into a wall (the slow motion says « À travers le mur ! »)
 }
 
 /** A lightning strike announced on the floor (storm missions): it falls when t reaches BOLT_WARN. */
@@ -229,6 +234,7 @@ export interface Mine {
   blast?: number; // radius of its blast (MINE_BLAST when omitted; « Grand souffle » makes it wider)
   seed?: number; // a seed of the Semeur (iteration 25): seconds until it bursts on its own (no tank sets it off)
   by?: number; // tank whose shell set it off (directly or through a chain of blasts): the blast is theirs
+  remote?: boolean; // « Détonateur » (iteration 52): no tank sets it off by rolling over it, its owner does (mine key)
 }
 
 interface AIState {
@@ -261,6 +267,9 @@ interface AIState {
 }
 
 type Pt = { x: number; y: number };
+
+/** Is the whole shell at (x, y) over the table (not over its frame)? */
+const inTable = (x: number, y: number) => x - BULLET_R >= 0 && y - BULLET_R >= 0 && x + BULLET_R < W && y + BULLET_R < H;
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
   ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5, mechanic: 6.5,
@@ -343,6 +352,8 @@ export class Game {
   bonusNext = 8;
   bonusEvery: [number, number] = [13, 19];
   bonusCap = 2;
+  /** Only these kinds fall (a mission may choose its crates, iteration 52); every kind when undefined. */
+  bonusKinds?: readonly BonusKind[];
   /** Night mission: the AI only sees foes close by, or those whose muzzle flash just lit up. */
   night = false;
   /** Extra bounces for every player shell (the « Ricochets fous » daily twist). */
@@ -364,6 +375,7 @@ export class Game {
    * right under their nose): they drive straight into the trap. Seeds of the Semeur are never buried.
    */
   hiddenMine(m: Mine, t: Tank): boolean {
+    if (m.remote && m.team !== t.team && m.fuse < 0) return true; // « Détonateur » (iteration 52): it never blinks, foes drive over it unawares
     return (this.sand || this.snowy) && m.team !== t.team && m.fuse < 0 && m.seed === undefined && this.buried(m) && Math.hypot(m.x - t.x, m.y - t.y) > SAND_SPOT + t.r;
   }
   /** Is this mine buried, in the sand (iteration 36) or under the snow (iteration 42, deep or packed: the snowfall covers it)? */
@@ -522,6 +534,8 @@ export class Game {
       if (bf.turbo > 0) bf.turbo -= DT;
       if (bf.fan > 0) bf.fan -= DT;
       if (bf.heavy) bf.heavy = bf.heavy > DT ? bf.heavy - DT : undefined;
+      if (bf.ghost) bf.ghost = bf.ghost > DT ? bf.ghost - DT : undefined;
+      if (bf.remote) bf.remote = bf.remote > DT ? bf.remote - DT : undefined;
       if (bf.invuln > 0) bf.invuln -= DT;
       if (t.reveal > 0) t.reveal -= DT;
       if (t.reshield !== undefined && !bf.shield) {
@@ -942,6 +956,7 @@ export class Game {
       t.hp = t.maxHp;
       t.buffs.bounce = t.buffs.turbo = t.buffs.fan = 0;
       t.buffs.heavy = t.chill = undefined;
+      t.buffs.ghost = t.buffs.remote = undefined;
       t.buffs.shield = false;
       t.buffs.invuln = CTF_SAFE;
       t.fireCd = 0.4;
@@ -1110,7 +1125,8 @@ export class Game {
       if (this.tanks.some((t) => t.alive && near(t.x, t.y, 2.5))) continue;
       if (this.mines.some((m) => near(m.x, m.y, MINE_BLAST + 0.3))) continue;
       if (this.bonuses.some((o) => near(o.x, o.y, 3))) continue;
-      const k = kind ?? BONUS_KINDS[Math.floor(Math.random() * BONUS_KINDS.length)];
+      const pool = this.bonusKinds?.length ? this.bonusKinds : BONUS_KINDS;
+      const k = kind ?? pool[Math.floor(Math.random() * pool.length)];
       const c: Bonus = { id: this.nextId++, kind: k, x, y, t: 0, dead: false };
       this.bonuses.push(c);
       this.events.push(['crate', x, y, BONUS_KINDS.indexOf(k)]);
@@ -1655,7 +1671,7 @@ export class Game {
     w.chill = undefined;
     w.buffs.shield = false;
     w.buffs.bounce = w.buffs.turbo = w.buffs.fan = 0;
-    w.buffs.heavy = undefined;
+    w.buffs.heavy = w.buffs.ghost = w.buffs.remote = undefined;
     w.buffs.invuln = MECA_SAFE;
     w.fireCd = Math.max(w.fireCd, MECA_SAFE + 0.7);
     w.loot = undefined;
@@ -2048,7 +2064,7 @@ export class Game {
     const tip = t.r + 0.22;
     const x = t.x + dx * tip, y = t.y + dy * tip;
     const sp = t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED;
-    this.events.push(['shot', r2(x), r2(y), r2(t.turret), (t.spec.rocket ? 1 : 0) | (t.buffs.heavy ? SHELL_HEAVY : 0), t.id]);
+    this.events.push(['shot', r2(x), r2(y), r2(t.turret), (t.spec.rocket ? 1 : 0) | (t.buffs.heavy ? SHELL_HEAVY : 0) | (t.buffs.ghost ? SHELL_GHOST : 0), t.id]);
     if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, t.x + dx * t.r * 0.6, t.y + dy * t.r * 0.6, BULLET_R)) {
       this.events.push(['pop', r2(x), r2(y)]);
       return true;
@@ -2056,7 +2072,8 @@ export class Game {
     const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0) + (t.kind === 'player' ? this.playerBounces : 0);
     const heavy = t.buffs.heavy ? true : undefined;
     const cork = heavy || (t.ranks && t.ranks[0] >= 3) ? true : undefined;
-    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, cork, heavy };
+    const ghost = t.buffs.ghost ? 1 : undefined;
+    const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, cork, heavy, ghost };
     this.bullets.push(main);
     if (t.buffs.fan > 0) {
       main.volley = main.id;
@@ -2065,21 +2082,53 @@ export class Game {
         const a = t.turret + da, ex = Math.cos(a), ey = Math.sin(a);
         const fx = t.x + ex * tip, fy = t.y + ey * tip;
         if (bulletBlocked(this.tiles, fx, fy, BULLET_R)) continue;
-        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id, cork, heavy });
+        this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id, cork, heavy, ghost });
       }
     }
     return true;
   }
 
   tryMine(t: Tank): boolean {
-    if (t.mineCd > 0 || this.ownMines(t) >= t.spec.mines) return false;
+    if (t.mineCd > 0) return false;
+    // « Détonateur » (iteration 52): with remote mines on the table, the mine key sets them all off instead
+    if (this.detonate(t)) { t.mineCd = 0.6; return true; }
+    if (this.ownMines(t) >= t.spec.mines) return false;
     for (const m of this.mines) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) < MINE_R * 3) return false;
     t.mineCd = 0.6;
     const blast = t.ranks && t.ranks[1] >= 2 ? MINE_BLAST * BIG_BLAST : undefined;
-    this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: t.x, y: t.y, t: 0, fuse: -1, dead: false, blast });
-    this.events.push(['mineSet', r2(t.x), r2(t.y)]);
+    const remote = t.buffs.remote ? true : undefined;
+    this.mines.push({ id: this.nextId++, owner: t.id, team: t.team, x: t.x, y: t.y, t: 0, fuse: -1, dead: false, blast, remote });
+    this.events.push(remote ? ['mineSet', r2(t.x), r2(t.y), 1] : ['mineSet', r2(t.x), r2(t.y)]);
     if (this.roll(t.id, 4) === 0) this.botSay(t, EMOTE_ATTENTION); // an AI teammate or rival warns about its own mine
     return true;
+  }
+
+  /** « Détonateur » (iteration 52): every remote mine of t still waiting is lit (a very short fuse); false when it had none. */
+  detonate(t: Tank): boolean {
+    let n = 0;
+    for (const m of this.mines) {
+      if (m.dead || !m.remote || m.owner !== t.id || m.fuse >= 0) continue;
+      m.fuse = REMOTE_FUSE;
+      this.events.push(['detonate', r2(m.x), r2(m.y), t.id]);
+      n++;
+    }
+    return n > 0;
+  }
+
+  /** A waiting remote mine of t, when setting it off now would catch a foe and spare t and its friends (the AI's trigger finger). */
+  remoteWorth(t: Tank): boolean {
+    let worth = false;
+    for (const m of this.mines) {
+      if (m.dead || !m.remote || m.owner !== t.id || m.fuse >= 0) continue;
+      const R = (m.blast ?? MINE_BLAST) + 0.1;
+      for (const o of this.tanks) {
+        if (!o.alive || under(o)) continue;
+        const d = Math.hypot(o.x - m.x, o.y - m.y);
+        if (o.team === t.team && d < R + 0.5) return false; // never with a friend (or itself) in the blast
+        if (o.team !== t.team && d < R - 0.15) worth = true;
+      }
+    }
+    return worth;
   }
 
   // -------------------------------------------------------------- « Le Tortillard » (iteration 49)
@@ -2252,6 +2301,7 @@ export class Game {
       if (windy) [b.vx, b.vy] = bend(b.vx, b.vy, gx, gy, dt); // the wind bends it, never speeds it up
       let bounced = false;
       const ox = b.x, oy = b.y;
+      if (b.ghost && this.ghostStep(b, dt)) continue; // « Passe-muraille » (iteration 52): through the wall, not off it
       const nx = b.x + b.vx * dt;
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
         if (this.gates) this.pressSwitch(nx, b.y, b.owner);
@@ -2291,7 +2341,7 @@ export class Game {
           if ((t.kind === 'rampart' || t.kind === 'train') && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22), and the Tortillard's cowcatcher (iteration 49)
           if (t.mag?.on && b.owner !== t.id) { this.catchShell(t, b); break; } // the Aimant catches it (iteration 27)
           b.dead = true;
-          this.killTank(t, this.tankById(b.owner), KO_SHELL, b.hits ?? 0);
+          this.killTank(t, this.tankById(b.owner), b.through ? KO_GHOST : KO_SHELL, b.hits ?? 0);
           break;
         }
       }
@@ -2367,7 +2417,7 @@ export class Game {
       if (m.dead) continue;
       m.t += dt;
       if (this.belts.length) [m.x, m.y] = beltStep(this.tiles, this.belts, m.x, m.y, MINE_R, dt); // mines ride the belts too
-      if (m.fuse < 0 && m.t > 0.4 && m.seed === undefined) {
+      if (m.fuse < 0 && m.t > 0.4 && m.seed === undefined && !m.remote) {
         for (const t of this.tanks) {
           if (!t.alive || t.team === m.team || t.id === m.owner || under(t)) continue;
           if (Math.hypot(t.x - m.x, t.y - m.y) < MINE_TRIGGER_R + t.r - TANK_R) { m.fuse = 0.55; break; }
@@ -2376,9 +2426,38 @@ export class Game {
       if (m.fuse >= 0) {
         m.fuse -= dt;
         if (m.fuse <= 0) this.explodeMine(m);
-      } else if (m.t >= (m.seed ?? MINE_FUSE)) this.explodeMine(m);
+      } else if (m.t >= (m.seed ?? (m.remote ? REMOTE_LIFE : MINE_FUSE))) this.explodeMine(m);
     }
     this.mines = this.mines.filter((m) => !m.dead);
+  }
+
+  /**
+   * « Passe-muraille » (iteration 52): a ghost shell about to hit a wall flies straight into it instead, and out the other
+   * side (it is a plain shell again from there: the next wall it bounces off). It cannot get through the edge of the
+   * table, and fades away inside a wall thicker than GHOST_DEPTH. True when it moved this step (skip the usual bounces).
+   */
+  ghostStep(b: Bullet, dt: number): boolean {
+    const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt;
+    if (b.ghost === 1) {
+      if (!bulletBlocked(this.tiles, nx, b.y, BULLET_R) && !bulletBlocked(this.tiles, b.x, ny, BULLET_R) && !bulletBlocked(this.tiles, nx, ny, BULLET_R)) return false;
+      if (!inTable(nx, ny)) return false; // the frame of the table: a plain bounce, it keeps its ghost for the next wall
+      b.ghost = 2;
+      b.depth = 0;
+      b.through = true;
+      this.events.push(['ghost', r2(b.x), r2(b.y), 0]);
+    }
+    b.x = nx; b.y = ny;
+    b.depth = (b.depth ?? 0) + Math.hypot(b.vx, b.vy) * dt;
+    if (!inTable(b.x, b.y) || b.depth > GHOST_DEPTH) {
+      b.dead = true;
+      this.events.push(['ghost', r2(b.x), r2(b.y), 2]);
+      return true;
+    }
+    if (!bulletBlocked(this.tiles, b.x, b.y, BULLET_R)) {
+      b.ghost = b.depth = undefined; // out the other side
+      this.events.push(['ghost', r2(b.x), r2(b.y), 1]);
+    }
+    return true;
   }
 
   /** « Brise-liège »: the cork cells a shell at (x, y) touches are blown away; false when it touched no cork. */
@@ -2648,7 +2727,7 @@ export class Game {
     const b = t.buffs;
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
-      | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
+      | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (b.ghost ? BONUS_INFO.ghost.flag : 0) | (b.remote ? BONUS_INFO.remote.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
       | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0) | (t.watch && t.watch.foe ? FLAG_SPOT : 0) | (t.fix && t.fix.t > 0 ? FLAG_REPAIR : 0) | (t.patched ? FLAG_PATCHED : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
@@ -2670,11 +2749,13 @@ export class Game {
     return this.bonuses.map((c): NetBonus => c.gold ? [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), 0, 1] : [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
   }
   netBullets(): NetBullet[] {
-    return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), (b.rocket ? 1 : 0) | (b.heavy ? SHELL_HEAVY : 0), b.owner]);
+    return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), (b.rocket ? 1 : 0) | (b.heavy ? SHELL_HEAVY : 0) | (b.ghost ? SHELL_GHOST : 0), b.owner]);
   }
   netMines(): NetMine[] {
     return this.mines.map((m): NetMine => {
       // « Le réticule » (iteration 44): a player's mine carries its owner (6th field, 5th left at 0) so the reticle can count them; older tabs ignore it
+      // « Détonateur » (iteration 52): a remote mine has a 7th field at 1 (and the owner in the 6th, whoever laid it)
+      if (m.remote) return [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > REMOTE_LIFE - 2.5 ? 1 : 0, 0, m.owner, 1];
       if (m.seed === undefined) return this.tankById(m.owner)?.kind === 'player' ? [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0, 0, m.owner] : [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > MINE_FUSE - 2.5 ? 1 : 0];
       // a seed (iteration 25): fifth field, its age in tenths of a second plus one (older clients ignore it)
       return [m.id, r2(m.x), r2(m.y), m.fuse >= 0 || m.t > m.seed - SEED_BLINK ? 1 : 0, 1 + Math.round(m.t * 10)];
@@ -2691,7 +2772,7 @@ export class Game {
     // in the wind (iteration 23), the AI follows the shell's curve with the gust of the moment (which may change in flight)
     const segs = this.wind !== undefined
       ? castWindy(this.tiles, sx, sy, ang, t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED, bounces, this.gust[0], this.gust[1], 32)
-      : castRicochet(this.tiles, sx, sy, ang, bounces, 45);
+      : castRicochet(this.tiles, sx, sy, ang, bounces, 45, !!t.buffs.ghost); // a ghost shell (iteration 52) goes through its first wall
     let acc = 0;
     for (let si = 0; si < segs.length; si++) {
       const s = segs[si];
@@ -2765,12 +2846,14 @@ export class Game {
     if (t.boss && t.boss.warn > 0) { if (t.kind !== 'bombard') t.turret += DT * 2.5; return; }
     if (t.mortar && t.mortar.warn > 0) return; // the Mortier holds still while it aims (updateMortar turns its barrel)
 
+    // « Détonateur » (iteration 52): a foe on one of its remote mines, nobody friendly near: boom
+    if (this.remoteWorth(t) && t.mineCd <= 0) this.detonate(t);
     if (ai.think <= 0) {
       ai.think = spec.skill >= 2 ? 0.18 : 0.3;
       this.aiThinkAim(t, foe);
       ai.seed = t.kind === 'player' ? this.seedTarget(t) : undefined;
       if (ai.seed) { ai.aim = Math.atan2(ai.seed.y - t.y, ai.seed.x - t.x); ai.aimValid = true; }
-      if (spec.mines > 0 && ai.mineCd <= 0 && this.ownMines(t) < spec.mines) {
+      if (spec.mines > 0 && ai.mineCd <= 0 && this.ownMines(t) < spec.mines && !this.mines.some((m) => m.remote && m.owner === t.id && !m.dead)) {
         const d = Math.hypot(foe.x - t.x, foe.y - t.y);
         const allyNear = this.tanks.some((o) => o.alive && o !== t && o.team === t.team && Math.hypot(o.x - t.x, o.y - t.y) < MINE_BLAST + 0.6);
         // never under a foe's nose (it would set it off before we get away), and only with a way out (iteration 13:

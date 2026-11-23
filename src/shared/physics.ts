@@ -1,4 +1,4 @@
-import { BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, isPit, Tile } from './constants';
+import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, isPit, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -88,7 +88,7 @@ export function bulletBlocked(tiles: ArrayLike<number>, x: number, y: number, r:
 export interface Segment { x0: number; y0: number; x1: number; y1: number }
 
 /** Cast a ray that ricochets off bullet-solid tiles and goes through portals. Point-sized (bullet radius approximated by inflating the walls a bit). */
-export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang: number, bounces: number, maxLen = 60): Segment[] {
+export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang: number, bounces: number, maxLen = 60, ghost = false): Segment[] {
   const segs: Segment[] = [];
   let dx = Math.cos(ang), dy = Math.sin(ang);
   let remaining = maxLen;
@@ -105,12 +105,39 @@ export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang
     }
     segs.push({ x0: x, y0: y, x1: hit.x, y1: hit.y });
     if (!hit.hit) break;
+    if (ghost) {
+      // « Passe-muraille » (iteration 52): the first wall inside the table lets the shell through (see Game.ghostStep)
+      const out = ghostExit(tiles, hit.x, hit.y, dx, dy);
+      if (out !== undefined) ghost = false; // the frame: a plain bounce, the ghost waits for the next wall
+      if (out) {
+        remaining -= out.depth;
+        segs.push({ x0: hit.x, y0: hit.y, x1: out.x, y1: out.y });
+        x = out.x; y = out.y;
+        continue;
+      }
+      if (out === null) break; // it fades away in a wall too thick
+    }
     if (hit.axis === 0) dx = -dx; else dy = -dy;
     x = hit.x + dx * 1e-4;
     y = hit.y + dy * 1e-4;
     b++;
   }
   return segs;
+}
+
+/**
+ * Where a ghost shell entering a wall at (x, y) along (dx, dy) comes out: the first point clear of every wall, undefined
+ * when that wall is the frame of the table (it bounces off as usual), null when it would fade inside (thicker than GHOST_DEPTH).
+ */
+function ghostExit(tiles: ArrayLike<number>, x: number, y: number, dx: number, dy: number): { x: number; y: number; depth: number } | null | undefined {
+  const R = 0.09, step = 0.05, inside = (px: number, py: number) => px - R >= 0 && py - R >= 0 && px + R < W && py + R < H;
+  if (!inside(x + dx * 0.2, y + dy * 0.2)) return undefined;
+  for (let d = step; d <= GHOST_DEPTH; d += step) {
+    const px = x + dx * d, py = y + dy * d;
+    if (!inside(px, py)) return null;
+    if (!bulletBlocked(tiles, px, py, R)) return { x: px, y: py, depth: d };
+  }
+  return null;
 }
 
 /**

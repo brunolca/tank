@@ -1,7 +1,7 @@
 {
-  "iteration": 51,
+  "iteration": 52,
   "date": "2026-11-23",
-  "title": "Le Mécano",
+  "title": "Le Passe-muraille",
   "journal": [
     {
       "iteration": 1,
@@ -620,6 +620,18 @@
         "Un tank réparé repart rafistolé, deux bandes de sparadrap sur la caisse : il tombe au premier coup et ne se répare qu’une fois. Les boss et les tanks tombés dans un trou restent à terre.",
         "Pendant qu’il travaille, le Mécano ne bouge plus et ne tire plus : c’est le moment de l’abattre. Deux Mécanos se réparent l’un l’autre, alors vise-les ensemble !",
         "Deux nouvelles missions de nuit, « Le garage » (67) et « La casse » (68, sous l’orage), puis le Mécano se glisse dans les missions générées. Il a sa fiche au bestiaire et son pinceau dans l’atelier."
+      ]
+    },
+    {
+      "iteration": 52,
+      "date": "2026-11-23",
+      "title": "Le Passe-muraille",
+      "notes": [
+        "Nouvelle caisse : le Passe-muraille. Pendant 10 secondes, tes obus traversent le premier mur qu’ils touchent, pâles comme des fantômes, puis ricochent comme d’habitude.",
+        "Plus de cachette : un obus fantôme débusque même un tank tapi dans un tunnel. Seuls le bord de la table et les murs trop épais l’arrêtent.",
+        "Nouvelle caisse : le Détonateur. Pendant 14 secondes, tes mines portent une petite antenne verte ; elles ne sautent plus au passage et les ennemis ne s’en méfient pas. Rappuie sur la touche des mines… et boum !",
+        "Nouvelle mission faite main, « Les murs épais » (69) : des murs de deux cases d’épaisseur, et seules ces deux nouvelles caisses y tombent. Le Pilleur, lui, les veut aussi.",
+        "Tes coéquipiers et les rivaux savent s’en servir : ils tirent à travers les murs et font sauter leurs pièges au bon moment. Le manuel compte désormais huit caisses."
       ]
     }
   ]

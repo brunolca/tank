@@ -109,6 +109,34 @@ export const sfx = {
     tone(t, 0.08, 660, 660, 0.15, 'square');
     tone(t + 0.1, 0.1, 880, 880, 0.15, 'square');
   },
+  /** « Détonateur » (iteration 52): the remote mine answers with a little radio chirp. */
+  remoteSet() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.22;
+    tone(t, 0.05, 1320, 1760, 0.07, 'sine');
+    tone(t + 0.07, 0.05, 1760, 2200, 0.06, 'sine');
+  },
+  /** Its owner presses the plunger: a click, then a rising beep just before the blast. */
+  detonate() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.03, 3500, 2, 0.22, 'highpass');
+    tone(t + 0.02, 0.12, 900, 2400, 0.12, 'square');
+  },
+  /** « Passe-muraille » (iteration 52): a soft airy whistle on top of the shot. */
+  ghostShot() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.28, 520, 880, 0.06, 'sine');
+    noise(t, 0.22, 2400, 0.8, 0.05, 'bandpass', 1200);
+  },
+  /** The ghost shell slips into a wall: a wobbly « wouuh ». */
+  ghostPass() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.32, 700, 300, 0.09, 'sine');
+    tone(t + 0.04, 0.3, 740, 330, 0.05, 'triangle');
+  },
   /** The Maçon lays a block: two hollow knocks of wood and a little scrape of the trowel. */
   build() {
     if (!ctx) return;

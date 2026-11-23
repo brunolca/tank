@@ -1,4 +1,4 @@
-import { BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
+import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -27,6 +27,8 @@ export interface LevelDef {
   fog?: number; // banks of mist drift over the table (iteration 26): the seed of their paths (see fog.ts)
   /** Optional overlay of conveyor belts (same 17 rows, only > < ^ V count): lets a tank start on a belt (iteration 16). */
   belts?: string[];
+  /** Only these kinds of bonus crates fall in this mission, and more often (iteration 52). */
+  crates?: BonusKind[];
 }
 
 export const LEVELS: LevelDef[] = [
@@ -1078,6 +1080,32 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 52: « Le passe-muraille ». Thick walls, two tiles deep, hide the enemies from every angle but the long way
+  // round; only the crates of the « Passe-muraille » (through the wall!) and the « Détonateur » (a trap they cannot see) fall
+  // here, a Pilleur races the players to them and a Maçon thickens the walls
+  69: {
+    name: 'Les murs épais',
+    crates: ['ghost', 'remote'],
+    map: [
+      '......................',
+      '..1.....##.......##...',
+      '........##...v...##.m.',
+      '..2.....##.......##...',
+      '........##.......##...',
+      '........##..####......',
+      '............####...t..',
+      '...oo.................',
+      '...oo........s........',
+      '......................',
+      '........####......##..',
+      '........####......##..',
+      '..............g...##..',
+      '.....##...........##.c',
+      '.....##...####....##..',
+      '..........####........',
+      '......................',
+    ],
+  },
   // iteration 51: « Le Mécano ». At night, it works behind a tall fence at the back of the garage, while a steel tank, a pink
   // and a grey tank hold the front: go round the fence and shoot it first, or every wreck rolls again
   67: {
@@ -1379,6 +1407,8 @@ export interface ParsedLevel {
   belts?: number[];
   /** « Le Tortillard » (iteration 49): the loop of rails its train runs round, flat [x0, y0, x1, y1…] (closed: the last point joins the first). */
   rail?: number[];
+  /** Only these kinds of bonus crates fall here, and more often (iteration 52, see LevelDef.crates). */
+  crates?: BonusKind[];
 }
 
 export function parseLevel(def: LevelDef): ParsedLevel {
@@ -1426,7 +1456,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       }
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180, fog: def.fog };
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180, fog: def.fog, crates: def.crates };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------

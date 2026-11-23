@@ -51,10 +51,10 @@ export interface Input {
 // 64 boss charging a volley (or the Foreur spinning up), 128 boss enraged, 256 enemy has spotted a foe (night), 512 the Foreur is under the table, 16384 « Gros calibre », 32768 frozen (iteration 29). hp only for tanks with several hit points.
 // iteration 21, tables with ice only: then [.., hp or null, vx, vy], the speed the tank slides at.
 export type NetTank = [number, number, number, number, number, number, (number | null)?, number?, number?];
-// bullet: [id, x, y, vx, vy, rocket, ownerTankId]
+// bullet: [id, x, y, vx, vy, rocket, ownerTankId]  rocket is a bit field: 1 rocket, 2 « Gros calibre » (iteration 29), 4 a ghost shell of the « Passe-muraille » not yet through its wall (iteration 52)
 export type NetBullet = [number, number, number, number, number, number, number];
 // mine: [id, x, y, blinking]
-export type NetMine = [number, number, number, number] | [number, number, number, number, number] | [number, number, number, number, number, number]; // 6th (iteration 44): the tank that laid it, for player mines only (the 5th is then 0) // 5th: a seed of the Semeur (iteration 25), 1 + its age in tenths of a second
+export type NetMine = [number, number, number, number] | [number, number, number, number, number] | [number, number, number, number, number, number] | [number, number, number, number, number, number, number]; // 7th (iteration 52): 1 for a remote mine of the « Détonateur » // 6th (iteration 44): the tank that laid it, for player mines only (the 5th is then 0) // 5th: a seed of the Semeur (iteration 25), 1 + its age in tenths of a second
 // bonus crate: [id, x, y, kind (index in BONUS_KINDS), blinking]
 export type NetBonus = [number, number, number, number, number] | [number, number, number, number, number, number]; // id x y kind blink [gold: 1, the golden crate of « La chasse aux caisses », iteration 37]
 
@@ -65,6 +65,9 @@ export type GameEvent =
   | ['boom', number, number, number] // x y tankId
   | ['ko', number, number, number, number] // victimTankId killerTankId (0: none) cause (KO_*) wallBounces: who did it, right after its 'boom' (« Le ralenti », iteration 32; older clients ignore it)
   | ['mineSet', number, number]
+  | ['mineSet', number, number, number] // « Détonateur » (iteration 52): 4th field 1, a remote mine (its own click)
+  | ['detonate', number, number, number] // x y ownerId: a remote mine is set off by its owner (iteration 52)
+  | ['ghost', number, number, number] // x y phase (« Passe-muraille », iteration 52): 0 into a wall, 1 out the other side, 2 faded inside
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number]
   | ['lob', number, number, number, number, number, number] // x0 y0 x1 y1 flightSeconds tankId: « Le Mortier » (iteration 34) lobs a cannonball (older tabs are told to reload)

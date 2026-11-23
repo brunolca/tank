@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 67, night: false, arms: ['canon', 'ricochet'], hud: true, seconds: 18, wrecks: [3, 11.5], newcomers: [[1.2, ['mechanic']]], caption: 'Itération 51 : le Mécano', sub: 'Un tank à clé à molette qui répare les épaves de ses amis' },
-  { mission: 68, night: false, storm: false, arms: ['canon', 'sapeur'], hud: true, seconds: 16, wrecks: [2.5, 9.5], caption: 'Deux Mécanos à la casse', sub: 'Ils se réparent l’un l’autre : abats-les ensemble !' },
-  { mission: 67, arms: ['fusee', 'canon'], hud: true, seconds: 15, wrecks: [3], caption: 'De nuit, ses étincelles le trahissent', sub: 'Le tank réparé repart rafistolé… et ne se répare qu’une fois' },
-  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Une nouvelle fiche au bestiaire', sub: 'Abats-le en premier… ou pendant qu’il travaille' },
+  { mission: 69, arms: ['canon', 'ricochet'], hud: true, seconds: 18, buffs: ['ghost'], ghostShots: [2.5, 7.5, 12.5], caption: 'Itération 52 : le Passe-muraille', sub: 'Une caisse qui fait traverser un mur à tes obus' },
+  { mission: 69, arms: ['canon', 'sapeur'], hud: true, seconds: 17, buffs: ['remote'], remoteTraps: [2, 7.5, 12.5], caption: 'Et le Détonateur', sub: 'Tes mines attendent ton signal… et boum !' },
+  { mission: 12, arms: ['canon', 'fusee'], hud: true, seconds: 15, buffs: ['ghost'], ghostShots: [2.5, 8], replays: [4.6], caption: 'Plus de cachette derrière les murs', sub: 'Même le tank d’acier de la « Forteresse » n’est plus à l’abri' },
+  { manual: [7, ['caisses']], seconds: 7, caption: 'Huit caisses au manuel', sub: 'Le Pilleur les vole aussi : sois le plus rapide !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -107,6 +107,8 @@ try {
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
+      for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
+      for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way
       for (const [s, kinds] of shot.newcomers ?? []) setTimeout(() => d.newcomer?.(kinds), s * 1000); // « Nouveau au bestiaire ! » (iteration 38)
       for (const s of shot.sandTraps ?? []) setTimeout(() => d.sandTrap?.(), s * 1000); // « Les dunes » (iteration 36): a buried mine on an enemy's way
       for (const s of shot.bridgeTraps ?? []) setTimeout(() => d.bridgeTrap?.(8), s * 1000); // « Les ponts » (iteration 33): the next enemy on a bridge falls

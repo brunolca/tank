@@ -455,7 +455,7 @@ export const TUNNEL_SIGHT = 1.6;
 
 // ------------------------------------------------------------------ bonus crates
 // The index in BONUS_KINDS is what travels on the wire: append new kinds, never reorder.
-export const BONUS_KINDS = ['shield', 'bounce', 'turbo', 'fan', 'freeze', 'heavy'] as const;
+export const BONUS_KINDS = ['shield', 'bounce', 'turbo', 'fan', 'freeze', 'heavy', 'ghost', 'remote'] as const;
 export type BonusKind = (typeof BONUS_KINDS)[number];
 export const BONUS_R = 0.32;
 export const BONUS_LIFE = 16; // seconds a crate waits on the floor
@@ -467,7 +467,19 @@ export const BONUS_INFO: Record<BonusKind, { label: string; color: number; durat
   // iteration 29: « Gel » is instant (every foe of the one who grabs it freezes, see FREEZE_TIME), « Gros calibre » lasts
   freeze: { label: 'Gel', color: 0xbfeaff, duration: 0, flag: 0 },
   heavy: { label: 'Gros calibre', color: 0x8a6cff, duration: 10, flag: 16384 },
+  // iteration 52: « Passe-muraille » (every shell fired goes through the first wall it meets) and « Détonateur » (the mines
+  // laid stay quiet until their owner sets them off with the mine key)
+  ghost: { label: 'Passe-muraille', color: 0x9fe8d8, duration: 10, flag: 1048576 },
+  remote: { label: 'Détonateur', color: 0xff5a3c, duration: 14, flag: 2097152 },
 };
+/** « Passe-muraille » (iteration 52): a ghost shell crosses at most this many tiles of wall in one go (thicker: it fades). */
+export const GHOST_DEPTH = 3.2;
+/** Bullet field 5 gets this bit for a ghost shell that has not gone through its wall yet (old tabs ignore it). */
+export const SHELL_GHOST = 4;
+/** « Détonateur » (iteration 52): a remote mine waits this long at most (then goes off on its own, like any mine). */
+export const REMOTE_LIFE = 22;
+/** Its fuse once the owner presses the mine key (a beat to hear the click, short enough to catch a tank on it). */
+export const REMOTE_FUSE = 0.15;
 /** « Gel » (iteration 29): seconds every foe stays frozen in its ice cube (bosses shake it off sooner). */
 export const FREEZE_TIME = 3.5;
 export const FREEZE_BOSS = 1.6;
@@ -585,6 +597,7 @@ export const KO_LOB = 5; // « Le Mortier » (iteration 34): a cannonball fell o
 export const KO_SAND = 6; // « Les dunes » (iteration 36): a mine buried in the sand
 export const KO_SNOW = 7; // « La neige » (iteration 42): a mine buried in the snow
 export const KO_TRAIN = 8; // « Le Tortillard » (iteration 49): run over by the train
+export const KO_GHOST = 9; // « Passe-muraille » (iteration 52): a shell that went through a wall (older tabs read a plain shell)
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */

@@ -13,8 +13,8 @@ import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean; gold?: boolean } // gold: « La chasse aux caisses » (iteration 37), the golden crate
-export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; heavy?: boolean; color?: number } // color: the shooter's, for player shells
-export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number } // seed: a seed of the Semeur (iteration 25), its age in seconds
+export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; heavy?: boolean; ghost?: boolean; color?: number } // ghost: a shell of the « Passe-muraille » not yet through its wall (iteration 52) // color: the shooter's, for player shells
+export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number; remote?: boolean } // remote: a mine of the « Détonateur » (iteration 52) // seed: a seed of the Semeur (iteration 25), its age in seconds
 /** « Drapeaux » (iteration 24): a flag, state 0 at home, 1 carried by `carrier`, 2 dropped (`left` seconds before it flies home). */
 /** « Le Mortier » (iteration 34): a cannonball in the air, from (x0, y0) to (x1, y1), t seconds into its dur-second flight. */
 export interface RLob { id: number; x0: number; y0: number; x1: number; y1: number; t: number; dur: number }
@@ -316,6 +316,24 @@ function crateTexture(kind: BonusKind) {
       }
     }
     g.stroke();
+  } else if (kind === 'ghost') {
+    // « Passe-muraille » (iteration 52): a shell flying through a brick wall, three speed lines behind it
+    g.fillStyle = 'rgba(255,248,232,0.45)';
+    g.fillRect(56, 34, 16, 60);
+    g.fillStyle = '#fff8e8';
+    g.moveTo(74, 56); g.lineTo(92, 56); g.quadraticCurveTo(104, 64, 92, 72); g.lineTo(74, 72); g.closePath(); g.fill();
+    g.lineWidth = 6;
+    g.beginPath();
+    for (const yy of [52, 64, 76]) { g.moveTo(32, yy); g.lineTo(48, yy); }
+    g.stroke();
+  } else if (kind === 'remote') {
+    // « Détonateur » (iteration 52): a plunger box with its handle, two radio waves above
+    g.fillRect(42, 62, 44, 28);
+    g.fillRect(61, 42, 6, 20);
+    g.fillRect(50, 38, 28, 7);
+    g.lineWidth = 5;
+    g.beginPath(); g.arc(64, 40, 18, -2.4, -0.74); g.stroke();
+    g.beginPath(); g.arc(64, 40, 28, -2.3, -0.84); g.stroke();
   } else if (kind === 'heavy') {
     // a big fat shell, nose up (iteration 29)
     g.moveTo(48, 92); g.lineTo(48, 58); g.quadraticCurveTo(48, 34, 64, 30); g.quadraticCurveTo(80, 34, 80, 58); g.lineTo(80, 92); g.closePath(); g.fill();
@@ -462,6 +480,7 @@ const geo = {
   mineBase: new THREE.CylinderGeometry(0.2, 0.24, 0.08, 24),
   mineTop: new THREE.SphereGeometry(0.15, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
   mineLed: new THREE.SphereGeometry(0.045, 10, 8),
+  antenna: new THREE.CylinderGeometry(0.012, 0.016, 0.34, 6), // « Détonateur » (iteration 52)
   shock: new THREE.RingGeometry(0.85, 1, 48),
   disc: new THREE.CircleGeometry(1, 40),
   crate: new RoundedBoxGeometry(0.58, 0.58, 0.58, 2, 0.06),
@@ -1531,6 +1550,12 @@ export class Renderer {
   private mineTopMat = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.6 });
   private ledOn = new THREE.MeshBasicMaterial({ color: 0xff3030 });
   private ledOff = new THREE.MeshBasicMaterial({ color: 0x551515 });
+  // « Détonateur » (iteration 52): the remote mine's antenna and its green light (red once it is set off)
+  private antennaMat = new THREE.MeshStandardMaterial({ color: 0x2c2c32, roughness: 0.4, metalness: 0.6 });
+  private remoteOn = new THREE.MeshBasicMaterial({ color: 0x5dff7a });
+  private remoteOff = new THREE.MeshBasicMaterial({ color: 0x1c4a24 });
+  // « Passe-muraille » (iteration 52): a pale see-through shell, drawn over the walls it flies through
+  private ghostMat = new THREE.MeshStandardMaterial({ color: 0xe6fff8, emissive: 0x9fe8d8, emissiveIntensity: 0.9, roughness: 0.2, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false });
   private wallGeo = new RoundedBoxGeometry(0.98, WALL_H, 0.98, 3, 0.06);
   private tallGeo = new RoundedBoxGeometry(0.98, TALL_H, 0.98, 3, 0.06);
   private wallMat = new THREE.MeshStandardMaterial({ map: woodTexture('#d9b98a', '#8a5a2b'), roughness: 0.75 });
@@ -4031,9 +4056,9 @@ export class Renderer {
       const bx = t.x - Math.cos(t.body) * 0.42, by = t.y - Math.sin(t.body) * 0.42;
       this.glow.emit({ x: bx + (Math.random() - 0.5) * 0.3, y: 0.15, z: by + (Math.random() - 0.5) * 0.3, vy: 0.4, life: 0.3, s0: 0.09, s1: 0.01, c0: 0xb8ff9a, c1: BONUS_INFO.turbo.color });
     }
-    for (const kind of ['bounce', 'fan', 'heavy'] as const) {
+    for (const kind of ['bounce', 'fan', 'heavy', 'ghost', 'remote'] as const) {
       if (!(fx & BONUS_INFO[kind].flag) || Math.random() > 18 * dt) continue;
-      const a = this.time * 3 + (kind === 'fan' ? Math.PI : kind === 'heavy' ? Math.PI / 2 : 0);
+      const a = this.time * 3 + (kind === 'fan' ? Math.PI : kind === 'heavy' ? Math.PI / 2 : kind === 'ghost' ? -Math.PI / 2 : kind === 'remote' ? Math.PI / 4 : 0);
       this.glow.emit({ x: t.x + Math.cos(a) * 0.5, y: 0.55, z: t.y + Math.sin(a) * 0.5, vy: 0.5, life: 0.45, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO[kind].color });
     }
   }
@@ -4231,9 +4256,17 @@ export class Renderer {
         m.castShadow = true;
         if (b.heavy) m.scale.setScalar(1.75); // « Gros calibre » (iteration 29)
         m.rotation.order = 'YXZ';
+        m.userData.mat = m.material;
         this.scene.add(m);
         this.bullets.set(b.id, m);
       }
+      // « Passe-muraille » (iteration 52): see-through until it is out the other side of its wall
+      if (!!b.ghost !== !!m.userData.ghost) {
+        m.userData.ghost = !!b.ghost;
+        m.material = b.ghost ? this.ghostMat : m.userData.mat;
+        m.renderOrder = b.ghost ? 4 : 0;
+      }
+      if (b.ghost && Math.random() < 45 * dt) this.glow.emit({ x: b.x, y: 0.45, z: b.y, vy: 0.3, life: 0.45, s0: 0.12, s1: 0.02, c0: 0xffffff, c1: BONUS_INFO.ghost.color });
       m.position.set(b.x, 0.45, b.y);
       m.rotation.y = -Math.atan2(b.vy, b.vx);
       m.rotation.z = Math.PI / 2;
@@ -4278,6 +4311,17 @@ export class Renderer {
         led.position.y = 0.17;
         led.name = 'led';
         g.add(base, top, led);
+        if (mn.remote) {
+          // « Détonateur » (iteration 52): a little antenna with a green light on top, the mine never blinks red by itself
+          const ant = new THREE.Mesh(geo.antenna, this.antennaMat);
+          ant.position.set(0.09, 0.3, -0.05);
+          ant.rotation.z = -0.25;
+          const tip = new THREE.Mesh(geo.mineLed, this.remoteOff);
+          tip.position.set(0.13, 0.47, -0.05);
+          tip.name = 'tip';
+          g.add(ant, tip);
+          g.userData.remote = true;
+        }
         g.traverse((o) => { o.castShadow = true; o.receiveShadow = true; });
         g.position.set(mn.x, 0, mn.y);
         this.scene.add(g);
@@ -4301,6 +4345,11 @@ export class Renderer {
       const led = g.getObjectByName('led') as THREE.Mesh;
       const on = mn.blink ? Math.sin(this.time * 22) > 0 : Math.sin(this.time * 3) > 0.6;
       led.material = on ? this.ledOn : this.ledOff;
+      if (g.userData.remote) {
+        const tip = g.getObjectByName('tip') as THREE.Mesh;
+        tip.material = mn.blink ? (on ? this.ledOn : this.ledOff) : Math.sin(this.time * 4 + mn.id) > 0.3 ? this.remoteOn : this.remoteOff;
+        if (!mn.blink) led.material = this.ledOff; // quiet: only its antenna says it is waiting
+      }
       if (on && mn.blink && Math.random() < 0.3) this.glow.emit({ x: mn.x, y: 0.2, z: mn.y, life: 0.12, s0: 0.12, s1: 0.02, c0: 0xff3030 });
     }
     for (const [id, g] of this.mines) {
@@ -4517,6 +4566,28 @@ export class Renderer {
     for (let i = 0; i < 5; i++) {
       this.smoke.emit({ x, y: 0.45, z: y, vx: dx * (0.5 + Math.random()), vy: 0.3 + Math.random() * 0.4, vz: dy * (0.5 + Math.random()), life: 0.5 + Math.random() * 0.3, s0: 0.06, s1: 0.2, c0: 0xf0ece4, c1: 0xffffff, drag: 3 });
     }
+  }
+
+  /** « Détonateur » (iteration 52): its owner presses the button, a ring of radio waves pulses out of the mine. */
+  detonate(x: number, y: number) {
+    for (const k of [0, 1]) {
+      const ring = new THREE.Mesh(geo.shock, new THREE.MeshBasicMaterial({ color: BONUS_INFO.remote.color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(x, 0.5 + k * 0.15, y);
+      this.scene.add(ring);
+      this.shocks.push({ mesh: ring, t: 0, max: 0.22 + k * 0.1, size: 0.5 + k * 0.4 });
+    }
+    for (let i = 0; i < 8; i++) this.glow.emit({ x, y: 0.5, z: y, vx: (Math.random() - 0.5) * 1.5, vy: 1.5 + Math.random(), vz: (Math.random() - 0.5) * 1.5, life: 0.25, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: BONUS_INFO.remote.color, grav: 4 });
+  }
+
+  /** « Passe-muraille » (iteration 52): a puff of pale wisps where a ghost shell goes into a wall (0), out of it (1) or fades inside (2). */
+  ghostPuff(x: number, y: number, phase: number) {
+    const n = phase === 1 ? 10 : 14;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.4 + Math.random() * (phase === 2 ? 0.8 : 1.4);
+      this.glow.emit({ x, y: 0.5, z: y, vx: Math.cos(a) * sp, vy: 0.6 + Math.random() * 0.8, vz: Math.sin(a) * sp, life: 0.5 + Math.random() * 0.3, s0: 0.12, s1: 0.02, c0: 0xffffff, c1: BONUS_INFO.ghost.color, drag: 2 });
+    }
+    if (phase !== 1) for (let i = 0; i < 4; i++) this.smoke.emit({ x: x + (Math.random() - 0.5) * 0.2, y: 0.55, z: y + (Math.random() - 0.5) * 0.2, vy: 0.5, life: 0.7, s0: 0.1, s1: 0.28, c0: 0xe8fff8, c1: 0xf6fffc, drag: 2 });
   }
 
   spark(x: number, y: number) {
