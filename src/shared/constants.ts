@@ -70,6 +70,7 @@ export type TankKind =
   | 'bombard'
   | 'hopper'
   | 'watcher'
+  | 'mechanic'
   | 'train'
   | 'wagon';
 
@@ -129,6 +130,9 @@ export const SPECS: Record<TankKind, TankSpec> = {
   // iteration 47: « Le Veilleur », a lighthouse on tracks that never moves: its beam sweeps the table, and whatever it
   // lights up gets a rocket straight down the beam (see WATCH_*). Outside its light it is blind.
   watcher: { speed: 0, maxBullets: 1, bounces: 0, rocket: true, fireCd: 1.5, turretSpeed: 1.9, mines: 0, skill: 1, reaction: 0.5, aimError: 0.02, label: 'Veilleur' },
+  // iteration 51: « Le Mécano », a toy mechanic with a big spanner: it drives to the wreck of a fallen friend and puts
+  // it back together (see MECA_*). It shoots little while it has a wreck in sight, never while it works.
+  mechanic: { speed: 1.9, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.2, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.6, aimError: 0.09, label: 'Mécano' },
   // iteration 49: the sixth boss, « le Tortillard », a toy locomotive that runs round its rails pulling gun wagons
   // (see TRAIN_*): it runs over whatever stands on the track, and its cowcatcher sends head-on shells back. The rails
   // drive it, never the AI (speed 0 here: nothing pushes it about either).
@@ -174,6 +178,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   bombard: 0x5e3f7f,
   hopper: 0xa8d02c,
   watcher: 0x3b3577,
+  mechanic: 0xb8683a,
   train: 0x2f7a4d,
   wagon: 0xd9a63a,
 };
@@ -503,6 +508,20 @@ export const WATCH_LOSE = 0.8;
 export const WATCH_REVEAL = 0.5;
 /** Tank flag: the Veilleur has caught someone in its light (the beam turns red). */
 export const FLAG_SPOT = 131072;
+
+// ------------------------------------------------------------------ « Le Mécano » (iteration 51): the repair tank
+/** Seconds of work to put a wreck back on its tracks (the Mécano stands still, spanner turning: shoot it!). */
+export const MECA_FIX = 3.2;
+/** A wreck must have cooled down this long before the Mécano heads for it (the blast first, then the repair). */
+export const MECA_COOL = 1.5;
+/** How close (tiles) it must be to the wreck to work on it. */
+export const MECA_REACH = 1.05;
+/** Seconds the repaired tank stays untouchable while it shakes off the dust (and before it may fire). */
+export const MECA_SAFE = 0.8;
+/** Tank flag: the Mécano is at work on a wreck (its spanner turns). */
+export const FLAG_REPAIR = 262144;
+/** Tank flag: this tank was put back together by a Mécano (a patch and a bandage on its hull). */
+export const FLAG_PATCHED = 524288;
 /** Bullet field 5 (rocket) gets this bit for a « Gros calibre » shell (old tabs just see a rocket). */
 export const SHELL_HEAVY = 2;
 export const TURBO_MULT = 1.45;

@@ -6,7 +6,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_F
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { KO_TRAIN, TRAIN_SPEED, FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
+import { FLAG_REPAIR, FLAG_PATCHED, MECA_FIX, MECA_COOL, KO_TRAIN, TRAIN_SPEED, FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -3150,4 +3150,112 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout du Tortillard');
   if (process.exitCode !== 1) console.log(`Tortillard OK (${cleared} partie(s) gagnée(s) par l’IA, ${rams} écrasé(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le Mécano » (iteration 51): it drives to the wreck of a fallen friend and puts it back together after MECA_FIX
+// seconds of work (patched: one hit, never repaired twice); destroyed while it works, the wreck stays a wreck; it never
+// repairs a boss or a tank that fell into a pit; two Mécanos repair each other
+{
+  const fail = (m: string) => { console.error('MÉCANO:', m); process.exitCode = 1; };
+  const open = () => {
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    for (let x = 0; x < W; x++) { tiles[x] = Tile.Wall; tiles[(H - 1) * W + x] = Tile.Wall; }
+    for (let y = 0; y < H; y++) { tiles[y * W] = Tile.Wall; tiles[y * W + W - 1] = Tile.Wall; }
+    return tiles;
+  };
+  const run = (g: Game, sec: number, until?: () => boolean) => {
+    const ev: unknown[][] = [];
+    for (let i = 0; i < sec * 30 && !(until && until()); i++) { g.step(new Map()); ev.push(...g.events); g.events = []; }
+    return ev;
+  };
+  {
+    const g = new Game(open());
+    const p = g.addTank('player', 0, 2.5, 2.5, 0x3d7bff, 'p1', 'P');
+    p.alive = false; // nobody to shoot at: the Mécano only works
+    const mech = g.addTank('mechanic', 99, 17.5, 12.5, 0);
+    const ash = g.addTank('ash', 99, 8.5, 8.5, 0);
+    const ghost = g.addTank('ash', 99, 3.5, 13.5, 0); // keeps the mission going
+    g.frozen = false;
+    let revived = 0;
+    g.onRevive = (t, by) => { if (t === ash && by === mech) revived++; };
+    g.killTank(ash, p);
+    const ev = run(g, 20, () => ash.alive);
+    if (!ash.alive) fail('l’épave n’a pas été réparée en 20 s');
+    if (!ev.some((e) => e[0] === 'fix' && e[3] === mech.id && e[4] === ash.id)) fail('pas d’événement fix');
+    if (!ev.some((e) => e[0] === 'fixed' && e[3] === ash.id)) fail('pas d’événement fixed');
+    if (revived !== 1) fail('onRevive non appelé');
+    if (!ash.patched || ash.hp !== 1) fail('le tank réparé doit être rafistolé, à un coup');
+    if (!(g.netTanks().find((n) => n[0] === ash.id)![5] & FLAG_PATCHED)) fail('le drapeau « rafistolé » ne voyage pas');
+    if (Math.hypot(mech.x - ash.x, mech.y - ash.y) > 2) fail('le Mécano a réparé de loin');
+    // a second time: it stays a wreck
+    run(g, 1);
+    g.killTank(ash, p);
+    run(g, 12);
+    if (ash.alive) fail('un tank déjà rafistolé a été réparé une deuxième fois');
+    // destroyed mid-repair: the wreck stays down
+    g.killTank(ghost, p);
+    let working = false;
+    run(g, 20, () => (working = !!(g.buffFlags(mech) & FLAG_REPAIR)));
+    if (!working) fail('le Mécano ne se met pas au travail (drapeau FLAG_REPAIR)');
+    g.killTank(mech, p);
+    run(g, MECA_FIX + 2);
+    if (ghost.alive) fail('l’épave a été réparée alors que le Mécano était détruit');
+  }
+  // never a boss, never a tank fallen into a pit, never before the wreck cools down
+  {
+    const tiles = open();
+    tiles[8 * W + 10] = Tile.Hole;
+    const g = new Game(tiles);
+    const p = g.addTank('player', 0, 2.5, 2.5, 0x3d7bff, 'p1', 'P');
+    p.alive = false;
+    const mech = g.addTank('mechanic', 99, 14.5, 8.5, 0);
+    const boss = g.addTank('boss', 99, 5.5, 12.5, 0);
+    const fell = g.addTank('pink', 99, 10.5, 8.5, 0);
+    g.frozen = false;
+    boss.hp = 1; boss.buffs.invuln = 0;
+    g.killTank(boss, p);
+    g.killTank(fell, p, 4 /* KO_FALL */);
+    const ev = run(g, 12);
+    if (boss.alive || fell.alive) fail('un boss ou un tank tombé dans un trou a été réparé');
+    if (ev.some((e) => e[0] === 'fix')) fail('le Mécano s’est mis au travail sur une épave interdite');
+    if (!mech.alive) fail('le Mécano a disparu');
+    const ash = g.addTank('ash', 99, 14.5, 10.5, 0);
+    g.killTank(ash, p);
+    run(g, MECA_COOL * 0.8);
+    if (g.buffFlags(mech) & FLAG_REPAIR) fail('le Mécano travaille sur une épave encore fumante');
+  }
+  // two Mécanos repair each other
+  {
+    const g = new Game(open());
+    const p = g.addTank('player', 0, 2.5, 2.5, 0x3d7bff, 'p1', 'P');
+    p.alive = false;
+    const a = g.addTank('mechanic', 99, 10.5, 8.5, 0);
+    const b = g.addTank('mechanic', 99, 13.5, 8.5, 0);
+    g.frozen = false;
+    g.killTank(a, p);
+    run(g, 15, () => a.alive);
+    if (!a.alive) fail('un Mécano ne répare pas l’autre');
+  }
+  // the missions of the Mécano: AI duos clear them, the tick stays cheap, and repairs do happen
+  let cleared = 0, fixes = 0, spent = 0, steps = 0;
+  for (let run2 = 0; run2 < 4; run2++) {
+    const l = getMission(run2 % 2 ? 68 : 67);
+    if (!l.enemies.some((e) => e.kind === 'mechanic')) fail(`la mission ${run2 % 2 ? 68 : 67} n’a pas de Mécano`);
+    const s2 = new Game(l.tiles, l.belts);
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      fixes += s2.events.filter((e) => e[0] === 'fixed').length;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions du Mécano');
+  if (process.exitCode !== 1) console.log(`Mécano OK (${cleared}/4 parties gagnées par l’IA, ${fixes} réparation(s), ${per.toFixed(3)} ms/tick)`);
 }

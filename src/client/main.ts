@@ -1,4 +1,4 @@
-import { type TankKind, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -470,6 +470,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (enemies.some((e) => e.kind === 'mechanic')) setTimeout(() => toast('Le Mécano répare les épaves de ses amis : quelques secondes de clé à molette et le tank repart ! Vise-le en premier… ou pendant qu’il travaille, quand il ne bouge plus.', 5200), 2200);
   else if (enemies.some((e) => e.kind === 'hopper')) setTimeout(() => toast('La Sauterelle se tasse sur ses ressorts… puis bondit par-dessus les murs pour te prendre à revers. Un anneau vert montre où elle va retomber : vise-le ! En l’air, rien ne la touche.', 5200), 2200);
   else if (enemies.some((e) => e.kind === 'mortar')) setTimeout(() => toast('Le Mortier tire en cloche, par-dessus les murs : quand un cercle rouge se resserre sous toi, file ! De près, il ne peut plus rien contre toi.', 5000), 2200);
   else if (enemies.some((e) => e.kind === 'frost')) setTimeout(() => toast('Le Givré patine sans jamais glisser et laisse du givre partout où il passe : là, ton tank dérape ! Une mine fait fondre le givre, et il fond tout seul une fois le Givré détruit.', 5000), 2200);
@@ -1052,6 +1053,16 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.hopLand(e[3], e[1], e[2]);
       floater(e[1], e[2], 'Boing !', enemyColor('hopper'));
       if (audible) sfx.hopLand();
+      break;
+    case 'fix': // « Le Mécano » (iteration 51): it starts work on a wreck, a ring fills up around it
+      renderer.startRepair(e[3], e[4], e[1], e[2], e[5]);
+      floater(e[1], e[2], 'Clic, clac…', enemyColor('mechanic'));
+      if (audible) sfx.ratchet();
+      break;
+    case 'fixed': // the wreck rolls again
+      renderer.repaired(e[3], e[1], e[2]);
+      floater(e[1], e[2], 'Réparé !', 0xffc040);
+      if (audible) sfx.fixed();
       break;
     case 'spot': // « Le Veilleur » (iteration 47): it caught someone in its light, the alarm rings
       floater(e[1], e[2], 'Repéré !', 0xff4a30);
@@ -2719,6 +2730,7 @@ function enemyName(kind: string) {
   if (kind === 'wagon') return 'un wagon';
   if (kind === 'hopper') return 'la Sauterelle';
   if (kind === 'magnet') return 'l’Aimant';
+  if (kind === 'mechanic') return 'le Mécano';
   return `le ${label}`;
 }
 
@@ -3006,6 +3018,7 @@ const BESTIARY: [TankKind, string][] = [
   ['mortar', 'tire en cloche par-dessus les murs : fuis le cercle rouge, fonce-lui dessus'],
   ['hopper', 'saute par-dessus les murs pour te prendre à revers : vise l’anneau vert où elle va retomber'],
   ['watcher', 'son faisceau balaie la table : s’il t’éclaire, sa fusée suit la lumière ; hors du faisceau, il ne voit rien'],
+  ['mechanic', 'répare les épaves de ses amis, qui repartent rafistolés : abats-le en premier, ou pendant qu’il travaille'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -3077,6 +3090,7 @@ function tankSvg(kind: string, known: boolean) {
     : kind === 'hopper' ? '<path d="M14 9 l-7 -5 l-4 7 M14 39 l-7 5 l-4 -7" fill="none" stroke="#2a1d12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="20" r="2.6" fill="#fff"/><circle cx="29" cy="28" r="2.6" fill="#fff"/>'
     : kind === 'train' ? '<rect x="10" y="17" width="18" height="14" rx="3" fill="#2a1d12" opacity=".35"/><circle cx="31" cy="24" r="3.4" fill="#2a1d12"/><path d="M40 14 l5 10 l-5 10" fill="none" stroke="#f2c14e" stroke-width="2.6" stroke-linejoin="round"/>'
     : kind === 'wagon' ? '<rect x="7" y="22" width="4" height="4" fill="#2a1d12"/><rect x="37" y="22" width="4" height="4" fill="#2a1d12"/>'
+    : kind === 'mechanic' ? '<path d="M14 24 H34" stroke="#dfe5ea" stroke-width="4" stroke-linecap="round"/><path d="M36 19.5 a5 5 0 1 0 0 9" fill="none" stroke="#dfe5ea" stroke-width="3.4"/><rect x="5" y="19" width="7" height="10" rx="1.5" fill="#d8392f" stroke="#2a1d12" stroke-width="1"/>'
     : kind === 'watcher' ? '<path d="M24 24 L46 15 L46 33 Z" fill="#ffd648" opacity=".55"/><circle cx="24" cy="24" r="4" fill="#ffe680" stroke="#2a1d12" stroke-width="1.2"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
     : '';
@@ -3101,6 +3115,7 @@ function enemySheet(kind: string) {
   if (s.invisible) tags.push('Invisible');
   if (kind === 'hopper') tags.push('Saute les murs');
   if (kind === 'watcher') tags.push('Phare tournant');
+  if (kind === 'mechanic') tags.push('Répare les épaves', 'Une fois par tank');
   if (kind === 'train') tags.push('Roule sur des rails', 'Chasse-pierres');
   if (kind === 'wagon') tags.push('Suit la locomotive');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
@@ -3806,7 +3821,7 @@ if (params.has('demo')) {
       newcomerCards(kinds, 0);
     },
     /** « Le manuel » (iteration 39): the home screen, then the manual opened on `tabs` one after the other (the bestiary page scrolls slowly). */
-    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'train') {
+    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'mechanic') {
       clearScene();
       show('home');
       const lead = Math.min(1500, ms / 4), each = (ms - lead - 400) / tabs.length;
@@ -4059,6 +4074,47 @@ if (params.has('demo')) {
         n++;
       }
       return n;
+    },
+    /**
+     * « Le Mécano » (iteration 51): the nearest friend of every Mécano on the table is moved next to it and blown up,
+     * and the Mécano is untouchable for a few seconds, so the drive there, the spanner and the ring that
+     * fills up all show on camera. Returns how many.
+     */
+    wreck(safe = 6) {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const m of g.tanks) {
+        if (!m.alive || m.kind !== 'mechanic') continue;
+        let best: (typeof g.tanks)[number] | undefined, bd = Infinity;
+        for (const o of g.tanks) {
+          if (!o.alive || o === m || o.team !== m.team || o.boss || o.rail || o.car || o.patched) continue;
+          const d = Math.hypot(o.x - m.x, o.y - m.y);
+          if (d < bd) { bd = d; best = o; }
+        }
+        if (!best) continue;
+        // for the camera: the friend is moved right next to the Mécano first (the work starts at once)
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+          const cx = Math.floor(m.x) + dx, cy = Math.floor(m.y) + dy;
+          if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1 || isSolidTankTile(g.tiles[cy * W + cx])) continue;
+          if (g.tanks.some((o) => o.alive && o !== best && Math.hypot(o.x - cx - 0.5, o.y - cy - 0.5) < 0.8)) continue;
+          best.x = cx + 0.5; best.y = cy + 0.5;
+          break;
+        }
+        best.buffs.invuln = 0;
+        best.buffs.shield = false;
+        best.hp = 1;
+        g.killTank(best, undefined);
+        if (best.alive) continue;
+        m.buffs.invuln = Math.max(m.buffs.invuln, safe);
+        if (m.fix) m.fix.look = 0;
+        n++;
+      }
+      return n;
+    },
+    /** « Le Mécano » (iteration 51): where each Mécano of the table is and how its work goes (for the tools). */
+    repairs() {
+      return (attract?.tanks ?? []).filter((m) => m.kind === 'mechanic').map((m) => ({ alive: m.alive, x: +m.x.toFixed(2), y: +m.y.toFixed(2), wreck: m.fix?.wreck ?? 0, t: +(m.fix?.t ?? 0).toFixed(2) }));
     },
     /**
      * « La Sauterelle » (iteration 41): every Sauterelle on the table on the ground crouches at once for a leap at the

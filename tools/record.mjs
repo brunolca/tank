@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { couronne: [0, [2, 2, 2, 2], 75, 0], arms: ['canon', 'ricochet', 'fusee', 'sapeur'], seconds: 22, caption: 'Itération 50 : la couronne', sub: 'Un nouveau mode : une seule couronne, et tout le monde la veut' },
-  { couronne: [4, [2, 2, 2, 2], 45, 19, true], arms: ['ricochet', 'canon', 'sapeur', 'fusee'], crowns: [1], seconds: 20, caption: 'Garde-la 25 secondes', sub: 'Touché ? Elle tombe de ta tête… et le premier qui passe la ramasse' },
-  { couronne: [2, [2, 2, 2, 2], 60, 6], arms: ['canon', 'fusee', 'ricochet', 'sapeur'], crowns: [1.5], seconds: 14, caption: 'La couronne brille de nuit', sub: 'Impossible de cacher qui règne' },
-  { manual: [7, ['modes']], seconds: 7, caption: 'Au manuel', sub: 'Premier à trois manches, seul contre les rivaux ou entre amis' },
+  { mission: 67, night: false, arms: ['canon', 'ricochet'], hud: true, seconds: 18, wrecks: [3, 11.5], newcomers: [[1.2, ['mechanic']]], caption: 'Itération 51 : le Mécano', sub: 'Un tank à clé à molette qui répare les épaves de ses amis' },
+  { mission: 68, night: false, storm: false, arms: ['canon', 'sapeur'], hud: true, seconds: 16, wrecks: [2.5, 9.5], caption: 'Deux Mécanos à la casse', sub: 'Ils se réparent l’un l’autre : abats-les ensemble !' },
+  { mission: 67, arms: ['fusee', 'canon'], hud: true, seconds: 15, wrecks: [3], caption: 'De nuit, ses étincelles le trahissent', sub: 'Le tank réparé repart rafistolé… et ne se répare qu’une fois' },
+  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Une nouvelle fiche au bestiaire', sub: 'Abats-le en premier… ou pendant qu’il travaille' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -96,6 +96,7 @@ try {
       for (const s of shot.crowns ?? []) setTimeout(() => d.crown?.(), s * 1000); // « La couronne » (iteration 50): the crown onto the nearest rival's head
       for (const s of shot.trainMines ?? []) setTimeout(() => d.trainMine?.(), s * 1000); // « Le Tortillard » (iteration 49): a mine on the track ahead of the train
       for (const s of shot.reverses ?? []) setTimeout(() => d.reverse?.(), s * 1000); // and it stops whistling, then backs up
+      for (const s of shot.wrecks ?? []) setTimeout(() => d.wreck?.(), s * 1000); // « Le Mécano » (iteration 51): a friend of each Mécano blows up, it repairs it
       for (const s of shot.watches ?? []) setTimeout(() => d.watch?.(), s * 1000); // « Le Veilleur » (iteration 47): every beam swings onto a hero
       for (const s of shot.hops ?? []) setTimeout(() => d.hop?.(), s * 1000); // « La Sauterelle » (iteration 41): every Sauterelle leaps at once
       for (const s of shot.lobs ?? []) setTimeout(() => d.lob?.(), s * 1000); // « Le Mortier » (iteration 34): every Mortier fires at once

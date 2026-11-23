@@ -1,7 +1,7 @@
 {
-  "iteration": 50,
-  "date": "2026-11-22",
-  "title": "La couronne",
+  "iteration": 51,
+  "date": "2026-11-23",
+  "title": "Le Mécano",
   "journal": [
     {
       "iteration": 1,
@@ -608,6 +608,18 @@
         "Touché ? La couronne tombe là où tu es, et le premier qui passe la ramasse. Laissée à terre, elle rentre sur son coussin au bout de 7 secondes. Les tanks touchés reviennent dans leur coin.",
         "Le tableau de bord suit chaque règne avec une jauge dorée, le roi du moment a sa petite couronne, et une roulette de tambour prévient quand il n’est plus qu’à 5 secondes du trône.",
         "Seul ? Les rivaux pilotés par l’ordinateur foncent sur la couronne libre et pourchassent celui qui la porte. Premier à 3 manches ; la couronne a aussi sa ligne au manuel et passe parfois en fond d’accueil."
+      ]
+    },
+    {
+      "iteration": 51,
+      "date": "2026-11-23",
+      "title": "Le Mécano",
+      "notes": [
+        "Nouvel ennemi : le Mécano, un tank cuivré coiffé d’une grosse clé à molette, avec sa caisse à outils rouge sur le dos.",
+        "Quand un de ses amis saute, il fonce vers l’épave et se met au travail : un anneau de petits traits jaunes se remplit autour d’elle, les étincelles volent… et au bout de trois secondes, le tank repart !",
+        "Un tank réparé repart rafistolé, deux bandes de sparadrap sur la caisse : il tombe au premier coup et ne se répare qu’une fois. Les boss et les tanks tombés dans un trou restent à terre.",
+        "Pendant qu’il travaille, le Mécano ne bouge plus et ne tire plus : c’est le moment de l’abattre. Deux Mécanos se réparent l’un l’autre, alors vise-les ensemble !",
+        "Deux nouvelles missions de nuit, « Le garage » (67) et « La casse » (68, sous l’orage), puis le Mécano se glisse dans les missions générées. Il a sa fiche au bestiaire et son pinceau dans l’atelier."
       ]
     }
   ]

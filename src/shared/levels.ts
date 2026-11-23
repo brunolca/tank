@@ -13,9 +13,9 @@ import { BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, RED_GATE_CHAR,
 //         { } « Les ponts-levis » (iteration 48): a red drawbridge (raised at the start: a pit) and a blue one (lowered: a
 //           bridge) over a pit, flipped by the same switches; on a flip of the switches, the conveyor belts turn round too
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher', R: 'mechanic',
 };
 
 export interface LevelDef {
@@ -1078,6 +1078,57 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 51: « Le Mécano ». At night, it works behind a tall fence at the back of the garage, while a steel tank, a pink
+  // and a grey tank hold the front: go round the fence and shoot it first, or every wreck rolls again
+  67: {
+    name: 'Le garage',
+    night: true, // (the 67th was a night mission before it got its own map: the nights stay as many)
+    map: [
+      '......................',
+      '..1........#..........',
+      '...........#.....p....',
+      '..2........#..........',
+      '...........#...HHHHH..',
+      '...............H......',
+      '.....oo........H...R..',
+      '.....oo...s....H......',
+      '...............HHHHH..',
+      '......................',
+      '...#####..............',
+      '.............a........',
+      '......................',
+      '.........o.......##...',
+      '.........o.......##.s.',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 51: a scrapyard at night, under a storm, with two Mécanos in opposite corners: they repair each other too, so take them both
+  // down close together (a yellow tank sows mines in the sand in the middle)
+  68: {
+    name: 'La casse',
+    night: true,
+    storm: true, // (as the generated 68th was: lightning shows the Mécanos at work)
+    map: [
+      '......................',
+      '..1......o....o.......',
+      '.........o.y..o....R..',
+      '..2......oo..oo.......',
+      '......................',
+      '....#............##...',
+      '....#....,,,,....#....',
+      '....#...,,v,,,...#..m.',
+      '.........,,,,.........',
+      '......................',
+      '...##.........##......',
+      '.........oo...........',
+      '....R....oo...........',
+      '......................',
+      '.........##......a....',
+      '.........##...........',
+      '......................',
+    ],
+  },
   // iteration 47: « Le Veilleur ». A lighthouse on an island in the middle (out of reach: shoot it from the shore when its
   // beam looks away), a second one in a corner, and tall fences to hide behind while the light sweeps past
   64: {
@@ -1551,6 +1602,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 64) {
       const rl = rng(mission * 7193 + 97);
       for (const e of enemies) if ((e.kind === 'brown' || e.kind === 'ash' || e.kind === 'marine' || e.kind === 'violet' || e.kind === 'green') && rl() < 0.18) { e.kind = 'watcher'; break; }
+    }
+    // the Mécano (iteration 51) comes along from the 69th: one more stream, at most one of them, only with friends to repair
+    if (opt.seed === undefined && mission > 68 && enemies.length >= 3) {
+      const rr = rng(mission * 9241 + 101);
+      for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'marine' || e.kind === 'violet' || e.kind === 'green' || e.kind === 'mason') && rr() < 0.14) { e.kind = 'mechanic'; break; }
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

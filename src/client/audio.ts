@@ -541,6 +541,24 @@ export const sfx = {
     noise(t, 0.12, 500, 1.2, 0.35, 'bandpass', 220);
     tone(t + 0.08, 0.7, 900, 1500, 0.05, 'sine');
   },
+  /** « Le Mécano » (iteration 51) gets to work: a ratchet spanner, a run of quick wooden clicks. */
+  ratchet() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 7; i++) {
+      noise(t + i * 0.085, 0.03, 2400 + (i % 2) * 600, 6, 0.09, 'bandpass');
+      tone(t + i * 0.085, 0.025, 1800, 1500, 0.025, 'square');
+    }
+  },
+  /** The wreck rolls again: a « ding » of a little bell over a happy rising chirp. */
+  fixed() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.12, 520, 880, 0.08, 'triangle');
+    tone(t + 0.1, 0.5, 1568, 1560, 0.09, 'sine');
+    tone(t + 0.1, 0.4, 2350, 2340, 0.03, 'sine');
+    noise(t, 0.08, 900, 1, 0.06, 'lowpass');
+  },
   /** « Le Veilleur » (iteration 47) caught someone in its light: a little two-tone alarm bell (louder when it is you). */
   spot(me = false) {
     if (!ctx) return;

@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -53,6 +53,10 @@ export interface Tank {
   mortar?: MortarState; // the Mortier (iteration 34)
   hop?: HopState; // « La Sauterelle » (iteration 41)
   watch?: WatchState; // « Le Veilleur » (iteration 47)
+  fix?: FixState; // « Le Mécano » (iteration 51)
+  patched?: boolean; // put back together by a Mécano (iteration 51): it cannot be repaired a second time
+  diedAt?: number; // enemies: the tick it was destroyed (the Mécano lets the wreck cool down first)
+  fixable?: boolean; // enemies: its wreck can be repaired (not fallen into a pit, not a boss, not patched already)
   rail?: RailState; // « Le Tortillard » (iteration 49): the locomotive
   car?: CarState; // and each of its wagons
 }
@@ -80,6 +84,16 @@ export interface Rail {
   pts: number[];
   cum: number[];
   len: number;
+}
+
+/**
+ * The Mécano (iteration 51): the wreck it is heading for or working on (tank id, 0: none), seconds of work done on it,
+ * and seconds until it looks around for wrecks again.
+ */
+export interface FixState {
+  wreck: number;
+  t: number;
+  look: number;
 }
 
 /**
@@ -249,10 +263,12 @@ interface AIState {
 type Pt = { x: number; y: number };
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5, mechanic: 6.5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
+/** « Le Mécano » (iteration 51): a wreck was put back on its tracks (the room forgets it was destroyed). */
+export type ReviveCb = (t: Tank, by: Tank) => void;
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -406,6 +422,7 @@ export class Game {
   frozen = true;
   private nextId = 1;
   onKill?: KillCb;
+  onRevive?: ReviveCb;
 
   constructor(tiles: number[], belts?: number[]) {
     this.tiles = tiles.slice();
@@ -431,6 +448,7 @@ export class Game {
     if (kind === 'mortar') t.mortar = { t: MORTAR_FIRST + Math.random() * 1.2, warn: 0, x: x, y: y };
     if (kind === 'hopper') t.hop = { t: HOP_FIRST + Math.random() * 1.5, warn: 0, air: -1, dur: 1, x0: x, y0: y, x1: x, y1: y, foe: 0 };
     if (kind === 'watcher') t.watch = { dir: Math.random() < 0.5 ? 1 : -1, flipT: WATCH_FLIP[0] + Math.random() * (WATCH_FLIP[1] - WATCH_FLIP[0]), foe: 0, lock: 0, lost: 0 };
+    if (kind === 'mechanic') t.fix = { wreck: 0, t: 0, look: 0.5 };
     if (kind === 'train') this.putOnRail(t);
     if (kind === 'wagon') this.hookWagon(t);
     if (kind === 'frost') {
@@ -534,6 +552,11 @@ export class Game {
       t.slid = false;
       if (t.watch) { // « Le Veilleur » (iteration 47): its beam does all its thinking, it never drives
         this.updateWatch(t);
+        if (this.ice) this.driveTank(t, 0, 0, DT);
+        this.rideBelt(t);
+        continue;
+      }
+      if (t.fix && this.updateMechanic(t)) { // « Le Mécano » (iteration 51): at work on a wreck, spanner turning
         if (this.ice) this.driveTank(t, 0, 0, DT);
         this.rideBelt(t);
         continue;
@@ -1546,6 +1569,106 @@ export class Game {
     return best;
   }
 
+  // -------------------------------------------------------------- « Le Mécano » (iteration 51)
+
+  /** Can the Mécano t work on this wreck? A friend's, cooled down, repairable, on a cell a tank can stand on. */
+  wreckFor(t: Tank, w: Tank): boolean {
+    if (w.alive || !w.fixable || w.team !== t.team || w === t) return false;
+    if (w.diedAt === undefined || this.tick - w.diedAt < MECA_COOL / DT) return false;
+    return !isSolidTank(tileAt(this.tiles, Math.floor(w.x), Math.floor(w.y)));
+  }
+
+  /** Steps a tank needs to reach each cell (-1: out of reach), walls, holes and raised gates in the way. */
+  private stepsFrom(x: number, y: number): Int16Array {
+    const dist = new Int16Array(W * H).fill(-1);
+    const start = Math.floor(y) * W + Math.floor(x);
+    if (start < 0 || start >= W * H) return dist;
+    dist[start] = 0;
+    const q = [start];
+    for (let qi = 0; qi < q.length; qi++) {
+      const c = q[qi], cx = c % W, cy = (c / W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const n = ny * W + nx;
+        if (dist[n] >= 0 || isSolidTank(this.tiles[n])) continue;
+        dist[n] = dist[c] + 1;
+        q.push(n);
+      }
+    }
+    return dist;
+  }
+
+  /**
+   * The Mécano: it looks for the nearest wreck of a friend it can drive to, heads there (the AI drives, and still
+   * shoots on the way), then stands by it for MECA_FIX seconds, spanner turning, and the tank rolls again (patched, one
+   * hit, it cannot be repaired twice). True while it works (no driving, no shooting).
+   */
+  updateMechanic(t: Tank): boolean {
+    const f = t.fix!, ai = t.ai;
+    let w = f.wreck ? this.tankById(f.wreck) : undefined;
+    if (w && !this.wreckFor(t, w)) { w = undefined; f.wreck = 0; f.t = 0; }
+    f.look -= DT;
+    if (!w && f.look <= 0) {
+      f.look = 0.5;
+      let dist: Int16Array | undefined, bd = Infinity;
+      for (const o of this.tanks) {
+        if (!this.wreckFor(t, o)) continue;
+        dist ??= this.stepsFrom(t.x, t.y);
+        const d = dist[Math.floor(o.y) * W + Math.floor(o.x)];
+        if (d >= 0 && d < bd) { bd = d; w = o; }
+      }
+      if (w) { f.wreck = w.id; f.t = 0; }
+    }
+    if (!w) {
+      if (ai && ai.goal !== undefined) { ai.goal = undefined; ai.path = []; }
+      return false;
+    }
+    if (Math.hypot(w.x - t.x, w.y - t.y) > MECA_REACH + w.r * 0.5) {
+      f.t = 0; // pushed away mid-repair: it starts over
+      const cell = Math.floor(w.y) * W + Math.floor(w.x);
+      if (ai && ai.goal !== cell) { ai.goal = cell; ai.path = []; ai.pathT = 0; }
+      // nobody left to fight (the AI would sit still): it simply drives there
+      if (ai && !this.tanks.some((o) => o.alive && o.team !== t.team && !under(o))) { this.aiMove(t, w); return true; }
+      return false;
+    }
+    if (f.t === 0) this.events.push(['fix', r2(w.x), r2(w.y), t.id, w.id, MECA_FIX]);
+    f.t += DT;
+    t.turret = rotateToward(t.turret, Math.atan2(w.y - t.y, w.x - t.x), 3 * DT);
+    t.alert = false;
+    if (f.t < MECA_FIX) return true;
+    // done, once nobody is parked on the wreck
+    if (this.tanks.some((o) => o.alive && o !== t && !under(o) && Math.hypot(o.x - w!.x, o.y - w!.y) < o.r + w!.r)) { f.t = MECA_FIX; return true; }
+    this.revive(w, t);
+    f.wreck = 0; f.t = 0; f.look = 0.8;
+    if (ai) { ai.goal = undefined; ai.path = []; ai.pathT = 0; }
+    return true;
+  }
+
+  /** A wreck rolls again (the Mécano's work): one hit, patched, untouchable for a moment. */
+  revive(w: Tank, by: Tank) {
+    w.alive = true;
+    w.patched = true;
+    w.fixable = false;
+    w.hp = 1;
+    w.vx = w.vy = 0;
+    w.chill = undefined;
+    w.buffs.shield = false;
+    w.buffs.bounce = w.buffs.turbo = w.buffs.fan = 0;
+    w.buffs.heavy = undefined;
+    w.buffs.invuln = MECA_SAFE;
+    w.fireCd = Math.max(w.fireCd, MECA_SAFE + 0.7);
+    w.loot = undefined;
+    if (w.ai) { w.ai.path = []; w.ai.pathT = 0; w.ai.dodgeT = 0; w.ai.goal = undefined; w.ai.locked = false; w.ai.escape = undefined; }
+    if (w.hop) { w.hop.air = -1; w.hop.warn = 0; w.hop.t = Math.max(w.hop.t, 2); }
+    if (w.watch) { w.watch.foe = 0; w.watch.lock = 0; w.watch.lost = 0; }
+    if (w.mag) { w.mag.on = false; w.mag.held = 0; }
+    if (w.mortar) w.mortar.warn = 0;
+    if (w.fix) { w.fix.wreck = 0; w.fix.t = 0; w.fix.look = 1; }
+    this.events.push(['fixed', r2(w.x), r2(w.y), w.id, by.id]);
+    this.onRevive?.(w, by);
+  }
+
   // -------------------------------------------------------------- « Le Veilleur » (iteration 47)
 
   /**
@@ -2358,6 +2481,11 @@ export class Game {
     if (t.rail) this.derail(t, killer); // first, so the locomotive's own blast is the last one (the replay shows it)
     t.alive = false;
     t.chill = undefined;
+    if (t.kind !== 'player') {
+      // « Le Mécano » (iteration 51): an enemy's wreck it can put back together, unless it fell into a pit or was patched already
+      t.diedAt = this.tick;
+      t.fixable = cause !== KO_FALL && !t.patched && !t.boss && !t.rail && !t.car && t.kind !== 'wagon';
+    }
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
     this.events.push(['ko', t.id, killer?.id ?? 0, cause, n]);
     if (t.loot && this.bonusOn) this.dropLoot(t, t.loot);
@@ -2521,7 +2649,7 @@ export class Game {
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
       | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
-      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0) | (t.watch && t.watch.foe ? FLAG_SPOT : 0)
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0) | (t.watch && t.watch.foe ? FLAG_SPOT : 0) | (t.fix && t.fix.t > 0 ? FLAG_REPAIR : 0) | (t.patched ? FLAG_PATCHED : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
   /**

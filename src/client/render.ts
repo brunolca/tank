@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
@@ -213,6 +213,9 @@ interface TankView {
   leap?: { x0: number; y0: number; x1: number; y1: number }; // the leap it is in (from its « hop » event)
   leapRing?: THREE.Mesh; // and the ring on the floor where it will land
   squash?: number; // the bounce of its landing, fading out
+  spanner?: THREE.Group; // « Le Mécano » (iteration 51): the big spanner on its turret (it turns while it works)
+  patch?: THREE.Group; // a tank put back together by a Mécano: two crossed strips of plaster on its hull
+  fixing?: boolean; // its wreck is being repaired right now (drawn half sunk and tilted, rising as the work goes on)
   lantern?: LanternView; // « Le Veilleur » (iteration 47): its lighthouse lamp and the beam it throws on the table
   wheels?: THREE.Mesh[]; // « Le Tortillard » (iteration 49): the wheels of the locomotive and its wagons (they turn as it runs)
   chimney?: THREE.Object3D; // and the locomotive's chimney, where the smoke puffs out
@@ -592,6 +595,47 @@ const watchGeo = {
   lens: new THREE.BoxGeometry(0.05, 0.12, 0.15),
 };
 const watchBandMat = new THREE.MeshStandardMaterial({ color: 0xf1e6cf, roughness: 0.5 });
+// « Le Mécano » (iteration 51): a big chrome spanner on its turret, a red toolbox on its back deck; the plaster strips of
+// a patched tank; the ring of little ticks that fills up around a wreck under repair
+const mechGeo = {
+  handle: new THREE.BoxGeometry(0.4, 0.05, 0.075),
+  jaw: new THREE.TorusGeometry(0.075, 0.03, 8, 16, Math.PI * 1.45),
+  ring: new THREE.TorusGeometry(0.05, 0.022, 8, 14),
+  post: new THREE.CylinderGeometry(0.025, 0.03, 0.14, 8),
+  box: new THREE.BoxGeometry(0.2, 0.12, 0.3),
+  lid: new THREE.BoxGeometry(0.215, 0.03, 0.315),
+  grip: new THREE.TorusGeometry(0.055, 0.013, 6, 12, Math.PI),
+  strip: new THREE.BoxGeometry(0.36, 0.014, 0.075),
+  tick: new THREE.BoxGeometry(0.14, 0.03, 0.07),
+};
+const chromeMat = new THREE.MeshStandardMaterial({ color: 0xdfe5ea, roughness: 0.22, metalness: 0.85 });
+const toolboxMat = new THREE.MeshStandardMaterial({ color: 0xd8392f, roughness: 0.45, metalness: 0.15 });
+const plasterMat = new THREE.MeshStandardMaterial({ color: 0xf6e7c8, roughness: 0.85 });
+const tickOnMat = new THREE.MeshBasicMaterial({ color: 0xffd648 });
+const tickOffMat = new THREE.MeshBasicMaterial({ color: 0x6b5236, transparent: true, opacity: 0.7 });
+/** Ticks of the repair ring (one lights up every 1/REPAIR_TICKS of the work). */
+const REPAIR_TICKS = 16;
+
+/** The Mécano's spanner: a handle, an open jaw at one end and a ring at the other, raised on a little post. */
+function buildSpanner(): THREE.Group {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(mechGeo.post, chromeMat);
+  post.position.y = 0.07;
+  const arm = new THREE.Group();
+  arm.position.y = 0.16;
+  const handle = new THREE.Mesh(mechGeo.handle, chromeMat);
+  const jaw = new THREE.Mesh(mechGeo.jaw, chromeMat);
+  jaw.rotation.x = -Math.PI / 2;
+  jaw.rotation.z = Math.PI * 0.275;
+  jaw.position.x = 0.25;
+  const ring = new THREE.Mesh(mechGeo.ring, chromeMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.x = -0.22;
+  arm.add(handle, jaw, ring);
+  g.add(post, arm);
+  g.userData.arm = arm;
+  return g;
+}
 // « Le Tortillard » (iteration 49): a toy steam locomotive (boiler, cab, chimney, cowcatcher, red wheels) and its flat
 // wagons, each with a little cannon; its rails on the floor (sleepers and two steel rails)
 const trainGeo = {
@@ -1171,6 +1215,26 @@ function buildTank(info: TankInfo): TankView {
     view.lantern = { glass, lens: lensMat, beam, pos, col, red: 0, reach: WATCH_RANGE };
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o !== room) o.castShadow = o.receiveShadow = true; });
   }
+  if (info.kind === 'mechanic') {
+    // a short barrel, the spanner on the turret, the toolbox on the back deck
+    barrel.geometry = geo.shortBarrel;
+    barrel.position.x = 0.26;
+    muzzle.position.x = 0.42;
+    const sp = buildSpanner();
+    sp.position.set(-0.02, 0.13, 0);
+    turret.add(sp);
+    view.spanner = sp;
+    const box = new THREE.Group();
+    const b = new THREE.Mesh(mechGeo.box, toolboxMat);
+    const lid = new THREE.Mesh(mechGeo.lid, toolboxMat);
+    lid.position.y = 0.075;
+    const grip = new THREE.Mesh(mechGeo.grip, chromeMat);
+    grip.position.y = 0.09;
+    box.add(b, lid, grip);
+    box.position.set(-0.29, 0.43, 0);
+    hull.add(box);
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
   if (info.kind === 'hopper') {
     const legMat = new THREE.MeshStandardMaterial({ color: shade(enemyColor('hopper'), -0.28), roughness: 0.5, metalness: 0.1 });
     view.legs = [];
@@ -1457,6 +1521,8 @@ export class Renderer {
   private smoke: ParticleSystem;
   private debris: ParticleSystem;
   private shocks: { mesh: THREE.Mesh; t: number; max: number; size: number }[] = [];
+  /** « Le Mécano » (iteration 51): the repairs going on, by Mécano id (the wreck, where it lies, when the work began). */
+  private repairs = new Map<number, { wreck: number; x: number; y: number; t0: number; dur: number; ring: THREE.Group }>();
   private flash: THREE.PointLight;
   private flashT = 0;
   private bulletMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 0.6, roughness: 0.3 });
@@ -1938,6 +2004,8 @@ export class Renderer {
     this.switches = [];
     for (const f of this.falling) this.levelGroup.remove(f.obj);
     this.falling = [];
+    for (const r of this.repairs.values()) this.scene.remove(r.ring);
+    this.repairs.clear();
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); if (t.lantern) this.scene.remove(t.lantern.beam); }
     this.tanks.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
@@ -3269,9 +3337,13 @@ export class Renderer {
       if (!t.alive) {
         if (v.wasAlive) this.deathMark(t.x, t.y, v.info);
         v.wasAlive = false;
+        this.wreckUnderRepair(v, t);
         continue;
       }
       v.wasAlive = true;
+      if (v.fixing) { v.fixing = false; v.root.rotation.set(0, 0, 0); }
+      if (!v.patch && (t.fx ?? 0) & FLAG_PATCHED) this.addPatch(v);
+      if (v.spanner) this.tankMechanic(v, t, dt, visible);
       v.root.position.set(t.x, 0, t.y);
       v.hull.rotation.y = -t.body;
       v.turret.rotation.y = -t.turret;
@@ -3479,6 +3551,97 @@ export class Renderer {
       }
     }
     for (let i = n; i < this.beamLights.length; i++) this.beamLights[i].intensity = 0;
+  }
+
+  // ---------------------------------------------------------------- « Le Mécano » (iteration 51)
+
+  /** A Mécano starts work on a wreck: a ring of ticks around it fills up as the work goes on. */
+  startRepair(mech: number, wreck: number, x: number, y: number, dur: number) {
+    this.stopRepair(mech);
+    const ring = new THREE.Group();
+    for (let i = 0; i < REPAIR_TICKS; i++) {
+      const a = (i / REPAIR_TICKS) * Math.PI * 2 - Math.PI / 2;
+      const m = new THREE.Mesh(mechGeo.tick, tickOffMat);
+      m.position.set(Math.cos(a) * 0.62, 0.04, Math.sin(a) * 0.62);
+      m.rotation.y = -a;
+      ring.add(m);
+    }
+    ring.position.set(x, 0, y);
+    this.scene.add(ring);
+    this.repairs.set(mech, { wreck, x, y, t0: this.time, dur: Math.max(0.5, dur), ring });
+  }
+
+  stopRepair(mech: number) {
+    const r = this.repairs.get(mech);
+    if (!r) return;
+    this.scene.remove(r.ring);
+    this.repairs.delete(mech);
+  }
+
+  /** The wreck rolls again: a puff of dust, a little star of sparks, the ring goes. */
+  repaired(wreck: number, x: number, y: number) {
+    for (const [id, r] of this.repairs) if (r.wreck === wreck) this.stopRepair(id);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      this.smoke.emit({ x: x + Math.cos(a) * 0.3, y: 0.08, z: y + Math.sin(a) * 0.3, vx: Math.cos(a) * 1.3, vy: 0.3 + Math.random() * 0.3, vz: Math.sin(a) * 1.3, life: 0.5, s0: 0.08, s1: 0.22, c0: 0xd9c4a0, c1: 0xefe4cf, drag: 3 });
+    }
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2.5;
+      this.glow.emit({ x, y: 0.5, z: y, vx: Math.cos(a) * sp, vy: 1.5 + Math.random() * 2, vz: Math.sin(a) * sp, life: 0.45 + Math.random() * 0.3, s0: 0.07, s1: 0.01, c0: 0xfff2a0, c1: 0xff9a30, drag: 1.5, grav: 6 });
+    }
+  }
+
+  /** A dead tank: drawn half sunk and tilted while a Mécano works on it, straightening up as the ring fills. */
+  private wreckUnderRepair(v: TankView, t: RTank) {
+    let rep: { x: number; y: number; t0: number; dur: number; ring: THREE.Group } | undefined;
+    for (const r of this.repairs.values()) if (r.wreck === t.id) { rep = r; break; }
+    if (!rep) {
+      if (v.fixing) { v.fixing = false; v.root.rotation.set(0, 0, 0); }
+      return;
+    }
+    const k = Math.max(0, Math.min(1, (this.time - rep.t0) / rep.dur));
+    v.fixing = true;
+    v.root.visible = true;
+    v.root.position.set(rep.x, -0.16 * (1 - k), rep.y);
+    v.root.rotation.set(0.45 * (1 - k) + Math.sin(this.time * 30) * 0.03 * (1 - k), 0, 0.25 * (1 - k));
+    const lit = Math.floor(k * REPAIR_TICKS);
+    rep.ring.children.forEach((m, i) => { (m as THREE.Mesh).material = i < lit ? tickOnMat : tickOffMat; });
+    if (Math.random() < 0.45) {
+      const a = Math.random() * Math.PI * 2;
+      this.glow.emit({ x: rep.x + Math.cos(a) * 0.25, y: 0.35, z: rep.y + Math.sin(a) * 0.25, vx: Math.cos(a) * 1.8, vy: 1.2 + Math.random() * 1.5, vz: Math.sin(a) * 1.8, life: 0.3 + Math.random() * 0.2, s0: 0.05, s1: 0.01, c0: 0xfff6c0, c1: 0xffa030, drag: 1, grav: 7 });
+    }
+  }
+
+  /** The Mécano's spanner: it bobs as it drives, and spins round while it works (a repair lost: its ring goes). */
+  private tankMechanic(v: TankView, t: RTank, dt: number, visible: boolean) {
+    const working = !!((t.fx ?? 0) & FLAG_REPAIR);
+    const arm = v.spanner!.userData.arm as THREE.Group;
+    if (working) arm.rotation.y += dt * 9;
+    else {
+      arm.rotation.y = arm.rotation.y % (Math.PI * 2);
+      arm.rotation.y += -arm.rotation.y * Math.min(1, dt * 6);
+      const r = this.repairs.get(t.id);
+      if (r && this.time - r.t0 > 0.5) this.stopRepair(t.id); // driven off, or the wreck came back some other way
+    }
+    arm.position.y = 0.16 + (working ? Math.abs(Math.sin(this.time * 18)) * 0.05 : Math.sin(this.time * 4) * 0.012);
+    if (working && visible && Math.random() < 0.5) {
+      const a = t.turret;
+      this.glow.emit({ x: t.x + Math.cos(a) * 0.35, y: 0.75, z: t.y + Math.sin(a) * 0.35, vx: (Math.random() - 0.5) * 1.5, vy: 1 + Math.random(), vz: (Math.random() - 0.5) * 1.5, life: 0.3, s0: 0.05, s1: 0.01, c0: 0xffffff, c1: 0xffc040, drag: 1, grav: 6 });
+    }
+  }
+
+  /** A patched tank (put back together by a Mécano): two crossed strips of plaster on its hull. */
+  private addPatch(v: TankView) {
+    const g = new THREE.Group();
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(mechGeo.strip, plasterMat);
+      m.rotation.y = s * 0.7;
+      g.add(m);
+    }
+    g.position.set(0.24, 0.38, 0.16);
+    g.scale.setScalar(0.62);
+    v.hull.add(g);
+    v.patch = g;
   }
 
   private tankHopper(v: TankView, t: RTank, dt: number): boolean {

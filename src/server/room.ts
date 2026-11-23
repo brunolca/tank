@@ -526,6 +526,10 @@ export class Room extends DurableObject<Env> {
     }
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
+    game.onRevive = (t) => { // « Le Mécano » (iteration 51): a repaired enemy is no longer destroyed for the next try
+      const idx = this.enemyIndexByTank.get(t.id);
+      if (idx !== undefined) this.killedEnemies.delete(idx);
+    };
     if (pvp(this.mode)) this.tally = undefined;
     else if (!this.tally || this.tally.mission !== this.mission) {
       // a new mission (not a retry): its par time and its shell budget, from the tanks as they stand now
@@ -561,6 +565,8 @@ export class Room extends DurableObject<Env> {
     if (!att?.v || att.v < 41) tanks = tanks.map((t) => (t.kind === 'hopper' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 47 draw the Veilleur as a plain brown tank (it never moves either, its beam just does not show)
     if (!att?.v || att.v < 47) tanks = tanks.map((t) => (t.kind === 'watcher' ? { ...t, kind: 'brown' } : t));
+    // tabs older than iteration 51 draw the Mécano as a plain grey tank (its wrecks just come back to life)
+    if (!att?.v || att.v < 51) tanks = tanks.map((t) => (t.kind === 'mechanic' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 49 draw the Tortillard as a Colosse and its wagons as grey tanks (gliding round the table)
     if (!att?.v || att.v < 49) tanks = tanks.map((t) => (t.kind === 'train' ? { ...t, kind: 'boss' } : t.kind === 'wagon' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {

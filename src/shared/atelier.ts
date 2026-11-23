@@ -77,6 +77,8 @@ export const BRUSHES: Brush[] = [
   // iteration 48: « Les ponts-levis » (share-code letters s, t)
   { ch: '{', label: 'Pont-levis rouge', group: 'sol' },
   { ch: '}', label: 'Pont-levis bleu', group: 'sol' },
+  // iteration 51: « Le Mécano » (share-code letter u)
+  { ch: 'R', label: 'Mécano', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
