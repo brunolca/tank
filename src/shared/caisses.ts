@@ -30,6 +30,7 @@ export function huntArena(round: number): ParsedLevel {
   lvl.name = 'La chasse aux caisses';
   lvl.storm = false;
   lvl.fog = undefined;
+  lvl.blizzard = undefined; // (iteration 54: the squalls would hide them)
   return lvl;
 }
 

@@ -39,6 +39,7 @@ export function crownArena(round: number): ParsedLevel & { crown: [number, numbe
   lvl.name = 'La couronne';
   lvl.storm = false;
   lvl.fog = undefined;
+  lvl.blizzard = undefined; // (iteration 54: the squalls would hide them)
   const crown = nearestFree(lvl.tiles, 10, 8, lvl.spawns); // the free cell nearest to the middle: fair to every corner
   return { ...lvl, crown };
 }

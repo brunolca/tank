@@ -17,6 +17,7 @@ import { renderTree } from './skills';
 import { COUNCIL_SECONDS, TAUPE_MIN_PLAYERS, TAUPE_STAGES, VERDICT_SECONDS, taupeLevel, type CouncilState } from '../shared/taupe';
 import { initAudio, isMusicOn, setMusicIntensity, setRain, setVolume, setWind, sfx, startMusic, toggleMusic, volumes, windGust } from './audio';
 import { gustAt, windAngle, windWords } from '../shared/wind';
+import { SQUALL_WARN, squallIn, whiteoutAt } from '../shared/blizzard';
 import { setupFeedback, type Region } from './feedback';
 import { Controls } from './input';
 import { EMOTE_ICONS, hydrateIcons, icon } from './icons';
@@ -223,6 +224,9 @@ let levelWind: number | undefined;
 let windSoundT = 0;
 /** Fog (iteration 26): the seed of the banks of mist of the current level, undefined on a clear table. */
 let levelFog: number | undefined;
+/** « Le blizzard » (iteration 54): squalls on this table, and the squall last announced (its starting tick). */
+let levelBlizzard = false;
+let squallSaid = -1;
 let latestK = 0;
 let pending: Input[] = [];
 let seq = 0;
@@ -396,6 +400,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   levelFog = typeof msg.fog === 'number' && Number.isFinite(msg.fog) ? msg.fog : undefined;
   renderer.fogAlly = coopLike(msg.mode) ? (id) => infos.get(id)?.team !== 99 : msg.mode === 'drapeau' ? (id) => !!myTeam && infos.get(id)?.team === myTeam : undefined;
   renderer.setFog(levelFog);
+  levelBlizzard = msg.blizzard === 1 && levelWind !== undefined;
+  renderer.setBlizzard(levelBlizzard);
+  squallSaid = -1;
   show('game');
   setRain(!!msg.storm);
   setWind(levelWind !== undefined);
@@ -423,8 +430,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(SAND) ? ' · Sable' : ''}${snowCells.length ? ' · Neige' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}`;
-  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${mapIce ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(SAND) ? ' · Sable' : ''}${snowCells.length ? ' · Neige' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}${levelBlizzard ? ' · Blizzard' : ''}`;
+  const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${mapIce ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}${levelBlizzard ? ' blizzard' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
   const thunderFight = enemies.some((e) => e.kind === 'thunder');
@@ -466,6 +473,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
   else if (enemies.some((e) => e.kind === 'watcher')) setTimeout(() => toast(msg.night ? 'Le Veilleur balaie la nuit de son faisceau. S’il t’éclaire, l’alarme sonne, tous les ennemis savent où tu es… et sa fusée suit la lumière : sors du faisceau !' : 'Le Veilleur balaie la table de son faisceau. S’il t’éclaire, l’alarme sonne et sa fusée suit la lumière : sors du faisceau ! Hors de sa lumière, il ne voit rien.', 5400), 2200);
+  else if (levelBlizzard) setTimeout(() => toast(coopLike(msg.mode) ? 'Blizzard : toutes les quinze secondes, une bourrasque blanchit la table. Plus personne ne voit à plus de trois cases… les ennemis non plus ! Profite-en pour avancer, et tire entre deux bourrasques.' : 'Blizzard : pendant les bourrasques, personne ne voit à plus de trois cases. Glisse-toi dans le dos des autres… mais chaque tir te trahit !', 6000), 2200);
   else if (levelFog !== undefined) setTimeout(() => toast(coopLike(msg.mode) ? 'Brouillard : au cœur de la brume, un tank ne se voit que de près… ou quand il tire. Les ennemis aussi te perdent de vue !' : 'Brouillard : cache-toi dans la brume ! Chaque tir trahit ta position.', 4600), 2200);
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
@@ -489,6 +497,30 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
+/** The wind chip of the HUD says « Blizzard » on such a table, and turns white while a squall blows (iteration 54). */
+function windChip(tick: number) {
+  const el = $('#hud-wind');
+  el.classList.toggle('squall', levelBlizzard && whiteoutAt(tick) > 0.2);
+  const label = levelBlizzard ? 'Blizzard' : 'Vent';
+  const sp = el.querySelector('span');
+  if (sp && sp.textContent !== label) sp.textContent = label;
+}
+
+/**
+ * « Le blizzard » (iteration 54): a squall is announced SQUALL_WARN seconds before it rises (« Bourrasque ! » and a howl),
+ * once per squall. Everything follows from the tick: no message on the wire.
+ */
+function squallWatch(tick: number, audible: boolean) {
+  const left = squallIn(tick);
+  if (left <= 0 || left > SQUALL_WARN) return;
+  const start = Math.round(tick + left * TICK_RATE);
+  if (Math.abs(start - squallSaid) < TICK_RATE) return;
+  squallSaid = start;
+  if (!audible || screen !== 'game') return;
+  toast('Bourrasque ! Plus personne n’y voit rien…', 2200);
+  sfx.squall();
+}
+
 /** « Le bilan » (iteration 45): the weather of a table, as words for the briefing. */
 function weatherWords(night: boolean | undefined, storm: boolean | undefined, bl: number[] = belts, wind = levelWind, fog = levelFog) {
   const w: string[] = [];
@@ -497,7 +529,7 @@ function weatherWords(night: boolean | undefined, storm: boolean | undefined, bl
   if (bl.includes(ICE)) w.push('Glace');
   if (bl.includes(SAND)) w.push('Sable');
   if (bl.includes(SNOW) || bl.includes(PACKED)) w.push('Neige');
-  if (wind !== undefined) w.push('Vent');
+  if (wind !== undefined) w.push(levelBlizzard ? 'Blizzard' : 'Vent');
   if (fog !== undefined) w.push('Brouillard');
   return w;
 }
@@ -822,6 +854,8 @@ function dryFire() {
   sfx.dry();
   reticle.dry();
 }
+/** « Gare au tir ami » (iteration 54): was the reticle red last frame, and when it last beeped. */
+let friendWas = false, friendBeep = 0;
 /**
  * « Gare au tir ami » (iteration 53): would a shell fired from (x, y) along `ang` hit a teammate (or come back on its shooter)
  * before any foe? The reticle then turns red. Same ricochet ray as the AI, walls, portals and snowmen included.
@@ -871,6 +905,10 @@ function updateReticleOnline(latest: Snap) {
     }
     friend = friendlyAim(pred.x, pred.y, aimAng, mySpec.bounces, myTankId, others);
   }
+  // and a soft double beep when it turns red (iteration 54), at most every second and a half
+  const now = performance.now();
+  if (friend && !friendWas && now - friendBeep > 1500) { friendBeep = now; sfx.friendWarn(); }
+  friendWas = friend;
   reticle.update({
     x: spot.x, y: spot.y, max: mySpec.maxBullets, ready, mines: mySpec.mines, minesLeft: Math.max(0, mySpec.mines - mines),
     reload: mySpec.fireCd > 0 ? Math.max(0, localFireCd) / mySpec.fireCd : 0,
@@ -919,11 +957,13 @@ function onlineFrame(dt: number) {
   if (levelWind !== undefined && (windSoundT -= dt) <= 0) {
     windSoundT = 0.15;
     const k = gustAt(renderTick);
-    windGust(k);
+    windGust(levelBlizzard ? Math.min(1.5, k + whiteoutAt(renderTick) * 0.8) : k); // a squall howls (iteration 54)
     $<HTMLElement>('#hud-wind i').style.transform = `rotate(${((windAngle(levelWind, renderTick) * 180) / Math.PI).toFixed(1)}deg)`;
     $<HTMLElement>('#hud-wind u').style.width = `${Math.round(k * 100)}%`;
+    windChip(renderTick);
   }
 
+  if (levelBlizzard) squallWatch(renderTick, true);
   // events
   while (evq.length && evq[0].k <= renderTick) handleEvent(evq.shift()!.e, true);
 
@@ -2250,6 +2290,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   g.storm = opts.storm ?? (!!lvl.storm || (!opts.heroes && opts.mission === undefined && Math.random() < 0.18));
   // the wind (iteration 23): its own setting, and sometimes on the home screen
   g.wind = lvl.wind ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && Math.random() < 0.16 ? Math.floor(Math.random() * 8) * (Math.PI / 4) : undefined);
+  g.blizzard = !!lvl.blizzard && g.wind !== undefined; // « Le blizzard » (iteration 54)
   // the fog (iteration 26): its own setting, and sometimes on the home screen (on calm, daylit tables)
   g.fog = lvl.fog ?? (!opts.heroes && opts.mission === undefined && !opts.atelier && !g.night && g.wind === undefined && Math.random() < 0.16 ? 1 + Math.floor(Math.random() * 999) : undefined);
   if (lvl.crates?.length) { g.bonusKinds = lvl.crates; g.bonusNext = 3; g.bonusEvery = [7, 10]; } // a mission's own crates (iteration 52)
@@ -2299,6 +2340,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   renderer.setWind(g.wind);
   renderer.fogAlly = (id) => g.tankById(id)?.team === 1; // the camera sees through the mist around the heroes
   renderer.setFog(g.fog);
+  renderer.setBlizzard(g.blizzard); squallSaid = -1;
 }
 function stopAttract() {
   attract = undefined;
@@ -2318,6 +2360,7 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
   g.storm = !!lvl.storm;
   g.wind = lvl.wind;
   g.fog = lvl.fog;
+  g.blizzard = !!lvl.blizzard && g.wind !== undefined;
   const names = [0, 1, 2, 3].map((i) => RIVAL_NAMES[(vs.round + i * 3) % RIVAL_NAMES.length]);
   lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
     const t = g.addTank('player', i + 1, x, y, PLAYER_COLORS[i], `ia:${i + 1}`, names[i]);
@@ -2338,6 +2381,7 @@ function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
   renderer.setWind(g.wind);
   renderer.fogAlly = () => true; // the camera follows everybody: the mist only hides them from each other
   renderer.setFog(g.fog);
+  renderer.setBlizzard(g.blizzard); squallSaid = -1;
   renderVsBoard();
 }
 
@@ -2376,6 +2420,7 @@ function startAttractHunt(h: AttractHunt, arms?: Weapon[]) {
   renderer.setWind(g.wind);
   renderer.fogAlly = () => true;
   renderer.setFog(undefined);
+  renderer.setBlizzard(false);
   renderAttractHunt();
 }
 
@@ -2454,6 +2499,7 @@ function startAttractCrown(c: AttractCrown, arms?: Weapon[]) {
   renderer.setWind(g.wind);
   renderer.fogAlly = () => true;
   renderer.setFog(undefined);
+  renderer.setBlizzard(false);
   renderAttractCrown();
 }
 
@@ -2533,6 +2579,7 @@ function startAttractFlags(c: AttractFlags, arms?: Weapon[]) {
   renderer.setStorm(false);
   renderer.setWind(g.wind);
   renderer.setFog(undefined);
+  renderer.setBlizzard(false);
   renderCtfBoard();
 }
 
@@ -2677,6 +2724,7 @@ function attractFrame(dt: number) {
   }
   const u = attractAcc / DT;
   renderer.windTick = renderer.fogTick = g.tick + u;
+  if (g.blizzard) squallWatch(g.tick + u, document.body.classList.contains('demo') && screen === 'game');
   const tanks: RTank[] = g.tanks.map((t) => {
     const p = attractPrev.get(t.id) ?? t;
     const w = jumped(p.x, p.y, t.x, t.y, u);
@@ -3234,14 +3282,15 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…'],
   ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.'],
   ['{}', 'Ponts-levis', 'Au-dessus d’un trou. Les rouges sont levés au départ, les bleus baissés, et l’interrupteur les fait basculer. Levé, il laisse passer les obus mais pas les tanks. Et à chaque « Clac ! », les tapis roulants changent de sens.'],
-  ['8', 'Bonhomme de neige', 'Il arrête les tanks et avale les obus, sans ricochet. Le premier obus lui fait perdre la tête, le deuxième le renverse dans la neige. Une mine le fait tomber d’un coup. Et il te suit des yeux…', true],
+  ['8', 'Bonhomme de neige', 'Il arrête les tanks et avale les obus, sans ricochet. Le premier obus lui fait perdre la tête, le deuxième le renverse dans la neige. Une mine le fait tomber d’un coup. Et il te suit des yeux…'],
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
-const WEATHER: [string, string, string][] = [
+const WEATHER: [string, string, string, boolean?][] = [
   ['moon', 'Nuit', 'Les ennemis ne te voient que de près… ou quand tu tires. Tes phares éclairent devant toi.'],
   ['bolt', 'Orage', 'Quand le sol crépite, la foudre va tomber : écarte-toi ! Chaque éclair montre tout le monde.'],
   ['wind', 'Vent', 'Il courbe les obus en vol : vise en amont, ou tire quand la manche à air retombe.'],
   ['fog', 'Brouillard', 'Des bancs de brume dérivent sur la table : on n’y voit que ses voisins proches.'],
+  ['snowflake', 'Blizzard', 'Neige et vent : toutes les quinze secondes, une bourrasque blanchit la table. Plus personne ne voit à plus de trois cases, le vent redouble et les pistes se comblent vite.', true],
 ];
 function manualPage(tab: ManualTab) {
   if (tab === 'commandes') return `<div class="keys">${KEYS.map(([h, rows]) => `<section><h3>${escapeHtml(h)}</h3><ul>${rows.map(([k, v]) => `<li><span>${k}</span><b>${escapeHtml(v)}</b></li>`).join('')}</ul></section>`).join('')}</div>
@@ -3252,7 +3301,7 @@ function manualPage(tab: ManualTab) {
     <p class="tip">Les caisses tombent du ciel pendant les missions : roule dessus pour les ouvrir. Le Pilleur, lui aussi, les convoite.</p>`;
   if (tab === 'terrain') return `<ul class="terrain">${TERRAIN.map(([chs, n, d, fresh]) => `<li class="${fresh ? 'new' : ''}">${[...chs].map((c) => `<img src="${cellImage(c)}" alt="">`).join('')}<div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
     <h3 class="weather-h">Le temps qu’il fait</h3>
-    <ul class="terrain weather">${WEATHER.map(([i, n, d]) => `<li><i class="wx">${icon(i)}</i><div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
+    <ul class="terrain weather">${WEATHER.map(([i, n, d, fresh]) => `<li class="${fresh ? 'new' : ''}"><i class="wx">${icon(i)}</i><div><b>${escapeHtml(n)}</b><span>${escapeHtml(d)}</span></div></li>`).join('')}</ul>
     <p class="tip">Tous ces terrains t’attendent aussi dans l’atelier, pour dessiner tes propres missions, avec la météo de ton choix.</p>`;
   const n = BESTIARY.filter(([k]) => metOrDemo(k)).length;
   return `<p class="count">${n >= BESTIARY.length ? 'Collection complète' : 'Rencontrés'} : <b>${n} / ${BESTIARY.length}</b></p>
@@ -4445,6 +4494,19 @@ if (params.has('demo')) {
     },
     /** « Gare au tir ami » (iteration 53): the demo reticle shows red for that long (as when a teammate is in the line). */
     friendAim(ms = 2500) { demoFriend = performance.now() + ms; },
+    /**
+     * « Le blizzard » (iteration 54): on a blizzard table, the next squall rises in `inS` seconds (for the videos: the
+     * cycle is moved on, never back). Returns the seconds it had to wait, or -1 when the table has no blizzard.
+     */
+    squall(inS = 1.8) {
+      const g = attract;
+      if (!g?.blizzard) return -1;
+      const wait = squallIn(g.tick);
+      if (wait > inS) g.tick += Math.round((wait - inS) * TICK_RATE);
+      return wait;
+    },
+    /** « Le blizzard »: the squall of this frame, as the screen draws it (0 clear, 1 white). */
+    get whiteout() { return renderer.whiteNow; },
     /** « Détonateur » (iteration 52): a hero's remote mine on the way of the nearest enemy (the hero sets it off when it rolls on). */
     remoteTrap() {
       const g = attract;

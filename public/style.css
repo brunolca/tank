@@ -235,6 +235,10 @@ kbd {
 #hud-wind i { font-style: normal; display: inline-block; color: #d8f0e0; transition: transform 0.2s linear; }
 #hud-wind b { width: 46px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
 #hud-wind u { display: block; height: 100%; width: 50%; background: linear-gradient(90deg, #9bd3b0, #f6efe2); border-radius: 3px; transition: width 0.2s linear; }
+/* « Le blizzard » (iteration 54): the chip turns to snow while a squall blows */
+#hud-wind.squall { background: rgba(236, 244, 255, 0.85); color: #1d3550; border-color: #fff; box-shadow: 0 0 18px rgba(255, 255, 255, 0.7); }
+#hud-wind.squall i { color: #1d3550; }
+#hud-wind.squall u { background: linear-gradient(90deg, #9fc4ff, #ffffff); }
 #scoreboard { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .sb-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
 .sb-row i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }

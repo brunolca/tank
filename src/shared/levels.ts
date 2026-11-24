@@ -25,6 +25,7 @@ export interface LevelDef {
   storm?: boolean; // lightning strikes fall on the table, announced by a crackling ring (iteration 9)
   wind?: number; // a wind bends the shells (iteration 23): where it mainly blows, in degrees (0 right, 90 down the map, 180 left, 270 up)
   fog?: number; // banks of mist drift over the table (iteration 26): the seed of their paths (see fog.ts)
+  blizzard?: boolean; // « Le blizzard » (iteration 54): squalls of snow now and then (see blizzard.ts); needs a wind
   /** Optional overlay of conveyor belts (same 17 rows, only > < ^ V count): lets a tank start on a belt (iteration 16). */
   belts?: string[];
   /** Only these kinds of bonus crates fall in this mission, and more often (iteration 52). */
@@ -1154,6 +1155,60 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 54: « Le blizzard ». A snowfield in the wind: every fifteen seconds a squall sweeps the table, nobody sees
+  // farther than three tiles, the enemies lose you (and you lose them), and the trails fill up fast; a portal links top and bottom. Strike between squalls
+  54: {
+    name: 'Le blizzard',
+    wind: 200,
+    blizzard: true,
+    map: [
+      '......................',
+      '.&&&&&&&&&*&&&&&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&s&&.',
+      '.&&###&&&&HH&&&&&&&&&.',
+      '.&&&&&&&8&&&&8&&&###&.',
+      '.&&&&&&&&&&&&&&&&&&y&.',
+      '..1&&&&###&&&&&&&&&&&.',
+      '.&&&&&&&&&&&8&&&m&&&&.',
+      '.&&&8&&&&&&&&&&&&&&&g.',
+      '.&&&&&&&&&&&8&&&&&&&&.',
+      '..2&&&&###&&&&&&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&&y&.',
+      '.&&&&&&&8&&&&8&&&###&.',
+      '.&&###&&&&HH&&&&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&a&&.',
+      '.&&&&&&&&&*&&&&&&&&&&.',
+      '......................',
+    ],
+  },
+  // iteration 54: a mountain pass, at night, in the blizzard. A Veilleur sweeps the middle with its beam (a squall blinds
+  // it too), the Givré freezes the snow, a Pilleur hunts the crates, an ash and a violet guard the far end: slip from snowman to
+  // snowman while the squall blows
+  75: {
+    name: 'Nuit blanche',
+    night: true, // (the generated 75th was a night mission: the nights stay as many)
+    wind: 270,
+    blizzard: true,
+    map: [
+      '......................',
+      '.&&&&&HHH&&&&HHH&&&&&.',
+      '.&&&&&HHH&&&&HHH&&&a&.',
+      '.&&8&&&&&&8&&&&&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&8&&.',
+      '.HHH&&&&&###&&&&&&&p&.',
+      '..1&&8&&&&&&&&8&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&HH&.',
+      '.&&&8&&&&&&L&&&&&&HHf.',
+      '.&&&&&&&&&&&&&&&&&HH&.',
+      '..2&&8&&&&&&&&8&&&&&&.',
+      '.HHH&&&&&###&&&&&&&t&.',
+      '.&&&&&&&&&&&&&&&&&8&&.',
+      '.&&8&&&&&&8&&&&&&&&&&.',
+      '.&&&&&HHH&&&&HHH&&&v&.',
+      '.&&&&&HHH&&&&HHH&&&&&.',
+      '......................',
+    ],
+  },
   // iteration 51: « Le Mécano ». At night, it works behind a tall fence at the back of the garage, while a steel tank, a pink
   // and a grey tank hold the front: go round the fence and shoot it first, or every wreck rolls again
   67: {
@@ -1451,6 +1506,8 @@ export interface ParsedLevel {
   wind?: number;
   /** Fog (iteration 26): the seed of the banks of mist, when there is fog. */
   fog?: number;
+  /** « Le blizzard » (iteration 54): squalls of snow sweep the (windy) table now and then. */
+  blizzard?: boolean;
   /** Floor layer: conveyor belts (iteration 16), ice (iteration 21) and sand (iteration 36), one code per cell (0 none, 1 right, 2 left, 3 up, 4 down, 5 ice, 6 sand), only when the map has some. */
   belts?: number[];
   /** « Le Tortillard » (iteration 49): the loop of rails its train runs round, flat [x0, y0, x1, y1…] (closed: the last point joins the first). */
@@ -1507,7 +1564,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       }
     }
   }
-  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180, fog: def.fog, crates: def.crates };
+  return { name: def.name, tiles, spawns: spawns.filter(Boolean), enemies, night: def.night, storm: def.storm, belts, wind: def.wind === undefined ? undefined : (def.wind * Math.PI) / 180, fog: def.fog, blizzard: def.blizzard && def.wind !== undefined ? true : undefined, crates: def.crates };
 }
 
 // ---------- procedural missions (endless mode after the handmade campaign) ----------
@@ -2121,6 +2178,11 @@ export function versusArena(round: number): ParsedLevel {
   base.storm = round % 5 === 2; // and one in five under a storm (from the third round)
   base.wind = round % 6 === 4 ? ((round * 3) % 8) * (Math.PI / 4) : undefined; // and one in six in the wind (iteration 23), from the fifth
   base.fog = round % 7 === 5 && !base.night && base.wind === undefined ? 3 + round : undefined; // and one in seven in the fog (iteration 26): hide and seek
+  // « Le blizzard » (iteration 54): the snowy arenas, by day, every other time round the pool, are swept by squalls
+  if (base.belts?.includes(SNOW) && !base.night && base.fog === undefined && Math.floor(round / pool.length) % 2 === 0) {
+    base.blizzard = true;
+    if (base.wind === undefined) base.wind = ((round * 3) % 8) * (Math.PI / 4);
+  }
   return base;
 }
 

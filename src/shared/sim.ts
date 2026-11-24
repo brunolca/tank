@@ -5,6 +5,7 @@ import {
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
+import { BLIZZARD_PUSH, BLIZZARD_REFILL, blizzardHides, whiteoutAt } from './blizzard';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
@@ -405,6 +406,10 @@ export class Game {
   fog?: number;
   /** Where the banks of mist are this tick (see fogBanks). */
   fogNow: FogBank[] = [];
+  /** « Le blizzard » (iteration 54): squalls of snow sweep this (windy) table now and then, see blizzard.ts. */
+  blizzard = false;
+  /** Thickness of the squall this tick (0 clear, 1 its heart; always 0 without a blizzard). */
+  whiteout = 0;
   /** « Drapeaux » (iteration 24): the two flags of a capture-the-flag round (undefined in every other mode). */
   flags?: CtfFlag[];
   /** The team that brought the enemy flag home this round (0: not yet). */
@@ -528,6 +533,8 @@ export class Game {
     this.tick++;
     if (this.frozen) return;
     if (this.wind !== undefined) this.gust = windAt(this.wind, this.tick);
+    this.whiteout = this.blizzard ? whiteoutAt(this.tick) : 0;
+    if (this.whiteout > 0) { const k = 1 + BLIZZARD_PUSH * this.whiteout; this.gust = [this.gust[0] * k, this.gust[1] * k]; } // a squall blows harder
     if (this.fog !== undefined) fogBanks(this.fog, this.tick, this.fogNow);
     else if (this.fogNow.length) this.fogNow = [];
     for (const t of this.tanks) {
@@ -829,6 +836,7 @@ export class Game {
    * after SNOW_REFILL seconds. The Foreur under the table and the Sauterelle in the air pack nothing.
    */
   stepSnow(dt: number) {
+    const SNOW_REFILL = this.refill;
     for (const t of this.tanks) {
       const c = t.alive && !under(t) && t.x >= 0 && t.y >= 0 && t.x < W && t.y < H ? Math.floor(t.y) * W + Math.floor(t.x) : -1;
       const was = this.snowAt.get(t.id);
@@ -848,8 +856,12 @@ export class Game {
     }
   }
 
+  /** Seconds before a trail is covered again: much sooner in a blizzard (iteration 54). */
+  get refill() { return this.blizzard ? BLIZZARD_REFILL : SNOW_REFILL; }
+
   /** A blast blows the snow away around it (iteration 42): bare trails, until the snowfall covers them again. */
   clearSnow(x: number, y: number, R: number) {
+    const SNOW_REFILL = this.refill;
     for (let cy = Math.floor(y - R); cy <= Math.floor(y + R); cy++)
       for (let cx = Math.floor(x - R); cx <= Math.floor(x + R); cx++) {
         if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue;
@@ -1701,6 +1713,7 @@ export class Game {
     if (d > WATCH_RANGE + r) return false;
     if (d > 0.3 && Math.abs(angDiff(t.turret, Math.atan2(dy, dx))) > WATCH_HALF + Math.asin(Math.min(1, r / d))) return false;
     if (this.fogNow.length && fogHides(this.fogNow, x, y, t.x, t.y, r)) return false;
+    if (this.whiteout > 0 && blizzardHides(this.whiteout, x, y, t.x, t.y, r)) return false; // nor through a squall (iteration 54)
     return this.lineClear(t.x, t.y, x, y);
   }
 
@@ -2847,6 +2860,8 @@ export class Game {
     if (this.inTunnel(o) && (o.x - t.x) ** 2 + (o.y - t.y) ** 2 > TUNNEL_SIGHT * TUNNEL_SIGHT) return false;
     // lost in a bank of mist (iteration 26), unless close by, or its muzzle flash (or a lightning flash) just gave it away
     if (this.fogNow.length && o.reveal <= 0 && this.flash <= 0 && fogHides(this.fogNow, o.x, o.y, t.x, t.y, o.r)) return false;
+    // lost in a squall of snow (iteration 54): nobody sees far, unless a muzzle flash (or lightning) gives it away
+    if (this.whiteout > 0 && o.reveal <= 0 && this.flash <= 0 && blizzardHides(this.whiteout, o.x, o.y, t.x, t.y, o.r)) return false;
     if (!this.night || o.reveal > 0 || this.flash > 0) return true;
     const d = NIGHT_SIGHT + o.r;
     return (o.x - t.x) ** 2 + (o.y - t.y) ** 2 < d * d;

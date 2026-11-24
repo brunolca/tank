@@ -514,6 +514,7 @@ export class Room extends DurableObject<Env> {
     game.storm = !!this.level.storm;
     game.wind = this.level.wind;
     game.fog = this.level.fog;
+    game.blizzard = !!this.level.blizzard; // « Le blizzard » (iteration 54)
     if (pvp(this.mode)) { game.bonusNext = 5; game.bonusEvery = [8, 12]; }
     if (this.level.crates?.length && !pvp(this.mode)) { game.bonusKinds = this.level.crates; game.bonusNext = 3; game.bonusEvery = [7, 10]; } // a mission's own crates (iteration 52)
     if (this.bases) game.flags = newFlags(this.bases);
@@ -583,6 +584,7 @@ export class Room extends DurableObject<Env> {
       storm: this.level.storm ? 1 : undefined,
       wind: this.level.wind,
       fog: this.level.fog,
+      blizzard: this.level.blizzard ? 1 : undefined,
       belts: this.game.floorBelts(), // the map's own floor (the Givré's frost comes with the snapshots, iteration 31)
       daily: this.dailyState(),
       rush: this.rushState(),

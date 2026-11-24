@@ -5,6 +5,7 @@ import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isSnowman, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
+import { BLIZZARD_HIDE, BLIZZARD_SIGHT, whiteoutAt } from '../shared/blizzard';
 import { isRivalId } from '../shared/rivals';
 import { CTF_RETURN, TEAM_COLORS } from '../shared/drapeau';
 import { GOLD_COLOR as GOLD } from '../shared/caisses';
@@ -1534,6 +1535,11 @@ export class Renderer {
   private fogAmt = 0;
   private fogStart = 0;
   private fogHorn = 0;
+  /** « Le blizzard » (iteration 54): squalls on this table (read at windTick), the veil of snow, and the squall of this frame. */
+  private blizzOn = false;
+  private blizzMesh?: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  /** Thickness of the squall this frame (0 clear, 1 its heart). */
+  whiteNow = 0;
   /** Called now and then on a foggy table (for the foghorn). */
   onFogHorn?: () => void;
   private tunnels: { cell: number; root: THREE.Group; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; op: number }[] = [];
@@ -2288,7 +2294,7 @@ export class Renderer {
       this.scene.add(sock);
       this.sock = sock; this.sockPivot = pivot;
     }
-    if (this.leaves) this.leaves.visible = on;
+    if (this.leaves) this.leaves.visible = on && !this.blizzOn; // (a blizzard blows snow, not leaves: iteration 54)
     if (this.gustLines) this.gustLines.visible = on;
     if (this.sock) this.sock.visible = on;
   }
@@ -2361,9 +2367,96 @@ export class Renderer {
   }
   get fogOn() { return this.fogSeed !== undefined; }
 
+  /**
+   * « Le blizzard » (iteration 54): now and then a squall turns the table white. A veil of driven snow streams along the
+   * wind, thick everywhere but in a small clearing around you (and your teammates), where you still see BLIZZARD_SIGHT tiles.
+   */
+  setBlizzard(on: boolean) {
+    this.blizzOn = on;
+    this.whiteNow = 0;
+    if (on && !this.blizzMesh) {
+      const seers = Array.from({ length: 4 }, () => new THREE.Vector3(0, 0, 0));
+      const mat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: { uSeer: { value: seers }, uTime: { value: 0 }, uAmt: { value: 0 }, uSight: { value: BLIZZARD_SIGHT }, uDir: { value: new THREE.Vector2(1, 0) }, uNight: { value: 0 } },
+        vertexShader: `
+          varying vec2 vP;
+          void main() {
+            vec4 w = modelMatrix * vec4(position, 1.0);
+            vP = w.xz;
+            gl_Position = projectionMatrix * viewMatrix * w;
+          }`,
+        fragmentShader: `
+          uniform vec3 uSeer[4];
+          uniform float uTime, uAmt, uSight, uNight;
+          uniform vec2 uDir;
+          varying vec2 vP;
+          float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float noise(vec2 p) {
+            vec2 i = floor(p), f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+          }
+          void main() {
+            // along the wind (u) and across it (v): long streaks of snow racing downwind
+            vec2 q = vec2(dot(vP, uDir), dot(vP, vec2(-uDir.y, uDir.x)));
+            float s1 = noise(vec2(q.x * 0.35 - uTime * 2.6, q.y * 2.2));
+            float s2 = noise(vec2(q.x * 0.8 - uTime * 4.1, q.y * 4.5 + 7.0));
+            float s3 = noise(vec2(q.x * 0.18 - uTime * 0.9, q.y * 0.6 + 3.0));
+            float a = 0.62 + 0.22 * s3 + 0.16 * s1 + 0.12 * s2;
+            float clear = 1.0;
+            for (int i = 0; i < 4; i++) {
+              vec3 s = uSeer[i];
+              float c = smoothstep(uSight * 0.4, uSight * 1.05, length(vP - s.xy));
+              clear = min(clear, mix(1.0, 0.12 + 0.88 * c, s.z));
+            }
+            vec3 col = mix(vec3(0.86, 0.9, 0.97), vec3(1.0), s1 * 0.6 + s2 * 0.4);
+            col = mix(col, vec3(0.13, 0.17, 0.27) + 0.12 * s1, uNight * 0.82); // a dark squall at night
+            gl_FragColor = vec4(col, clamp(a * clear, 0.0, 0.93) * uAmt);
+          }`,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W + 6, H + 6).rotateX(-Math.PI / 2), mat);
+      mesh.position.set(W / 2, 1.62, H / 2); // above the tall walls: the squall swallows everything
+      mesh.renderOrder = 6;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      this.blizzMesh = mesh;
+    }
+    if (this.blizzMesh) { this.blizzMesh.visible = false; this.blizzMesh.material.uniforms.uAmt.value = 0; }
+    if (this.leaves) this.leaves.visible = !on && this.windBase !== undefined; // snow flies instead of leaves
+  }
+  get blizzardOn() { return this.blizzOn; }
+
+  private animateBlizzard() {
+    const m = this.blizzMesh;
+    if (!m || !this.blizzOn) { this.whiteNow = 0; return; }
+    const w = whiteoutAt(this.windTick);
+    this.whiteNow = w;
+    m.visible = w > 0.001;
+    if (!m.visible) return;
+    const u = m.material.uniforms;
+    u.uAmt.value = w;
+    u.uTime.value = this.time;
+    u.uNight.value = this.night;
+    const ang = windAngle(this.windBase ?? 0, this.windTick);
+    (u.uDir.value as THREE.Vector2).set(Math.cos(ang), Math.sin(ang));
+    const seers = u.uSeer.value as THREE.Vector3[];
+    for (let i = 0; i < seers.length; i++) {
+      const s = this.fogSeers[i];
+      if (s) seers[i].set(s.x, s.y, 1); else seers[i].set(0, 0, 0);
+    }
+  }
+
   /** Is that tank lost in the mist for us? Never ourselves, our teammates, a tank close to one of us, or one that just fired. */
   private lostInFog(t: RTank, v: TankView) {
-    if (this.fogSeed === undefined || !t.alive || (v.seenT ?? 0) > 0 || this.lightning > 0.45) return false;
+    if (!t.alive || (v.seenT ?? 0) > 0 || this.lightning > 0.45) return false;
+    // lost in a squall (iteration 54): farther than BLIZZARD_SIGHT from all of us
+    if (this.blizzOn && this.whiteNow >= BLIZZARD_HIDE) {
+      const rb = BLIZZARD_SIGHT + v.scale * TANK_R;
+      if (!this.fogSeers.some((s) => (s.x - t.x) ** 2 + (s.y - t.y) ** 2 < rb * rb)) return true;
+    }
+    if (this.fogSeed === undefined) return false;
     const r = FOG_SIGHT + v.scale * TANK_R;
     for (const s of this.fogSeers) if ((s.x - t.x) ** 2 + (s.y - t.y) ** 2 < r * r) return false;
     return fogDensity(this.fogNow, t.x, t.y) >= FOG_HIDE;
@@ -2698,11 +2791,21 @@ export class Renderer {
   private animateSnow(dt: number) {
     if (!this.snow?.visible) return;
     const p = this.snowPos;
+    // in a blizzard (iteration 54) the flakes fly along the wind, faster and faster as a squall comes
+    let bx = 0, bz = 0;
+    if (this.blizzOn && this.windBase !== undefined) {
+      const ang = windAngle(this.windBase, this.windTick), k = 1.2 + gustAt(this.windTick) * 1.5 + whiteoutAt(this.windTick) * 7;
+      bx = Math.cos(ang) * k; bz = Math.sin(ang) * k;
+    }
     for (let k = 0; k < SNOW_FLAKES; k++) {
       const o = k * 3, sd = this.snowSeed[k];
-      p[o] += Math.sin(this.time * 0.9 + sd) * 0.35 * dt + 0.12 * dt;
+      p[o] += Math.sin(this.time * 0.9 + sd) * 0.35 * dt + (bx ? bx * (0.7 + (sd % 1) * 0.6) : 0.12) * dt;
       p[o + 1] -= (0.55 + (sd % 1) * 0.4) * dt;
-      p[o + 2] += Math.cos(this.time * 0.7 + sd) * 0.25 * dt;
+      p[o + 2] += Math.cos(this.time * 0.7 + sd) * 0.25 * dt + bz * (0.7 + (sd % 1) * 0.6) * dt;
+      if (bx || bz) { // blown off the table: back in on the other side
+        if (p[o] > W + 2) p[o] -= W + 4; else if (p[o] < -2) p[o] += W + 4;
+        if (p[o + 2] > H + 2) p[o + 2] -= H + 4; else if (p[o + 2] < -2) p[o + 2] += H + 4;
+      }
       if (p[o + 1] < 0.02) { p[o] = -2 + Math.random() * (W + 4); p[o + 1] = 6 + Math.random(); p[o + 2] = -2 + Math.random() * (H + 4); }
     }
     (this.snow.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
@@ -3488,8 +3591,9 @@ export class Renderer {
 
   syncTanks(list: RTank[], myId: number, dt: number) {
     this.fogSeers.length = 0;
-    if (this.fogSeed !== undefined) {
-      fogBanks(this.fogSeed, this.fogTick, this.fogNow);
+    if (this.fogSeed !== undefined || this.blizzOn) {
+      if (this.fogSeed !== undefined) fogBanks(this.fogSeed, this.fogTick, this.fogNow);
+      this.whiteNow = this.blizzOn ? whiteoutAt(this.windTick) : 0;
       for (const t of list) if (t.alive && (t.id === myId || this.fogAlly?.(t.id)) && this.fogSeers.length < 4) this.fogSeers.push({ x: t.x, y: t.y });
     }
     this.tunnelBusy.clear();
@@ -4840,6 +4944,7 @@ export class Renderer {
     this.animateSnow(dt);
     this.animateWind(dt);
     this.animateFog(dt);
+    this.animateBlizzard();
     this.animateFlags(dt);
     this.animateCrown(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;

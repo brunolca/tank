@@ -31,6 +31,7 @@ const P: Record<string, string> = {
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   wind: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/>',
   fog: '<path d="M4 8h16M2 12h14M6 16h16M4 20h10"/>',
+  snowflake: '<path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5M4 10.3l3.4-1-.9-3.4M20 13.7l-3.4 1 .9 3.4M4 13.7l3.4 1-.9 3.4M20 10.3l-3.4-1 .9-3.4"/>',
   leaf: '<path d="M5 19C5 10 10 5 20 4c0 10-5 15-14 15z"/><path d="M5 19l9-9"/>',
   // the mole's role
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',

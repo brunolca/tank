@@ -179,6 +179,7 @@ export type ServerMsg =
       night?: 1; // night mission (older clients just play it in daylight)
       storm?: 1; // storm: lightning strikes (iteration 9; older clients see tanks blow up without the lightning)
       wind?: number; // wind (iteration 23): where it mainly blows (radians); the gust of the moment follows from the tick (see wind.ts). Older clients just see the shells curve
+      blizzard?: 1; // « Le blizzard » (iteration 54): squalls of snow, a function of the tick (see blizzard.ts); older tabs just see the enemies lose sight of them
       fog?: number; // fog (iteration 26): the seed of the drifting banks of mist (see fog.ts); older clients just see the enemies hesitate
       belts?: number[]; // conveyor belts, one code per cell (iteration 16; older tabs are told to reload, at worst they see tanks glide)
       daily?: DailyState;

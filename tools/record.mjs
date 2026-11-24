@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 66, arms: ['canon', 'ricochet'], hud: true, seconds: 18, snowShots: [2.2, 4.4, 8, 11.5, 14.5], caption: 'Itération 53 : les bonshommes de neige', sub: 'Ils avalent les obus… et y laissent leur tête' },
-  { mission: 77, arms: ['canon', 'sapeur'], hud: true, seconds: 17, snowShots: [3, 8.5, 13], lobs: [5, 10.5], caption: 'La bataille de boules de neige', sub: 'Deux forts de neige face à face, et les Mortiers démolissent le tien' },
-  { still: true, hud: true, seconds: 6, friend: [0.2, 5.5], caption: 'Gare au tir ami', sub: 'Le réticule rougit quand ton obus filerait sur un coéquipier' },
-  { atelier: 6, atelierMission: 66, seconds: 6, caption: 'Un nouveau pinceau dans l’atelier', sub: 'Plante tes propres bonshommes de neige' },
-  { manual: [7, ['terrain']], seconds: 7, caption: 'Et une nouvelle case au manuel', sub: 'Un obus, il perd la tête ; deux obus, il tombe' },
+  { mission: 54, arms: ['canon', 'ricochet'], hud: true, seconds: 19, squalls: [0.4], caption: 'Itération 54 : le blizzard', sub: 'Une bourrasque, et plus personne n’y voit à trois cases' },
+  { mission: 75, arms: ['canon', 'sapeur'], hud: true, seconds: 17, squalls: [0.4], watches: [6], snowShots: [3.5], caption: 'Nuit blanche', sub: 'Même le faisceau du Veilleur se perd dans la neige' },
+  { mission: 54, arms: ['canon', 'fusee'], hud: true, seconds: 11, squalls: [0.2], gusts: [6.5, 8], caption: 'Le vent redouble', sub: 'Dans la bourrasque, il courbe les obus encore plus fort' },
+  { still: true, hud: true, seconds: 6, friend: [0.3, 5], caption: 'Gare au tir ami', sub: 'Le réticule rougit… et bipe, maintenant' },
+  { manual: [7, ['terrain']], seconds: 7, caption: 'Le blizzard entre au manuel', sub: 'Entre deux bourrasques, frappe vite' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -110,6 +110,7 @@ try {
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
       for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way
+      for (const s of shot.squalls ?? []) setTimeout(() => d.squall?.(), s * 1000); // « Le blizzard » (iteration 54): the next squall rises within two seconds
       for (const s of shot.snowShots ?? []) setTimeout(() => d.snowShot?.(), s * 1000); // « Les bonshommes de neige » (iteration 53): a shell into a snowman
       if (shot.friend) setTimeout(() => d.friendAim?.(shot.friend[1] * 1000), shot.friend[0] * 1000); // « Gare au tir ami » (iteration 53): the red reticle
       for (const [s, kinds] of shot.newcomers ?? []) setTimeout(() => d.newcomer?.(kinds), s * 1000); // « Nouveau au bestiaire ! » (iteration 38)

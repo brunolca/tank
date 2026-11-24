@@ -1,7 +1,7 @@
 {
-  "iteration": 53,
+  "iteration": 54,
   "date": "2026-11-24",
-  "title": "Les bonshommes de neige",
+  "title": "Le blizzard",
   "journal": [
     {
       "iteration": 1,
@@ -645,6 +645,19 @@
         "Deux nouvelles missions : « Le jardin d’hiver » (la 66ᵉ), un jardin enneigé semé de bonshommes, et « La bataille de boules de neige » (la 77ᵉ), deux forts de neige face à face sous les boulets des Mortiers. Le jardin devient aussi une arène de versus.",
         "Gare au tir ami : en coopération, le réticule rougit et palpite quand ton obus, ricochets compris, filerait sur un coéquipier (ou sur toi) avant un ennemi.",
         "Le manuel présente la nouvelle case, et l’atelier gagne un pinceau « bonhomme de neige »."
+      ]
+    },
+    {
+      "iteration": 54,
+      "date": "2026-11-24",
+      "title": "Le blizzard",
+      "notes": [
+        "Nouvelle météo : le blizzard. La neige et le vent soufflent ensemble, et toutes les quinze secondes une bourrasque blanchit toute la table.",
+        "Pendant la bourrasque, plus personne ne voit à plus de trois cases : les ennemis te perdent de vue… et toi aussi. Avance, contourne, change de cachette, mais attention : chaque tir trahit ta position.",
+        "Le vent redouble au cœur de la bourrasque et courbe les obus encore plus fort, et les pistes tassées dans la neige se comblent bien plus vite. « Bourrasque ! » prévient juste avant, et la jauge du vent devient blanche.",
+        "Deux nouvelles missions : « Le blizzard » (la 54ᵉ), un champ de neige semé de bonshommes, et « Nuit blanche » (la 75ᵉ), un col de nuit où même le faisceau du Veilleur se perd dans la neige. Certaines arènes enneigées du versus ont aussi leurs bourrasques.",
+        "Gare au tir ami : quand le réticule rougit, un petit double bip te prévient maintenant aussi à l’oreille.",
+        "Le manuel présente le blizzard dans « Le temps qu’il fait »."
       ]
     }
   ]

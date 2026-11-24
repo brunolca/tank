@@ -10,6 +10,7 @@ import { KO_GHOST, SHELL_GHOST, REMOTE_LIFE, FLAG_REPAIR, FLAG_PATCHED, MECA_FIX
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
+import { BLIZZARD_PERIOD, BLIZZARD_REFILL, SQUALL_FULL, SQUALL_RISE, squallIn, whiteoutAt } from '../src/shared/blizzard';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { HUNT_CRATES, HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, huntArena, huntLeader, newHunt } from '../src/shared/caisses';
 import { CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, crownArena, crownLeader, newCrown } from '../src/shared/couronne';
@@ -38,6 +39,7 @@ for (let mission = 1; mission <= LEVELS.length + 15; mission++) {
   g.storm = !!lvl.storm;
   g.wind = lvl.wind;
   g.fog = lvl.fog;
+  g.blizzard = !!lvl.blizzard;
   let kills = 0, shots = 0, ticks = 0;
   g.onKill = () => kills++;
   const inputs = new Map();
@@ -3488,4 +3490,78 @@ console.log('total', Date.now() - t0, 'ms');
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions des bonshommes');
   if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).tiles.includes(Tile.Snowman)).some(Boolean)) fail('aucune arène de versus à bonshommes');
   if (process.exitCode !== 1) console.log(`bonshommes de neige OK (${cleared} partie(s) gagnée(s) par l’IA, ${hits} tête(s) tombée(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le blizzard » (iteration 54): squalls as a function of the tick; in a squall nobody sees farther than BLIZZARD_SIGHT
+// (a muzzle flash still gives a tank away), the wind pulls harder and the trails fill up sooner; missions 54 and 75 have it
+{
+  const fail = (m: string) => { console.error('blizzard : ' + m); process.exitCode = 1; };
+  const T = 30;
+  if (whiteoutAt(0) !== 0 || whiteoutAt(T * 5) !== 0) fail('une bourrasque souffle dès le début');
+  if (whiteoutAt(T * (SQUALL_FULL + 1)) !== 1) fail('pas de bourrasque au cœur du cycle');
+  if (whiteoutAt(T * (SQUALL_FULL + 1 + BLIZZARD_PERIOD)) !== 1) fail('les bourrasques ne reviennent pas');
+  if (Math.abs(squallIn(0) - SQUALL_RISE) > 1e-6 || squallIn(T * (SQUALL_FULL + 1)) !== 0) fail('mauvais compte à rebours de la bourrasque');
+  let prev = 0, jumps = 0;
+  for (let k = 0; k < T * BLIZZARD_PERIOD * 2; k++) { const w = whiteoutAt(k); if (Math.abs(w - prev) > 0.1) jumps++; prev = w; }
+  if (jumps) fail('la bourrasque arrive d’un coup (pas de montée)');
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  for (let x = 0; x < W; x++) { tiles[x] = Tile.Wall; tiles[(H - 1) * W + x] = Tile.Wall; }
+  for (let y = 0; y < H; y++) { tiles[y * W] = Tile.Wall; tiles[y * W + W - 1] = Tile.Wall; }
+  const g = new Game(tiles);
+  g.frozen = false;
+  g.wind = 0; g.blizzard = true;
+  const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const e = g.addTank('green', 99, 14.5, 8.5, 0xffffff);
+  const near = g.addTank('green', 99, 6.5, 8.5, 0xffffff);
+  g.step(new Map());
+  if (!g.canSee(e, p)) fail('hors bourrasque, on doit se voir');
+  const calm = Math.hypot(...g.gust);
+  g.tick = T * (SQUALL_FULL + 1) - 1; p.reveal = 0;
+  g.step(new Map());
+  if (g.whiteout !== 1) fail(`whiteout ${g.whiteout} au cœur de la bourrasque`);
+  p.reveal = 0;
+  if (g.canSee(e, p)) fail('en pleine bourrasque, un tank lointain se voit encore');
+  if (!g.canSee(near, p)) fail('en pleine bourrasque, un tank tout proche doit se voir');
+  p.reveal = 1;
+  if (!g.canSee(e, p)) fail('un tir doit trahir un tank dans la bourrasque');
+  p.reveal = 0;
+  if (Math.hypot(...g.gust) <= calm * 1.2 && gustAt(g.tick) >= gustAt(1) * 0.9) fail('le vent ne souffle pas plus fort dans la bourrasque');
+  const b = new Game(tiles);
+  b.wind = 0; b.blizzard = false; b.tick = g.tick - 1; b.frozen = false;
+  const q = b.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P'), f = b.addTank('green', 99, 14.5, 8.5, 0xffffff);
+  b.step(new Map()); q.reveal = 0;
+  if (!b.canSee(f, q) || b.whiteout !== 0) fail('sans blizzard, le vent seul ne doit rien cacher');
+  if (g.refill !== BLIZZARD_REFILL || b.refill !== SNOW_REFILL || BLIZZARD_REFILL >= SNOW_REFILL) fail('les pistes ne se comblent pas plus vite dans le blizzard');
+  // the missions: snow, wind and squalls; the AI duo still wins them now and then, the tick stays cheap
+  for (const m of [54, 75]) {
+    const l = getMission(m);
+    if (!l.blizzard || l.wind === undefined || !l.belts?.includes(SNOW)) fail(`la mission ${m} n’a pas son blizzard`);
+  }
+  let won = 0, spent = 0, steps = 0, lost = 0;
+  for (let run = 0; run < 8 && won < 2; run++) {
+    const l = getMission(run % 2 ? 75 : 54);
+    const s2 = new Game(l.tiles, l.belts);
+    s2.wind = l.wind; s2.blizzard = !!l.blizzard; s2.night = !!l.night;
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      if (s2.whiteout >= 1) lost++;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) won++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (!lost) fail('aucune bourrasque pendant les parties');
+  if (won === 0) fail('l’IA ne vient jamais à bout des missions du blizzard');
+  // the versus: some snowy arenas are swept by squalls (always with a wind); never the crown nor the hunt
+  const vs = Array.from({ length: VERSUS_ARENAS * 2 }, (_, r) => versusArena(r));
+  if (!vs.some((l) => l.blizzard)) fail('aucune arène de versus dans le blizzard');
+  if (vs.some((l) => l.blizzard && (l.wind === undefined || l.night || l.fog !== undefined))) fail('un blizzard de versus sans vent, de nuit ou dans la brume');
+  if (Array.from({ length: VERSUS_ARENAS * 2 }, (_, r) => crownArena(r).blizzard || huntArena(r).blizzard).some(Boolean)) fail('un blizzard sur la couronne ou la chasse aux caisses');
+  if (process.exitCode !== 1) console.log(`blizzard OK (${won} partie(s) gagnée(s) par l’IA, ${(lost / 30).toFixed(0)} s de bourrasque, ${per.toFixed(3)} ms/tick)`);
 }

@@ -560,6 +560,22 @@ export const sfx = {
       tone(t + 0.55, 0.25, 98, 60, 0.4, 'sine');
     }
   },
+  /** « Le blizzard » (iteration 54): a squall rises, a long howl of wind that swells and whistles through the walls. */
+  squall() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 2.2, 380, 1.4, 0.32, 'bandpass', 1300);
+    noise(t + 0.3, 1.8, 2400, 3, 0.1, 'bandpass', 3600);
+    tone(t + 0.2, 1.6, 620, 880, 0.025, 'sine');
+    tone(t + 0.5, 1.3, 930, 700, 0.018, 'sine');
+  },
+  /** « Gare au tir ami » (iteration 54): a short, soft double beep when the crosshair turns red. */
+  friendWarn() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.06, 1180, 1180, 0.045, 'square');
+    tone(t + 0.09, 0.06, 940, 940, 0.045, 'square');
+  },
   /** The Semeur sows (iteration 25): a creak of the hopper, then one hollow « plop » per seed thrown. */
   sow(n: number) {
     if (!ctx) return;
