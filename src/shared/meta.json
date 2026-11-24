@@ -1,7 +1,7 @@
 {
-  "iteration": 52,
-  "date": "2026-11-23",
-  "title": "Le Passe-muraille",
+  "iteration": 53,
+  "date": "2026-11-24",
+  "title": "Les bonshommes de neige",
   "journal": [
     {
       "iteration": 1,
@@ -632,6 +632,19 @@
         "Nouvelle caisse : le Détonateur. Pendant 14 secondes, tes mines portent une petite antenne verte ; elles ne sautent plus au passage et les ennemis ne s’en méfient pas. Rappuie sur la touche des mines… et boum !",
         "Nouvelle mission faite main, « Les murs épais » (69) : des murs de deux cases d’épaisseur, et seules ces deux nouvelles caisses y tombent. Le Pilleur, lui, les veut aussi.",
         "Tes coéquipiers et les rivaux savent s’en servir : ils tirent à travers les murs et font sauter leurs pièges au bon moment. Le manuel compte désormais huit caisses."
+      ]
+    },
+    {
+      "iteration": 53,
+      "date": "2026-11-24",
+      "title": "Les bonshommes de neige",
+      "notes": [
+        "Nouvelle case : le bonhomme de neige, avec son chapeau, sa carotte et son écharpe rouge. Il arrête les tanks et avale les obus, sans le moindre ricochet.",
+        "Le premier obus lui fait perdre la tête (elle roule dans la neige avec son chapeau), le deuxième le renverse en tas de neige. Une mine, la foudre ou un boulet le font tomber d’un coup.",
+        "Ils te suivent des yeux… Et les ennemis comme tes coéquipiers savent maintenant ouvrir une brèche à coups d’obus quand un bonhomme leur bouche la vue.",
+        "Deux nouvelles missions : « Le jardin d’hiver » (la 66ᵉ), un jardin enneigé semé de bonshommes, et « La bataille de boules de neige » (la 77ᵉ), deux forts de neige face à face sous les boulets des Mortiers. Le jardin devient aussi une arène de versus.",
+        "Gare au tir ami : en coopération, le réticule rougit et palpite quand ton obus, ricochets compris, filerait sur un coéquipier (ou sur toi) avant un ennemi.",
+        "Le manuel présente la nouvelle case, et l’atelier gagne un pinceau « bonhomme de neige »."
       ]
     }
   ]

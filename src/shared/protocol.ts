@@ -69,7 +69,8 @@ export type GameEvent =
   | ['detonate', number, number, number] // x y ownerId: a remote mine is set off by its owner (iteration 52)
   | ['ghost', number, number, number] // x y phase (« Passe-muraille », iteration 52): 0 into a wall, 1 out the other side, 2 faded inside
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
-  | ['block', number, number]
+  | ['block', number, number] // cx cy: a cork block, or a snowman (iteration 53), is gone
+  | ['snowman', number, number, number, number] // cx cy x y: « Les bonshommes de neige » (iteration 53), a shell at (x, y) knocked that snowman's head off (older tabs ignore it)
   | ['lob', number, number, number, number, number, number] // x0 y0 x1 y1 flightSeconds tankId: « Le Mortier » (iteration 34) lobs a cannonball (older tabs are told to reload)
   | ['land', number, number, number] // x y tankId: it lands and bursts there (radius MORTAR_BLAST)
   | ['hop', number, number, number, number, number, number] // x0 y0 x1 y1 flightSeconds tankId: « La Sauterelle » (iteration 41) leaps (older tabs ignore it)

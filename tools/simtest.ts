@@ -3003,7 +3003,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).tiles.includes(Tile.Switch)).some(Boolean)) fail('aucune arène de versus à interrupteurs');
   for (let r = 0; r < VERSUS_ARENAS; r++) if (versusArena(r + VERSUS_ARENAS).tiles.join('') !== versusArena(r).tiles.join('')) fail(`VERSUS_ARENAS (${VERSUS_ARENAS}) ne correspond pas au nombre d’arènes`);
   if (versusArena(VERSUS_ARENAS - 1).tiles.join('') === versusArena(0).tiles.join('')) fail('VERSUS_ARENAS est trop grand');
-  if (!versusArena(50).tiles.includes(Tile.Switch) || versusArena(50).night || versusArena(50).fog !== undefined || versusArena(50).wind !== undefined) fail('la manche 50 du film n’est plus « Rouge ou bleu » par temps clair');
+  if (!versusArena(14).tiles.includes(Tile.Switch) || versusArena(14).night || versusArena(14).fog !== undefined || versusArena(14).wind !== undefined) fail('la manche 14 n’est plus une arène à interrupteurs par temps clair');
   // a switch at (15, 8), a red gate across the way at x = 10, a blue one at x = 6
   const tiles = new Array(W * H).fill(Tile.Empty);
   tiles[8 * W + 15] = Tile.Switch;
@@ -3401,4 +3401,91 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions du Mécano');
   if (process.exitCode !== 1) console.log(`Mécano OK (${cleared}/4 parties gagnées par l’IA, ${fixes} réparation(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Les bonshommes de neige » (iteration 53): a snowman swallows a shell and loses its head, swallows a second one and falls
+// into a heap of snow; mines and heavy shells bring it down at once; the AI's rays stop on it; missions 66 and 77 have them
+{
+  const fail = (m: string) => { console.error('BONSHOMMES:', m); process.exitCode = 1; };
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  tiles[8 * W + 10] = Tile.Snowman;
+  const g = new Game(tiles);
+  g.frozen = false;
+  const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+  const e = g.addTank('brown', 99, 16.5, 8.5, 0xffffff);
+  e.fireCd = 99;
+  if (castRicochet(g.tiles, 4.5, 8.5, 0, 3).length !== 1) fail('le rayon de l’IA devrait s’arrêter sur le bonhomme');
+  if (castWindy(g.tiles, 4.5, 8.5, 0, BULLET_SPEED, 3, 0, 0).some((s) => s.x1 < s.x0 - 1e-6)) fail('le rayon de l’IA dans le vent ne devrait pas rebondir sur le bonhomme');
+  const fire = () => {
+    g.bullets = []; g.events = [];
+    p.x = 4.5; p.y = 8.5; p.turret = 0; p.fireCd = 0;
+    g.tryFire(p);
+    const b = g.bullets[g.bullets.length - 1];
+    for (let i = 0; i < 60 && !b.dead; i++) g.step(new Map());
+    return b;
+  };
+  let b = fire();
+  if (!b.dead || b.x > 10.2) fail('le bonhomme n’a pas avalé l’obus');
+  if (g.tiles[8 * W + 10] !== Tile.SnowLow) fail('le premier obus doit faire tomber la tête');
+  if (!g.events.some((ev) => ev[0] === 'snowman' && ev[1] === 10 && ev[2] === 8)) fail('pas d’événement « snowman »');
+  if (g.events.some((ev) => ev[0] === 'bounce')) fail('l’obus a ricoché sur le bonhomme');
+  if (!isSolidTank(g.tiles[8 * W + 10])) fail('un bonhomme sans tête doit encore arrêter les tanks');
+  b = fire();
+  if (g.tiles[8 * W + 10] !== Tile.Empty) fail('le deuxième obus doit abattre le bonhomme');
+  if (!g.events.some((ev) => ev[0] === 'block' && ev[1] === 10)) fail('pas d’événement « block » à l’effondrement');
+  if (!b.dead) fail('le deuxième obus doit aussi être avalé');
+  b = fire();
+  if (!e.alive || b.x < 10.5) { if (e.alive) fail('la voie libre, le tir doit passer'); }
+  // a mine blast brings down a whole snowman
+  g.tiles[8 * W + 12] = Tile.Snowman; g.tiles[9 * W + 12] = Tile.SnowLow;
+  g.bullets = []; g.events = [];
+  g.mines.push({ id: 5000, owner: p.id, team: 0, x: 11.5, y: 8.5, t: 9, fuse: 0.01, dead: false });
+  for (let i = 0; i < 5; i++) g.step(new Map());
+  if (g.tiles[8 * W + 12] !== Tile.Empty || g.tiles[9 * W + 12] !== Tile.Empty) fail('une mine doit abattre les bonshommes');
+  // a heavy shell knocks it down in one go and goes on
+  g.tiles[8 * W + 10] = Tile.Snowman;
+  e.alive = false;
+  g.giveBonus(p, 'heavy');
+  b = fire();
+  if (g.tiles[8 * W + 10] !== Tile.Empty) fail('le gros calibre doit abattre le bonhomme d’un coup');
+  // the AI clears a snowman standing between it and its foe
+  {
+    const t2 = new Array(W * H).fill(Tile.Empty);
+    for (let y = 0; y < H; y++) t2[y * W + 10] = Tile.Wall;
+    t2[8 * W + 10] = Tile.Snowman;
+    const g2 = new Game(t2);
+    g2.frozen = false;
+    g2.addTank('player', 0, 6.5, 8.5, 0x3d7bff, 'p1', 'P').fireCd = 99;
+    g2.addTank('green', 99, 14.5, 8.5, 0xffffff); // a turret that does not move: the snowman stays in its line
+    for (let i = 0; i < 30 * 12 && g2.tiles[8 * W + 10] === Tile.Snowman; i++) g2.step(new Map());
+    if (g2.tiles[8 * W + 10] === Tile.Snowman) fail('l’IA ne dégage pas le bonhomme qui la sépare de sa cible');
+  }
+  // the missions: snowmen in the snow, AI duos clear them, the tick stays cheap
+  let cleared = 0, hits = 0, spent = 0, steps = 0;
+  for (const m of [66, 77]) {
+    const l = getMission(m);
+    const n = l.tiles.filter((t) => t === Tile.Snowman).length;
+    if (n < 8) fail(`la mission ${m} n’a que ${n} bonhomme(s)`);
+    if (l.tiles.some((t, i) => t === Tile.Snowman && l.belts?.[i] !== SNOW)) fail(`un bonhomme de la mission ${m} n’est pas planté dans la neige`);
+  }
+  for (let run2 = 0; run2 < 6 && cleared < 2; run2++) {
+    const l = getMission(run2 % 2 ? 77 : 66);
+    const s2 = new Game(l.tiles, l.belts);
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      hits += s2.events.filter((ev) => ev[0] === 'snowman').length;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions des bonshommes');
+  if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).tiles.includes(Tile.Snowman)).some(Boolean)) fail('aucune arène de versus à bonshommes');
+  if (process.exitCode !== 1) console.log(`bonshommes de neige OK (${cleared} partie(s) gagnée(s) par l’IA, ${hits} tête(s) tombée(s), ${per.toFixed(3)} ms/tick)`);
 }

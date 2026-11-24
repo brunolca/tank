@@ -1,4 +1,4 @@
-import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
+import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -1080,6 +1080,54 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 53: « Les bonshommes de neige ». A snowy garden dotted with snowmen: each one stops a shell, loses its head,
+  // stops a second one and falls into a heap of snow. Cover that melts under fire, on both sides; the yellows bury their mines
+  66: {
+    name: 'Le jardin d’hiver',
+    map: [
+      '......................',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&8&&&&&&&&&&&&8&&b.',
+      '.&&&&&&&&###&&&&&&&&&.',
+      '.&&&&&&8&&&&&&8&&&&&&.',
+      '.&&8&&&&&&&&&&&&&&&a&.',
+      '..1&&&&&&8&&8&&&&&&&&.',
+      '.&&&&&&&&&&&&&&&&&8&&.',
+      '.&&&&8&&&&&&&&&&8&&&y.',
+      '.&&&&&&&&&&&&&&&&&8&&.',
+      '..2&&&&&&8&&8&&&&&&&&.',
+      '.&&8&&&&&&&&&&&&&&&t&.',
+      '.&&&&&&8&&&&&&8&&&&&&.',
+      '.&&&&&&&&###&&&&&&&&&.',
+      '.&&&8&&&&&&&&&&&&8&&g.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '......................',
+    ],
+  },
+  // iteration 53: two snow forts face each other, a wall of snowmen each. The Mortiers' cannonballs bring down the players'
+  // fort, the Givré freezes the snow between them: knock the heads off the far snowmen first, then aim through the gaps
+  77: {
+    name: 'La bataille de boules de neige',
+    map: [
+      '......................',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&&8&&&&HH&&&&8&&p&.',
+      '.&&&&8&&&&&&&&&&8&&&&.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&&8&&&###&&&&8&&M&.',
+      '..1&&8&&&&&&&&&&8&&&&.',
+      '.&&&&&&&&&&&&&&&&&&v&.',
+      '.&&&&8&&&&oo&&&&8&&&&.',
+      '.&&&&&&&&&&&&&&&&&&f&.',
+      '..2&&8&&&&&&&&&&8&&&&.',
+      '.&&&&8&&&###&&&&8&&M&.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '.&&&&8&&&&&&&&&&8&&&&.',
+      '.&&&&8&&&&HH&&&&8&&p&.',
+      '.&&&&&&&&&&&&&&&&&&&&.',
+      '......................',
+    ],
+  },
   // iteration 52: « Le passe-muraille ». Thick walls, two tiles deep, hide the enemies from every angle but the long way
   // round; only the crates of the « Passe-muraille » (through the wall!) and the « Détonateur » (a trap they cannot see) fall
   // here, a Pilleur races the players to them and a Maçon thickens the walls
@@ -1429,6 +1477,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '+') tiles[i] = Tile.PortalB;
       else if (c === '=') tiles[i] = Tile.Tunnel;
       else if (c === BRIDGE_CHAR) tiles[i] = Tile.Bridge;
+      else if (c === SNOWMAN_CHAR) tiles[i] = Tile.Snowman;
       else if (c === SWITCH_CHAR) tiles[i] = Tile.Switch;
       else if (c === RED_GATE_CHAR) tiles[i] = Tile.RedUp;
       else if (c === BLUE_GATE_CHAR) tiles[i] = Tile.BlueDown;
@@ -1442,6 +1491,8 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
   }
+  // « Les bonshommes de neige » (iteration 53): on a snowy table, a snowman stands in the snow, and falls into a heap of it
+  if (belts?.includes(SNOW)) for (let i = 0; i < W * H; i++) if (tiles[i] === Tile.Snowman) belts[i] = SNOW;
   if (def.belts) {
     for (let y = 0; y < H; y++) {
       const row = def.belts[y] ?? '';
@@ -2058,10 +2109,10 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 /** How many arenas the versus pool holds (a game starts on a random one of them, iteration 40). */
-export const VERSUS_ARENAS = 18;
+export const VERSUS_ARENAS = 19;
 export function versusArena(round: number): ParsedLevel {
   // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21), the ravine of mission 32 (iteration 33) and the dunes of mission 46 (iteration 36)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[45], EXTRA_LEVELS[46], EXTRA_LEVELS[51], EXTRA_LEVELS[57]); // the snow of mission 57 (iteration 42), and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[45], EXTRA_LEVELS[46], EXTRA_LEVELS[51], EXTRA_LEVELS[57], EXTRA_LEVELS[66]); // the snowmen of mission 66 (iteration 53), the snow of mission 57 (iteration 42), and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

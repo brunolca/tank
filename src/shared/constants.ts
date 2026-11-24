@@ -43,6 +43,11 @@ export const enum Tile {
   RedSpan = 15,
   BlueLift = 16,
   BlueSpan = 17,
+  // iteration 53, « Les bonshommes de neige »: a snowman stops tanks and shells; the first shell that hits it knocks its
+  // head off (Snowman -> SnowLow, the big round body still stands), the second one brings it down (floor); a blast, the
+  // lightning, the Foreur or a heavy shell bring it down at once
+  Snowman = 18,
+  SnowLow = 19,
 }
 
 export type TankKind =
@@ -445,7 +450,15 @@ export function isPortal(t: number) {
   return t === Tile.PortalA || t === Tile.PortalB;
 }
 export function isSolidBullet(t: number) {
-  return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork || t === Tile.Tunnel || t === Tile.Switch || t === Tile.RedUp || t === Tile.BlueUp;
+  return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork || t === Tile.Tunnel || t === Tile.Switch || t === Tile.RedUp || t === Tile.BlueUp || t === Tile.Snowman || t === Tile.SnowLow;
+}
+/** « Les bonshommes de neige » (iteration 53): a snowman, whole or headless. A shell hitting it is swallowed, not bounced. */
+export function isSnowman(t: number) {
+  return t === Tile.Snowman || t === Tile.SnowLow;
+}
+/** What a blast (mine, lightning, cannonball, the Foreur) blows away: cork, and snowmen (iteration 53). */
+export function isFragile(t: number) {
+  return t === Tile.Cork || t === Tile.Snowman || t === Tile.SnowLow;
 }
 export function isTunnel(t: number) {
   return t === Tile.Tunnel;
@@ -602,6 +615,10 @@ export const KO_GHOST = 9; // « Passe-muraille » (iteration 52): a shell that 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */
 export const BRIDGE_CHAR = ':';
+
+// ------------------------------------------------------------------ « Les bonshommes de neige » (iteration 53)
+/** Map character of a snowman (two balls of snow, one on top of the other). */
+export const SNOWMAN_CHAR = '8';
 
 // ------------------------------------------------------------------ « Les interrupteurs » (iteration 40)
 /** Map characters: the switch block, a red gate (raised at the start) and a blue gate (lowered at the start). */

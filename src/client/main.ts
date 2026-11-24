@@ -1,4 +1,4 @@
-import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, isSnowman, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -7,7 +7,7 @@ import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROU
 import { CROWN_COLOR, CROWN_HOLD, CROWN_HURRY, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, CROWN_TARGET, crownArena, newCrown } from '../shared/couronne';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
-import { angDiff, beltStep, castRicochet, floorSpeed } from '../shared/physics';
+import { angDiff, beltStep, castRicochet, floorSpeed, segCircle } from '../shared/physics';
 import { BOSS_NAMES, RUSH_DUO_HP, RUSH_LIVES, RUSH_STAGES, rushLevel, rushOrder, rushDuo, weekLabel, weekNumber } from '../shared/rush';
 import type { BossKind } from '../shared/levels';
 import type { AtelierMap, BoardDay, ClientMsg, DailyState, RushState, GameEvent, Input, Mode, NetBonus, NetBullet, NetMine, NetTank, Phase, PlayerInfo, Results, ServerMsg, TankInfo } from '../shared/protocol';
@@ -470,6 +470,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (tiles.some(isSnowman)) setTimeout(() => toast('Bonshommes de neige : ils avalent les obus sans ricochet. Un obus leur fait perdre la tête, un deuxième les renverse… Abrite-toi derrière les tiens, et ouvre une brèche dans ceux d’en face !', 5600), 2200);
   else if (enemies.some((e) => e.kind === 'mechanic')) setTimeout(() => toast('Le Mécano répare les épaves de ses amis : quelques secondes de clé à molette et le tank repart ! Vise-le en premier… ou pendant qu’il travaille, quand il ne bouge plus.', 5200), 2200);
   else if (enemies.some((e) => e.kind === 'hopper')) setTimeout(() => toast('La Sauterelle se tasse sur ses ressorts… puis bondit par-dessus les murs pour te prendre à revers. Un anneau vert montre où elle va retomber : vise-le ! En l’air, rien ne la touche.', 5200), 2200);
   else if (enemies.some((e) => e.kind === 'mortar')) setTimeout(() => toast('Le Mortier tire en cloche, par-dessus les murs : quand un cercle rouge se resserre sous toi, file ! De près, il ne peut plus rien contre toi.', 5000), 2200);
@@ -657,6 +658,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
   for (const e of msg.E) {
     evq.push({ k: msg.k, e });
     if (e[0] === 'block') tiles[e[2] * W + e[1]] = Tile.Empty; // prediction sees the freshest map
+    else if (e[0] === 'snowman') tiles[e[2] * W + e[1]] = Tile.SnowLow; // a headless snowman (iteration 53): still in the way
     else if (e[0] === 'build') tiles[e[2] * W + e[1]] = Tile.Cork; // the Maçon's new block stops my tank right away
     else if (e[0] === 'bridge') tiles[e[2] * W + e[1]] = Tile.Hole; // a bridge gave way (iteration 33): no driving over it any more
     else if (e[0] === 'gate') tiles[e[2] * W + e[1]] = e[3]; // « Les interrupteurs » (iteration 40): a gate rose or sank
@@ -820,6 +822,23 @@ function dryFire() {
   sfx.dry();
   reticle.dry();
 }
+/**
+ * « Gare au tir ami » (iteration 53): would a shell fired from (x, y) along `ang` hit a teammate (or come back on its shooter)
+ * before any foe? The reticle then turns red. Same ricochet ray as the AI, walls, portals and snowmen included.
+ */
+function friendlyAim(x: number, y: number, ang: number, bounces: number, meId: number, others: { id: number; x: number; y: number; r: number; foe: boolean }[]) {
+  const segs = castRicochet(tiles, x + Math.cos(ang) * 0.5, y + Math.sin(ang) * 0.5, ang, bounces, 40);
+  for (let i = 0; i < segs.length; i++) {
+    let best = Infinity, friend = false;
+    for (const o of others) {
+      if (o.id === meId && i === 0) continue; // the first stretch leaves the barrel: it cannot hit its own tank
+      const u = segCircle(segs[i], o.x, o.y, o.r + 0.09);
+      if (u >= 0 && u < best) { best = u; friend = !o.foe; }
+    }
+    if (best < Infinity) return friend;
+  }
+  return false;
+}
 function reticleAllowed() {
   return reticleOn && screen === 'game' && $('#menu').hidden && !council && !treeOpen && !reel && $('#feedback').hidden && $('#options').hidden;
 }
@@ -841,10 +860,21 @@ function updateReticleOnline(latest: Snap) {
   wasEmpty = ready <= 0;
   const spot = reticleSpot(pred.x + offset.x, pred.y + offset.y, aimAng);
   reticleFrame = true;
+  let friend = false;
+  if (coopLike(currentMode) && phase === 'playing') {
+    const others: { id: number; x: number; y: number; r: number; foe: boolean }[] = [];
+    for (const t of latest.T.values()) {
+      const ti = infos.get(t[0]);
+      if (!ti || !(t[5] & 1)) continue;
+      const mine = t[0] === myTankId;
+      others.push({ id: t[0], x: mine ? pred.x : t[1], y: mine ? pred.y : t[2], r: tankRadius(ti.kind), foe: ti.team !== info.team });
+    }
+    friend = friendlyAim(pred.x, pred.y, aimAng, mySpec.bounces, myTankId, others);
+  }
   reticle.update({
     x: spot.x, y: spot.y, max: mySpec.maxBullets, ready, mines: mySpec.mines, minesLeft: Math.max(0, mySpec.mines - mines),
     reload: mySpec.fireCd > 0 ? Math.max(0, localFireCd) / mySpec.fireCd : 0,
-    off: phase !== 'playing' || (coopLike(currentMode) && enemiesLeft === 0) || !!(me[5] & FLAG_FROZEN), color: info.color,
+    off: phase !== 'playing' || (coopLike(currentMode) && enemiesLeft === 0) || !!(me[5] & FLAG_FROZEN), color: info.color, friend,
   });
 }
 /** The enemies up top (tokens) and the team at the bottom, from what is on the table. */
@@ -1042,8 +1072,18 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (audible) sfx.sow(e[4]);
       break;
     case 'block':
+      if (renderer.hasSnowman(e[1], e[2])) { // « Les bonshommes de neige » (iteration 53): it falls into a heap of snow
+        renderer.removeBlock(e[1], e[2]);
+        if (audible) sfx.snowFall();
+        break;
+      }
       renderer.removeBlock(e[1], e[2]);
       if (audible) sfx.block();
+      break;
+    case 'snowman': // a shell knocked its head off (iteration 53)
+      renderer.knockSnowman(e[1], e[2], e[3], e[4]);
+      floater(e[1] + 0.5, e[2] + 0.5, 'Pouf !', 0xbfe3ff);
+      if (audible) sfx.snowHit();
       break;
     case 'lob': // « Le Mortier » (iteration 34): the barrel thumps, the cannonball is on its way (its ring shows where)
       renderer.lobShot(e[6], e[1], e[2], e[3], e[4]);
@@ -2571,6 +2611,8 @@ function bridgeTrap(g: Game) {
 // « Le réticule » (iteration 44), for the videos: the HUD of a coop mission over the demo, the first hero playing « me »
 let demoHud = false;
 const demoAim = { x: 0, y: 0, d: 4, set: false };
+/** « Gare au tir ami » (iteration 53): until then (performance.now()), the demo reticle shows red, for the film. */
+let demoFriend = 0;
 function updateDemoHud(g: Game, tanks: RTank[], dt: number) {
   if (screen !== 'game' || !attractOpts.heroes || attractOpts.versus || attractOpts.drapeau || attractOpts.caisses) return;
   const heroes = g.tanks.filter((t) => t.kind === 'player');
@@ -2611,6 +2653,7 @@ function updateDemoHud(g: Game, tanks: RTank[], dt: number) {
   reticle.update({
     x: demoAim.x, y: demoAim.y, max: me.spec.maxBullets, ready: Math.max(0, me.spec.maxBullets - out), mines: me.spec.mines, minesLeft: Math.max(0, me.spec.mines - mines),
     reload: me.spec.fireCd > 0 ? Math.max(0, Math.min(1, me.fireCd / me.spec.fireCd)) : 0, off: false, color: me.color,
+    friend: demoFriend > performance.now() || friendlyAim(me.x, me.y, rt.turret, me.spec.bounces, me.id, g.tanks.filter((t) => t.alive).map((t) => ({ id: t.id, x: t.x, y: t.y, r: t.r, foe: t.team !== me.team }))),
   });
 }
 
@@ -3190,7 +3233,8 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['&', 'Neige', 'On s’y enfonce et on y roule moins vite, mais chaque tank y trace une piste tassée, rapide, que la neige finit par recouvrir. Une mine posée dans la neige disparaît dessous, et les tanks blancs y laissent des traces.'],
   ['%', 'Interrupteur', 'Tire dessus : toutes les barrières basculent. Les ennemis aussi peuvent le toucher…'],
   ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.'],
-  ['{}', 'Ponts-levis', 'Au-dessus d’un trou. Les rouges sont levés au départ, les bleus baissés, et l’interrupteur les fait basculer. Levé, il laisse passer les obus mais pas les tanks. Et à chaque « Clac ! », les tapis roulants changent de sens.', true],
+  ['{}', 'Ponts-levis', 'Au-dessus d’un trou. Les rouges sont levés au départ, les bleus baissés, et l’interrupteur les fait basculer. Levé, il laisse passer les obus mais pas les tanks. Et à chaque « Clac ! », les tapis roulants changent de sens.'],
+  ['8', 'Bonhomme de neige', 'Il arrête les tanks et avale les obus, sans ricochet. Le premier obus lui fait perdre la tête, le deuxième le renverse dans la neige. Une mine le fait tomber d’un coup. Et il te suit des yeux…', true],
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
 const WEATHER: [string, string, string][] = [
@@ -4372,6 +4416,35 @@ if (params.has('demo')) {
       }
       return 0;
     },
+    /** « Les bonshommes de neige » (iteration 53): a hero fires straight at the nearest snowman in its line (its head flies off). */
+    snowShot() {
+      const g = attract;
+      if (!g) return 0;
+      let best: { h: Tank; ang: number; d: number } | undefined;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player') continue;
+        for (let c = 0; c < W * H; c++) {
+          if (!isSnowman(g.tiles[c])) continue;
+          const x = (c % W) + 0.5, y = Math.floor(c / W) + 0.5, d = Math.hypot(x - h.x, y - h.y);
+          if (d > 9 || (best && d >= best.d)) continue;
+          const ang = Math.atan2(y - h.y, x - h.x);
+          const res = g.traceShot(h, ang, 0);
+          if (res.hit) continue;
+          const end = h.r + 0.22 + res.len + 0.2;
+          if (Math.floor(h.y + Math.sin(ang) * end) * W + Math.floor(h.x + Math.cos(ang) * end) !== c) continue; // something else in the way
+          best = { h, ang, d };
+        }
+      }
+      if (!best) return 0;
+      const keep = best.h.turret;
+      best.h.turret = best.ang;
+      best.h.fireCd = 0;
+      const fired = g.tryFire(best.h);
+      best.h.turret = keep;
+      return fired ? 1 : 0;
+    },
+    /** « Gare au tir ami » (iteration 53): the demo reticle shows red for that long (as when a teammate is in the line). */
+    friendAim(ms = 2500) { demoFriend = performance.now() + ms; },
     /** « Détonateur » (iteration 52): a hero's remote mine on the way of the nearest enemy (the hero sets it off when it rolls on). */
     remoteTrap() {
       const g = attract;

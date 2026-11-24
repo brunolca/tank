@@ -191,6 +191,20 @@ export const sfx = {
     if (!ctx) return;
     noise(ctx.currentTime, 0.4, 900, 0.6, 0.6, 'lowpass', 200);
   },
+  /** « Les bonshommes de neige » (iteration 53): a soft « pouf » of snow, and a little « boing » as the head flies off. */
+  snowHit() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.22, 2600, 0.4, 0.5, 'lowpass', 500);
+    tone(t + 0.03, 0.2, 520, 880, 0.08, 'triangle');
+  },
+  /** …and a deeper, longer « flomp » as the whole snowman comes down. */
+  snowFall() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.5, 1600, 0.6, 0.6, 'lowpass', 160);
+    tone(t + 0.02, 0.3, 300, 140, 0.07, 'sine');
+  },
   jingle(kind: 'start' | 'clear' | 'fail' | 'over') {
     if (!ctx) return;
     const t = ctx.currentTime + 0.05;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
-import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, reverseBelts } from '../shared/constants';
+import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isSnowman, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { isRivalId } from '../shared/rivals';
@@ -599,6 +599,25 @@ const hopperGeo = {
   eye: new THREE.SphereGeometry(0.065, 12, 10),
   pupil: new THREE.SphereGeometry(0.032, 8, 6),
 };
+// « Les bonshommes de neige » (iteration 53): two balls of snow, coal eyes and buttons, a carrot, a top hat, a red scarf, twig arms
+const snowmanGeo = {
+  body: new THREE.SphereGeometry(0.36, 22, 16),
+  head: new THREE.SphereGeometry(0.235, 20, 14),
+  coal: new THREE.SphereGeometry(0.032, 8, 6),
+  nose: new THREE.ConeGeometry(0.045, 0.2, 10).rotateZ(-Math.PI / 2),
+  brim: new THREE.CylinderGeometry(0.2, 0.2, 0.03, 20),
+  crown: new THREE.CylinderGeometry(0.13, 0.14, 0.22, 18),
+  band: new THREE.CylinderGeometry(0.143, 0.143, 0.045, 18),
+  scarf: new THREE.TorusGeometry(0.2, 0.055, 8, 22).rotateX(Math.PI / 2),
+  tail: new THREE.BoxGeometry(0.09, 0.2, 0.035),
+  twig: new THREE.CylinderGeometry(0.016, 0.022, 0.36, 6).rotateZ(Math.PI / 2),
+};
+const snowMat = new THREE.MeshStandardMaterial({ color: 0xf6f9fd, roughness: 0.85, emissive: 0x4a5a70, emissiveIntensity: 0.12 });
+const coalMat = new THREE.MeshStandardMaterial({ color: 0x1d1d22, roughness: 0.5 });
+const carrotMat = new THREE.MeshStandardMaterial({ color: 0xff8a2a, roughness: 0.55 });
+const hatMat = new THREE.MeshStandardMaterial({ color: 0x23242c, roughness: 0.45 });
+const scarfMat = new THREE.MeshStandardMaterial({ color: 0xe2453c, roughness: 0.7 });
+const twigMat = new THREE.MeshStandardMaterial({ color: 0x6b4526, roughness: 0.9 });
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 const pupilMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1f, roughness: 0.2 });
 const hopRingMat = new THREE.MeshBasicMaterial({ color: 0x4a8a0e, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
@@ -1587,7 +1606,9 @@ export class Renderer {
   private rising: { mesh: THREE.Mesh; t: number }[] = [];
   // « Les ponts » (iteration 33): the deck of each bridge cell, and the planks of fallen ones tumbling into the pit
   private bridges = new Map<number, THREE.Group>();
-  private falling: { obj: THREE.Object3D; vy: number; spin: THREE.Vector3; t: number }[] = [];
+  private falling: { obj: THREE.Object3D; vy: number; spin: THREE.Vector3; t: number; vx?: number; vz?: number; life?: number }[] = [];
+  /** « Les bonshommes de neige » (iteration 53): the snowmen of the table, by cell; the head (with its hat) looks at the nearest tank. */
+  private snowmen = new Map<number, { root: THREE.Group; head?: THREE.Group; x: number; y: number; look: number; wobble: number }>();
   private plankGeo = new RoundedBoxGeometry(0.9, 0.05, 0.155, 2, 0.015);
   private railGeo = new THREE.BoxGeometry(0.06, 0.05, 1);
   private postGeo = new THREE.CylinderGeometry(0.035, 0.04, 0.26, 8);
@@ -2029,6 +2050,8 @@ export class Renderer {
     this.switches = [];
     for (const f of this.falling) this.levelGroup.remove(f.obj);
     this.falling = [];
+    for (const sm of this.snowmen.values()) this.levelGroup.remove(sm.root);
+    this.snowmen.clear();
     for (const r of this.repairs.values()) this.scene.remove(r.ring);
     this.repairs.clear();
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); if (t.lantern) this.scene.remove(t.lantern.beam); }
@@ -2080,6 +2103,7 @@ export class Renderer {
         else if (isGate(t)) this.addGate(x, y, t);
         else if (isDrawbridge(t)) this.addDrawbridge(tiles, x, y, t);
         else if (t === Tile.Switch) this.addSwitch(x, y);
+        else if (isSnowman(t)) this.addSnowman(x, y, t === Tile.Snowman);
       }
     }
     // the switches show which gates stand (red at the start); a late arrival reads it off the map
@@ -2540,7 +2564,7 @@ export class Renderer {
 
   /** The layer of snow of a new level: soft white drifts with rounded edges over every snow cell (none: hidden). */
   private addSnow(tiles: number[], belts: number[]) {
-    this.snowCells = new Set(belts.flatMap((b, i) => ((b === SNOW || b === PACKED) && tiles[i] === Tile.Empty ? [i] : [])));
+    this.snowCells = new Set(belts.flatMap((b, i) => ((b === SNOW || b === PACKED) && (tiles[i] === Tile.Empty || isSnowman(tiles[i])) ? [i] : []))); // a snowman stands in the snow (iteration 53)
     this.snowPacked.clear();
     this.flakes(this.iceCells.size > 0 || this.snowCells.size > 0);
     if (!this.snowCells.size) { if (this.snowMesh) this.snowMesh.visible = false; return; }
@@ -2765,6 +2789,17 @@ export class Renderer {
       if (f.t < 0) continue; // a short ripple along the bridge: not every plank lets go at once
       f.vy -= 11 * dt;
       f.obj.position.y += f.vy * dt;
+      if (f.vx) f.obj.position.x += f.vx * dt;
+      if (f.vz) f.obj.position.z += f.vz * dt;
+      if (f.life !== undefined) {
+        // a snowman's head (iteration 53): it bounces once on the table, rolls a little, then melts away
+        if (f.obj.position.y < 0.2 && f.vy < 0) { f.obj.position.y = 0.2; f.vy = -f.vy * 0.35; f.vx = (f.vx ?? 0) * 0.6; f.vz = (f.vz ?? 0) * 0.6; f.spin.multiplyScalar(0.6); }
+        f.obj.rotation.x += f.spin.x * dt; f.obj.rotation.y += f.spin.y * dt; f.obj.rotation.z += f.spin.z * dt;
+        const k = Math.min(1, (f.life - f.t) / 0.5);
+        f.obj.scale.setScalar(Math.max(0.01, k));
+        if (k <= 0) { this.levelGroup.remove(f.obj); this.falling.splice(i, 1); }
+        continue;
+      }
       f.obj.rotation.x += f.spin.x * dt;
       f.obj.rotation.y += f.spin.y * dt;
       f.obj.rotation.z += f.spin.z * dt;
@@ -3311,8 +3346,125 @@ export class Renderer {
     }
   }
 
+  // ---------------------------------------------------------------- « Les bonshommes de neige » (iteration 53)
+
+  private addSnowman(x: number, y: number, whole: boolean) {
+    const root = new THREE.Group();
+    // a little variety: each one turned and sized its own way, from its cell
+    const h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+    root.position.set(x + 0.5, 0, y + 0.5);
+    root.rotation.y = (h % 628) / 100;
+    root.scale.setScalar(0.94 + ((h >> 10) % 12) / 100);
+    const mesh = (g: THREE.BufferGeometry, m: THREE.Material, px: number, py: number, pz: number) => {
+      const o = new THREE.Mesh(g, m);
+      o.position.set(px, py, pz);
+      o.castShadow = true;
+      return o;
+    };
+    const body = mesh(snowmanGeo.body, snowMat, 0, 0.33, 0);
+    body.scale.y = 0.92;
+    body.receiveShadow = true;
+    root.add(body);
+    for (const [bx, by] of [[0.352, 0.36], [0.31, 0.51]]) root.add(mesh(snowmanGeo.coal, coalMat, bx, by, 0));
+    const scarf = mesh(snowmanGeo.scarf, scarfMat, 0, 0.6, 0);
+    const tail = mesh(snowmanGeo.tail, scarfMat, -0.06, 0.5, 0.2);
+    tail.rotation.set(0.25, 0.3, 0.15);
+    root.add(scarf, tail);
+    for (const side of [-1, 1]) {
+      const twig = mesh(snowmanGeo.twig, twigMat, 0, 0.47, side * 0.42);
+      twig.rotation.set(0, Math.PI / 2, side * 0.5);
+      root.add(twig);
+    }
+    let head: THREE.Group | undefined;
+    if (whole) {
+      head = new THREE.Group();
+      head.position.y = 0.8;
+      head.add(mesh(snowmanGeo.head, snowMat, 0, 0, 0));
+      for (const side of [-1, 1]) head.add(mesh(snowmanGeo.coal, coalMat, 0.208, 0.07, side * 0.085));
+      head.add(mesh(snowmanGeo.nose, carrotMat, 0.3, -0.01, 0));
+      head.add(mesh(snowmanGeo.brim, hatMat, 0, 0.2, 0), mesh(snowmanGeo.crown, hatMat, 0, 0.32, 0), mesh(snowmanGeo.band, scarfMat, 0, 0.25, 0));
+      head.rotation.z = 0.05;
+      root.add(head);
+    }
+    this.levelGroup.add(root);
+    this.snowmen.set(y * W + x, { root, head, x: x + 0.5, y: y + 0.5, look: root.rotation.y, wobble: 0 });
+  }
+
+  /** Is there a snowman on that cell (whole or headless)? */
+  hasSnowman(cx: number, cy: number) {
+    return this.snowmen.has(cy * W + cx);
+  }
+
+  /** A shell at (x, y) knocks the head off a snowman: it flies off with its hat, the body wobbles, a puff of snow. */
+  knockSnowman(cx: number, cy: number, x: number, y: number) {
+    const sm = this.snowmen.get(cy * W + cx);
+    this.snowPuff(cx + 0.5, 0.85, cy + 0.5, 22);
+    if (!sm) return;
+    sm.wobble = 1;
+    const head = sm.head;
+    if (!head) return;
+    sm.head = undefined;
+    sm.root.updateMatrixWorld(true);
+    this.levelGroup.attach(head);
+    let dx = sm.x - x, dy = sm.y - y;
+    const d = Math.hypot(dx, dy) || 1;
+    dx /= d; dy /= d;
+    this.falling.push({ obj: head, vy: 2.6, vx: dx * 1.6, vz: dy * 1.6, spin: new THREE.Vector3(dy * 6, (Math.random() - 0.5) * 4, -dx * 6), t: 0, life: 2.2 });
+  }
+
+  private snowPuff(x: number, y: number, z: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.debris.emit({
+        x: x + (Math.random() - 0.5) * 0.5, y: y + Math.random() * 0.3, z: z + (Math.random() - 0.5) * 0.5,
+        vx: Math.cos(a) * (0.8 + Math.random() * 2.2), vy: 1.5 + Math.random() * 2.8, vz: Math.sin(a) * (0.8 + Math.random() * 2.2),
+        life: 0.8 + Math.random() * 0.6, s0: 0.06 + Math.random() * 0.07, s1: 0.02, c0: 0xffffff, c1: 0xbcd4ec, grav: 8, drag: 0.8,
+      });
+    }
+  }
+
+  /** The heads look at the nearest tank (and the bodies wobble after a hit). */
+  private animateSnowmen(list: RTank[], dt: number) {
+    for (const sm of this.snowmen.values()) {
+      if (sm.wobble > 0) {
+        sm.wobble = Math.max(0, sm.wobble - dt * 1.6);
+        sm.root.rotation.z = Math.sin(sm.wobble * 22) * sm.wobble * 0.18;
+      }
+      if (!sm.head) continue;
+      let best = 49, tx = 0, ty = 0;
+      for (const t of list) {
+        if (!t.alive || t.invisible) continue;
+        const d = (t.x - sm.x) ** 2 + (t.y - sm.y) ** 2;
+        if (d < best) { best = d; tx = t.x; ty = t.y; }
+      }
+      if (best < 49) sm.look = Math.atan2(-(ty - sm.y), tx - sm.x);
+      // the head turns in the snowman's own frame: world angle minus the body's turn
+      const want = sm.look - sm.root.rotation.y;
+      const cur = sm.head.rotation.y;
+      let dlt = want - cur;
+      dlt = Math.atan2(Math.sin(dlt), Math.cos(dlt));
+      sm.head.rotation.y = cur + dlt * Math.min(1, dt * 3);
+    }
+  }
+
   removeBlock(cx: number, cy: number) {
     const key = cy * W + cx;
+    const sm = this.snowmen.get(key);
+    if (sm) {
+      // « Les bonshommes de neige » (iteration 53): it falls into a heap of snow, its twigs and scarf tumble down
+      this.snowmen.delete(key);
+      this.snowPuff(cx + 0.5, 0.45, cy + 0.5, 40);
+      sm.root.updateMatrixWorld(true);
+      const parts: THREE.Object3D[] = [];
+      sm.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) parts.push(o); });
+      for (const o of parts) {
+        this.levelGroup.attach(o);
+        const a = Math.random() * Math.PI * 2;
+        this.falling.push({ obj: o, vy: 1 + Math.random() * 1.6, vx: Math.cos(a) * 0.8, vz: Math.sin(a) * 0.8, spin: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 6), t: 0, life: 0.9 + Math.random() * 0.4 });
+      }
+      this.levelGroup.remove(sm.root);
+      return;
+    }
     const m = this.blocks.get(key);
     if (!m) return;
     this.levelGroup.remove(m);
@@ -3348,6 +3500,7 @@ export class Renderer {
         for (const [ox, oy] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) this.tunnelBusy.add(Math.floor(t.y + oy) * W + Math.floor(t.x + ox));
       }
     }
+    if (this.snowmen.size) this.animateSnowmen(list, dt);
     for (const t of list) {
       const v = this.tanks.get(t.id);
       if (!v) continue;

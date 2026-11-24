@@ -7,10 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 69, arms: ['canon', 'ricochet'], hud: true, seconds: 18, buffs: ['ghost'], ghostShots: [2.5, 7.5, 12.5], caption: 'Itération 52 : le Passe-muraille', sub: 'Une caisse qui fait traverser un mur à tes obus' },
-  { mission: 69, arms: ['canon', 'sapeur'], hud: true, seconds: 17, buffs: ['remote'], remoteTraps: [2, 7.5, 12.5], caption: 'Et le Détonateur', sub: 'Tes mines attendent ton signal… et boum !' },
-  { mission: 12, arms: ['canon', 'fusee'], hud: true, seconds: 15, buffs: ['ghost'], ghostShots: [2.5, 8], replays: [4.6], caption: 'Plus de cachette derrière les murs', sub: 'Même le tank d’acier de la « Forteresse » n’est plus à l’abri' },
-  { manual: [7, ['caisses']], seconds: 7, caption: 'Huit caisses au manuel', sub: 'Le Pilleur les vole aussi : sois le plus rapide !' },
+  { mission: 66, arms: ['canon', 'ricochet'], hud: true, seconds: 18, snowShots: [2.2, 4.4, 8, 11.5, 14.5], caption: 'Itération 53 : les bonshommes de neige', sub: 'Ils avalent les obus… et y laissent leur tête' },
+  { mission: 77, arms: ['canon', 'sapeur'], hud: true, seconds: 17, snowShots: [3, 8.5, 13], lobs: [5, 10.5], caption: 'La bataille de boules de neige', sub: 'Deux forts de neige face à face, et les Mortiers démolissent le tien' },
+  { still: true, hud: true, seconds: 6, friend: [0.2, 5.5], caption: 'Gare au tir ami', sub: 'Le réticule rougit quand ton obus filerait sur un coéquipier' },
+  { atelier: 6, atelierMission: 66, seconds: 6, caption: 'Un nouveau pinceau dans l’atelier', sub: 'Plante tes propres bonshommes de neige' },
+  { manual: [7, ['terrain']], seconds: 7, caption: 'Et une nouvelle case au manuel', sub: 'Un obus, il perd la tête ; deux obus, il tombe' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -109,6 +110,8 @@ try {
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
       for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way
+      for (const s of shot.snowShots ?? []) setTimeout(() => d.snowShot?.(), s * 1000); // « Les bonshommes de neige » (iteration 53): a shell into a snowman
+      if (shot.friend) setTimeout(() => d.friendAim?.(shot.friend[1] * 1000), shot.friend[0] * 1000); // « Gare au tir ami » (iteration 53): the red reticle
       for (const [s, kinds] of shot.newcomers ?? []) setTimeout(() => d.newcomer?.(kinds), s * 1000); // « Nouveau au bestiaire ! » (iteration 38)
       for (const s of shot.sandTraps ?? []) setTimeout(() => d.sandTrap?.(), s * 1000); // « Les dunes » (iteration 36): a buried mine on an enemy's way
       for (const s of shot.bridgeTraps ?? []) setTimeout(() => d.bridgeTrap?.(8), s * 1000); // « Les ponts » (iteration 33): the next enemy on a bridge falls

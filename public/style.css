@@ -1540,6 +1540,12 @@ body.aiming canvas#game { cursor: none; }
 #reticle.loading .load { stroke: var(--accent); }
 #reticle .hair { stroke: #fff3df; stroke-width: 2.2; stroke-linecap: round; }
 #reticle .dot { fill: var(--me, #fff3df); stroke: #2b1b0f; stroke-width: 0.8; }
+/* « Gare au tir ami » (iteration 53): the shot would hit a teammate first, the cross turns red and throbs */
+#reticle.friend .hair, #reticle.friend .load { stroke: #ff5a4e; }
+#reticle.friend .track { stroke: rgba(226, 69, 60, 0.55); }
+#reticle.friend .cross { animation: reticle-friend 0.5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+@keyframes reticle-friend { from { transform: scale(1); } to { transform: scale(1.22); } }
+@media (prefers-reduced-motion: reduce) { #reticle.friend .cross { animation: none; } }
 #reticle .shells rect { fill: rgba(255, 243, 223, 0.18); stroke: rgba(43, 27, 15, 0.75); stroke-width: 1.3; stroke-dasharray: 2.2 1.6; transition: fill 0.12s; transform-box: fill-box; transform-origin: center; }
 #reticle .shells rect.full { fill: #ffd27f; stroke: #2b1b0f; stroke-width: 1.5; stroke-dasharray: none; }
 #reticle .shells rect.pop { animation: pip-pop 0.28s cubic-bezier(0.3, 1.8, 0.5, 1); }

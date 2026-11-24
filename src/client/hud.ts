@@ -56,6 +56,7 @@ export interface ReticleState {
   reload: number; // 0 (ready) to 1 (just fired)
   off: boolean; // cannot fire (ceasefire, frozen…)
   color: number; // the player's colour
+  friend?: boolean; // « Gare au tir ami » (iteration 53): the shot would hit a teammate (or come back on its shooter) first
 }
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -151,5 +152,6 @@ export class Reticle {
     this.el.classList.toggle('loading', s.reload > 0.001);
     this.el.classList.toggle('empty', s.ready <= 0);
     this.el.classList.toggle('off', s.off);
+    this.el.classList.toggle('friend', !!s.friend && !s.off);
   }
 }

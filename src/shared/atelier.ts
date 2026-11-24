@@ -79,6 +79,8 @@ export const BRUSHES: Brush[] = [
   { ch: '}', label: 'Pont-levis bleu', group: 'sol' },
   // iteration 51: « Le Mécano » (share-code letter u)
   { ch: 'R', label: 'Mécano', group: 'tank' },
+  // iteration 53: « Les bonshommes de neige » (share-code letter v)
+  { ch: '8', label: 'Bonhomme de neige', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -150,7 +152,7 @@ export function checkAtelier(map: unknown): string | undefined {
   // the players must be able to drive somewhere: at least one open cell next to the first spot
   const [sx, sy] = lvl.spawns[0];
   const cx = Math.floor(sx), cy = Math.floor(sy);
-  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%{'.includes(map[y][x]);
+  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%{8'.includes(map[y][x]);
   if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => open(cx + dx, cy + dy))) return 'Le départ 1 est emmuré : laisse-lui de la place.';
   return undefined;
 }

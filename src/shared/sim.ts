@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isPortal, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isFragile, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -241,6 +241,8 @@ interface AIState {
   think: number;
   aim: number;
   aimValid: boolean;
+  /** « Les bonshommes de neige » (iteration 53): no shot at a foe, but a snowman stands in the way: knock it down. */
+  snow?: boolean;
   wanderAim: number;
   wanderT: number;
   path: number[];
@@ -422,6 +424,8 @@ export class Game {
    * a crate: it waits (in `gateWait`) until its cell is clear.
    */
   gates = false;
+  /** « Les bonshommes de neige » (iteration 53): the table had snowmen at the start (shells are checked against them). */
+  snowmen = false;
   /** How many times the switches were flipped (even: the red gates stand, as at the start). */
   flips = 0;
   /** Seconds before a switch takes another shell. */
@@ -443,6 +447,7 @@ export class Game {
     this.sand = this.belts.includes(SAND);
     this.snowy = this.belts.includes(SNOW);
     this.gates = this.tiles.includes(Tile.Switch);
+    this.snowmen = this.tiles.some(isSnowman);
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -1070,7 +1075,7 @@ export class Game {
     }
     for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++) {
       for (let cx = Math.floor(bo.x - 2); cx <= Math.floor(bo.x + 2); cx++) {
-        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (!isFragile(tileAt(this.tiles, cx, cy))) continue; // cork, and snowmen (iteration 53)
         if (Math.hypot(cx + 0.5 - bo.x, cy + 0.5 - bo.y) < BOLT_R + 0.35) {
           this.tiles[cy * W + cx] = Tile.Empty;
           this.events.push(['block', cx, cy]);
@@ -1361,7 +1366,7 @@ export class Game {
     }
     for (let cy = Math.floor(t.y - 2); cy <= Math.floor(t.y + 2); cy++) {
       for (let cx = Math.floor(t.x - 2); cx <= Math.floor(t.x + 2); cx++) {
-        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (!isFragile(tileAt(this.tiles, cx, cy))) continue; // cork, and snowmen (iteration 53)
         if (Math.hypot(cx + 0.5 - t.x, cy + 0.5 - t.y) < DRILL_BLAST + 0.35) {
           this.tiles[cy * W + cx] = Tile.Empty;
           this.events.push(['block', cx, cy]);
@@ -1388,7 +1393,7 @@ export class Game {
     const rr = t.r + 0.14;
     for (let cy = Math.floor(t.y - rr); cy <= Math.floor(t.y + rr); cy++) {
       for (let cx = Math.floor(t.x - rr); cx <= Math.floor(t.x + rr); cx++) {
-        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (!isFragile(tileAt(this.tiles, cx, cy))) continue; // cork, and snowmen (iteration 53)
         const nx = Math.max(cx, Math.min(cx + 1, t.x)), ny = Math.max(cy, Math.min(cy + 1, t.y));
         if ((nx - t.x) ** 2 + (ny - t.y) ** 2 < rr * rr) {
           this.tiles[cy * W + cx] = Tile.Empty;
@@ -1826,7 +1831,7 @@ export class Game {
     if (this.snowy) this.clearSnow(x, y, R);
     for (let cy = Math.floor(y - 2); cy <= Math.floor(y + 2); cy++) {
       for (let cx = Math.floor(x - 2); cx <= Math.floor(x + 2); cx++) {
-        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (!isFragile(tileAt(this.tiles, cx, cy))) continue; // cork, and snowmen (iteration 53)
         if (Math.hypot(cx + 0.5 - x, cy + 0.5 - y) < R + 0.35) {
           this.tiles[cy * W + cx] = Tile.Empty;
           this.events.push(['block', cx, cy]);
@@ -2305,7 +2310,10 @@ export class Game {
       const nx = b.x + b.vx * dt;
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
         if (this.gates) this.pressSwitch(nx, b.y, b.owner);
-        if (b.cork && this.breakCork(nx, b.y)) {
+        if (this.snowmen && this.hitSnowman(nx, b.y, !!b.heavy)) {
+          if (!b.heavy || bulletBlocked(this.tiles, nx, b.y, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+          b.x = nx; // « Gros calibre »: straight through the snow
+        } else if (b.cork && this.breakCork(nx, b.y)) {
           if (!b.heavy) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
           if (!bulletBlocked(this.tiles, nx, b.y, BULLET_R)) b.x = nx; else { b.vx = -b.vx; bounced = true; } // « Gros calibre »: straight through
         } else { b.vx = -b.vx; bounced = true; }
@@ -2313,7 +2321,10 @@ export class Game {
       const ny = b.y + b.vy * dt;
       if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) {
         if (this.gates) this.pressSwitch(b.x, ny, b.owner);
-        if (b.cork && this.breakCork(b.x, ny)) {
+        if (this.snowmen && this.hitSnowman(b.x, ny, !!b.heavy)) {
+          if (!b.heavy || bulletBlocked(this.tiles, b.x, ny, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
+          b.y = ny;
+        } else if (b.cork && this.breakCork(b.x, ny)) {
           if (!b.heavy) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
           if (!bulletBlocked(this.tiles, b.x, ny, BULLET_R)) b.y = ny; else { b.vy = -b.vy; bounced = true; }
         } else { b.vy = -b.vy; bounced = true; }
@@ -2460,6 +2471,30 @@ export class Game {
     return true;
   }
 
+  /**
+   * « Les bonshommes de neige » (iteration 53): a shell at (x, y) hits the snowmen it touches. A whole one loses its head
+   * (it still stands, smaller), a headless one falls into a heap of snow (floor); a heavy shell brings it down at once.
+   * False when it touched no snowman (the shell then bounces as usual).
+   */
+  hitSnowman(x: number, y: number, heavy: boolean): boolean {
+    let hit = false;
+    for (let cy = Math.floor(y - BULLET_R); cy <= Math.floor(y + BULLET_R); cy++) {
+      for (let cx = Math.floor(x - BULLET_R); cx <= Math.floor(x + BULLET_R); cx++) {
+        const t = tileAt(this.tiles, cx, cy);
+        if (!isSnowman(t)) continue;
+        hit = true;
+        if (t === Tile.Snowman && !heavy) {
+          this.tiles[cy * W + cx] = Tile.SnowLow;
+          this.events.push(['snowman', cx, cy, r2(x), r2(y)]);
+        } else {
+          this.tiles[cy * W + cx] = Tile.Empty;
+          this.events.push(['block', cx, cy]);
+        }
+      }
+    }
+    return hit;
+  }
+
   /** « Brise-liège »: the cork cells a shell at (x, y) touches are blown away; false when it touched no cork. */
   breakCork(x: number, y: number): boolean {
     let hit = false;
@@ -2504,7 +2539,7 @@ export class Game {
     const minY = Math.floor(m.y - R - 1), maxY = Math.floor(m.y + R + 1);
     for (let cy = minY; cy <= maxY; cy++) {
       for (let cx = minX; cx <= maxX; cx++) {
-        if (tileAt(this.tiles, cx, cy) !== Tile.Cork) continue;
+        if (!isFragile(tileAt(this.tiles, cx, cy))) continue; // cork, and snowmen (iteration 53)
         if (Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < R + 0.35) {
           this.tiles[cy * W + cx] = Tile.Empty;
           this.events.push(['block', cx, cy]);
@@ -2850,6 +2885,7 @@ export class Game {
     if (this.remoteWorth(t) && t.mineCd <= 0) this.detonate(t);
     if (ai.think <= 0) {
       ai.think = spec.skill >= 2 ? 0.18 : 0.3;
+      ai.snow = undefined;
       this.aiThinkAim(t, foe);
       ai.seed = t.kind === 'player' ? this.seedTarget(t) : undefined;
       if (ai.seed) { ai.aim = Math.atan2(ai.seed.y - t.y, ai.seed.x - t.x); ai.aimValid = true; }
@@ -2889,6 +2925,9 @@ export class Game {
       if (seed && !seed.dead && Math.abs(angDiff(t.turret, Math.atan2(seed.y - t.y, seed.x - t.x))) < 0.05) {
         // the seed is in the sights: no hesitation, it will not dodge
         if (this.tryFire(t)) { ai.seed = undefined; ai.hesitate = 0.3; }
+      } else if (ai.snow && aligned && !res?.hit) {
+        // a snowman in the way (iteration 53): an unhurried shot to clear it
+        if (this.tryFire(t)) { ai.snow = undefined; ai.hesitate = 0.5 + Math.random() * 0.5; }
       } else if (res?.hit && res.hit.team !== t.team && this.canSee(t, res.hit)) {
         if (!ai.locked) {
           // spotted a shot: take a human-ish moment before pulling the trigger
@@ -2991,10 +3030,29 @@ export class Game {
       if (spec.skill >= 3) for (const d of [-0.03, 0.03]) tryAng(bestAng + d, 0);
       ai.aim = bestAng + (spec.skill >= 3 ? 0 : (Math.random() - 0.5) * 0.04);
       ai.aimValid = true;
+    } else if (this.snowmen && this.snowInTheWay(t, foe)) {
+      ai.aim = Math.atan2(foe.y - t.y, foe.x - t.x);
+      ai.aimValid = ai.snow = true;
     } else {
       ai.aimValid = false;
       ai.aim = Math.atan2(foe.y - t.y, foe.x - t.x) + (Math.random() - 0.5) * 0.6;
     }
+  }
+
+  /**
+   * « Les bonshommes de neige » (iteration 53): is a snowman all that stands between this tank and its foe (in sight, not
+   * too far, no friend in the line)? Then a shell or two will open the way.
+   */
+  private snowInTheWay(t: Tank, foe: Tank): boolean {
+    if (t.spec.skill === 0 || !foe.alive || under(foe) || !this.canSee(t, foe)) return false;
+    const d = Math.hypot(foe.x - t.x, foe.y - t.y);
+    if (d > 10) return false;
+    const ang = Math.atan2(foe.y - t.y, foe.x - t.x);
+    const res = this.traceShot(t, ang, 0);
+    if (res.hit || res.len < 0.6 || res.len > d) return false; // a tank (friend or foe) first, or no snowman before the foe
+    const tip = t.r + 0.22, end = tip + res.len + 0.2;
+    const ex = t.x + Math.cos(ang) * end, ey = t.y + Math.sin(ang) * end;
+    return isSnowman(tileAt(this.tiles, Math.floor(ex), Math.floor(ey)));
   }
 
   private aiMove(t: Tank, foe: Pt) {
@@ -3104,7 +3162,7 @@ export class Game {
     // portals are left out of the plans: tanks that slip into one simply replan from the other side
     // the Foreur drills straight through cork
     const drills = t.kind === 'drill';
-    for (let i = 0; i < W * H; i++) if ((isSolidTank(this.tiles[i]) && !(drills && this.tiles[i] === Tile.Cork)) || (isPortal(this.tiles[i]) && i !== start && i !== ai.goal)) blocked[i] = 1;
+    for (let i = 0; i < W * H; i++) if ((isSolidTank(this.tiles[i]) && !(drills && isFragile(this.tiles[i]))) || (isPortal(this.tiles[i]) && i !== start && i !== ai.goal)) blocked[i] = 1;
     if (t.r > 0.45) {
       // big tanks only fit through cells whose neighbours are all free
       const solid = blocked.slice();

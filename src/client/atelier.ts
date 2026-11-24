@@ -71,6 +71,13 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
   } else if (c === '_') {
     g.fillStyle = '#3a2a1e'; rr(px + 1.5, py + 1.5, s - 3, s - 3, s * 0.25); g.fill();
     g.fillStyle = '#1b130d'; rr(px + s * 0.2, py + s * 0.25, s * 0.6, s * 0.55, s * 0.2); g.fill();
+  } else if (c === '8') {
+    // a snowman (iteration 53): seen from above, its round body, its head with a carrot, a red scarf between them
+    g.fillStyle = '#dfe9f5'; g.beginPath(); g.arc(px + s * 0.5, py + s * 0.56, s * 0.4, 0, 7); g.fill();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(px + s * 0.46, py + s * 0.52, s * 0.34, 0, 7); g.fill();
+    g.strokeStyle = '#e2453c'; g.lineWidth = Math.max(1.5, s * 0.08); g.beginPath(); g.arc(px + s * 0.5, py + s * 0.42, s * 0.2, 0, 7); g.stroke(); g.lineWidth = 1;
+    g.fillStyle = '#23242c'; g.beginPath(); g.arc(px + s * 0.5, py + s * 0.4, s * 0.15, 0, 7); g.fill();
+    g.fillStyle = '#ff8a2a'; g.beginPath(); g.moveTo(px + s * 0.6, py + s * 0.36); g.lineTo(px + s * 0.9, py + s * 0.42); g.lineTo(px + s * 0.6, py + s * 0.47); g.fill();
   } else if (c === '%') {
     // a switch (iteration 40): a wooden block with a big red button
     g.fillStyle = '#c8955a'; g.fillRect(px, py, s, s);

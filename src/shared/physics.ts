@@ -1,4 +1,4 @@
-import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isTunnel, isPit, Tile } from './constants';
+import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isSnowman, isTunnel, isPit, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -117,6 +117,7 @@ export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang
       }
       if (out === null) break; // it fades away in a wall too thick
     }
+    if (isSnowman(tileAt(tiles, hit.cx, hit.cy))) break; // « Les bonshommes de neige » (iteration 53): the snow swallows the shell
     if (hit.axis === 0) dx = -dx; else dy = -dy;
     x = hit.x + dx * 1e-4;
     y = hit.y + dy * 1e-4;
@@ -154,9 +155,9 @@ export function castWindy(tiles: ArrayLike<number>, x: number, y: number, ang: n
     const ox = x, oy = y;
     let bounced = false;
     const nx = x + vx * dt;
-    if (bulletBlocked(tiles, nx, y, R)) { vx = -vx; bounced = true; } else x = nx;
+    if (bulletBlocked(tiles, nx, y, R)) { if (snowmanNear(tiles, nx, y, R)) break; vx = -vx; bounced = true; } else x = nx;
     const ny = y + vy * dt;
-    if (bulletBlocked(tiles, x, ny, R)) { vy = -vy; bounced = true; } else y = ny;
+    if (bulletBlocked(tiles, x, ny, R)) { if (snowmanNear(tiles, x, ny, R)) break; vy = -vy; bounced = true; } else y = ny;
     const w = warpTarget(tiles, ox, oy, x, y);
     if (bounced || w || ++steps >= 2) {
       segs.push({ x0, y0, x1: x, y1: y });
@@ -176,6 +177,12 @@ export function castWindy(tiles: ArrayLike<number>, x: number, y: number, ang: n
   return segs;
 }
 
+/** Does a shell of radius r at (x, y) touch a snowman (iteration 53)? */
+export function snowmanNear(tiles: ArrayLike<number>, x: number, y: number, r: number): boolean {
+  for (let cy = Math.floor(y - r); cy <= Math.floor(y + r); cy++) for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++) if (isSnowman(tileAt(tiles, cx, cy))) return true;
+  return false;
+}
+
 function dda(tiles: ArrayLike<number>, x: number, y: number, dx: number, dy: number, maxT: number) {
   // inflate by bullet radius: shrink the effective free space by offsetting against wall faces
   const R = 0.09;
@@ -191,15 +198,15 @@ function dda(tiles: ArrayLike<number>, x: number, y: number, dx: number, dy: num
     let t: number, axis: number;
     if (tMaxX < tMaxY) { t = tMaxX; axis = 0; cx += stepX; tMaxX += tDeltaX; }
     else { t = tMaxY; axis = 1; cy += stepY; tMaxY += tDeltaY; }
-    if (t > maxT) return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis, warp: -1 };
+    if (t > maxT) return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis, warp: -1, cx, cy };
     const tile = tileAt(tiles, cx, cy);
-    if (isSolidBullet(tile)) return { hit: true, t, x: x + dx * t, y: y + dy * t, axis, warp: -1 };
+    if (isSolidBullet(tile)) return { hit: true, t, x: x + dx * t, y: y + dy * t, axis, warp: -1, cx, cy };
     if (isPortal(tile)) {
       const twin = portalTwin(tiles, cy * W + cx);
-      if (twin >= 0) return { hit: false, t, x: x + dx * t, y: y + dy * t, axis, warp: twin };
+      if (twin >= 0) return { hit: false, t, x: x + dx * t, y: y + dy * t, axis, warp: twin, cx, cy };
     }
   }
-  return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis: 0, warp: -1 };
+  return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis: 0, warp: -1, cx, cy };
 }
 
 /** Distance parameter along segment where it first touches circle, or -1. */
