@@ -280,7 +280,7 @@ type Pt = { x: number; y: number };
 const inTable = (x: number, y: number) => x - BULLET_R >= 0 && y - BULLET_R >= 0 && x + BULLET_R < W && y + BULLET_R < H;
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5, mechanic: 6.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5, mechanic: 6.5, spectre: 5.5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -289,6 +289,8 @@ export type ReviveCb = (t: Tank, by: Tank) => void;
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
+/** Does this tank fire ghost shells right now: a « Passe-muraille » crate (iteration 52), or « Le Spectre » (iteration 56), always? */
+export const ghostGun = (t: Tank) => !!t.buffs.ghost || t.kind === 'spectre';
 /** The Foreur under the table: out of reach of shells, mines, lightning and other tanks. */
 /** Out of reach: the Foreur under the table, or the Sauterelle in the air (iteration 41). Nothing touches it, it touches nothing. */
 export const under = (t: Tank) => (!!t.boss && t.boss.dig >= 2) || (!!t.hop && t.hop.air >= 0);
@@ -2279,7 +2281,7 @@ export class Game {
     const tip = t.r + 0.22;
     const x = t.x + dx * tip, y = t.y + dy * tip;
     const sp = t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED;
-    this.events.push(['shot', r2(x), r2(y), r2(t.turret), (t.spec.rocket ? 1 : 0) | (t.buffs.heavy ? SHELL_HEAVY : 0) | (t.buffs.ghost ? SHELL_GHOST : 0), t.id]);
+    this.events.push(['shot', r2(x), r2(y), r2(t.turret), (t.spec.rocket ? 1 : 0) | (t.buffs.heavy ? SHELL_HEAVY : 0) | (ghostGun(t) ? SHELL_GHOST : 0), t.id]);
     if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, t.x + dx * t.r * 0.6, t.y + dy * t.r * 0.6, BULLET_R)) {
       this.events.push(['pop', r2(x), r2(y)]);
       return true;
@@ -2287,7 +2289,7 @@ export class Game {
     const bounces = t.spec.bounces + (t.buffs.bounce > 0 ? 1 : 0) + (t.kind === 'player' ? this.playerBounces : 0);
     const heavy = t.buffs.heavy ? true : undefined;
     const cork = heavy || (t.ranks && t.ranks[0] >= 3) ? true : undefined;
-    const ghost = t.buffs.ghost ? 1 : undefined;
+    const ghost = ghostGun(t) ? 1 : undefined;
     const main: Bullet = { id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, cork, heavy, ghost };
     this.bullets.push(main);
     if (t.buffs.fan > 0) {
@@ -3018,7 +3020,7 @@ export class Game {
     // in the wind (iteration 23), the AI follows the shell's curve with the gust of the moment (which may change in flight)
     const segs = this.wind !== undefined
       ? castWindy(this.tiles, sx, sy, ang, t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED, bounces, this.gust[0], this.gust[1], 32)
-      : castRicochet(this.tiles, sx, sy, ang, bounces, 45, !!t.buffs.ghost); // a ghost shell (iteration 52) goes through its first wall
+      : castRicochet(this.tiles, sx, sy, ang, bounces, 45, ghostGun(t)); // a ghost shell (iteration 52) goes through its first wall
     let acc = 0;
     for (let si = 0; si < segs.length; si++) {
       const s = segs[si];

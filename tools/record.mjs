@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { ballon: [0, [2, 2, 2, 2], 45, true], seconds: 16, goalShots: [8.5], caption: 'Itération 55 : le ballon', sub: 'Bleus contre Rouges, un ballon de plage et deux buts' },
-  { ballon: [2, [2, 2, 2, 2], 40, true], seconds: 14, goalShots: [7], caption: 'Sur la patinoire', sub: 'Le ballon file sur la glace… et les tanks glissent' },
-  { ballon: [1, [2, 2, 1, 2], 40], seconds: 12, goalShots: [8], caption: 'Obus, chenilles ou mines', sub: 'Tout ce qui le touche le fait rouler' },
-  { rivals: 6, lobby: 'ballon', seconds: 7, caption: 'Seul ? Ajoute des rivaux', sub: 'Le ballon se joue de 2 à 4, en ligne' },
-  { manual: [7, ['modes']], seconds: 7, caption: 'Le ballon entre au manuel', sub: 'Première équipe à 3 buts' },
+  { mission: 71, arms: ['canon', 'ricochet'], hud: true, seconds: 18, newcomers: [[1.2, ['spectre']]], spooks: [4.5, 10.5], caption: 'Itération 56 : le Spectre', sub: 'Un tank sous un drap : ses obus traversent les murs' },
+  { mission: 72, arms: ['fusee', 'canon'], hud: true, seconds: 15, spooks: [3.5, 9], caption: 'Le grenier hanté, de nuit', sub: 'Aucun abri ne tient : écoute le « wouuh »… et bouge !' },
+  { mission: 71, arms: ['canon', 'sapeur'], hud: true, seconds: 14, buffs: ['ghost'], ghostShots: [3, 7.5], caption: 'À fantôme, fantôme et demi', sub: 'Ramasse un Passe-muraille et rends-lui la pareille' },
+  { daily: [1, 'spectres'], arms: ['canon', 'ricochet'], seconds: 11, spooks: [5], caption: 'Nouveau défi du jour : la Nuit des spectres', sub: 'Cinq étapes de nuit, un ennemi sur trois sous un drap' },
+  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Une nouvelle fiche au bestiaire', sub: 'Il recharge lentement : fonce-lui dessus !' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -110,6 +110,7 @@ try {
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
+      for (const s of shot.spooks ?? []) setTimeout(() => d.spook?.(), s * 1000); // « Le Spectre » (iteration 56): every Spectre fires through a wall at a hero
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
       for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way
       for (const s of shot.squalls ?? []) setTimeout(() => d.squall?.(), s * 1000); // « Le blizzard » (iteration 54): the next squall rises within two seconds

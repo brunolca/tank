@@ -1,6 +1,6 @@
 import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, isSnowman, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
-import { applyTwist, DAILY_STAGES, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
+import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
 import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags, type NetFlag } from '../shared/drapeau';
 import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROUND, HUNT_TARGET, huntArena, newHunt, HUNT_CRATES } from '../shared/caisses';
@@ -487,6 +487,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (trainFight) setTimeout(() => toast('Le Tortillard : « Tchou-tchou ! » Ne reste jamais sur les rails devant lui. Son chasse-pierres renvoie les obus de face : vise ses flancs, son dos… ou pose une mine sur la voie ! Quand il siffle à l’arrêt, il repart en marche arrière.', 6000), 2200);
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
+  else if (enemies.some((e) => e.kind === 'spectre')) setTimeout(() => toast('Le Spectre : ses obus passent à travers le premier mur qu’ils touchent. Aucun abri ne te protège ! Écoute le « wouuh » d’un obus qui entre dans le mur… et bouge. Il recharge lentement : fonce-lui dessus.', 5600), 2200);
   else if (enemies.some((e) => e.kind === 'watcher')) setTimeout(() => toast(msg.night ? 'Le Veilleur balaie la nuit de son faisceau. S’il t’éclaire, l’alarme sonne, tous les ennemis savent où tu es… et sa fusée suit la lumière : sors du faisceau !' : 'Le Veilleur balaie la table de son faisceau. S’il t’éclaire, l’alarme sonne et sa fusée suit la lumière : sors du faisceau ! Hors de sa lumière, il ne voit rien.', 5400), 2200);
   else if (levelBlizzard) setTimeout(() => toast(coopLike(msg.mode) ? 'Blizzard : toutes les quinze secondes, une bourrasque blanchit la table. Plus personne ne voit à plus de trois cases… les ennemis non plus ! Profite-en pour avancer, et tire entre deux bourrasques.' : 'Blizzard : pendant les bourrasques, personne ne voit à plus de trois cases. Glisse-toi dans le dos des autres… mais chaque tir te trahit !', 6000), 2200);
   else if (levelFog !== undefined) setTimeout(() => toast(coopLike(msg.mode) ? 'Brouillard : au cœur de la brume, un tank ne se voit que de près… ou quand il tire. Les ennemis aussi te perdent de vue !' : 'Brouillard : cache-toi dans la brume ! Chaque tir trahit ta position.', 4600), 2200);
@@ -2978,6 +2979,7 @@ function enemyName(kind: string) {
   if (kind === 'hopper') return 'la Sauterelle';
   if (kind === 'magnet') return 'l’Aimant';
   if (kind === 'mechanic') return 'le Mécano';
+  if (kind === 'spectre') return 'le Spectre';
   return `le ${label}`;
 }
 
@@ -3266,6 +3268,7 @@ const BESTIARY: [TankKind, string][] = [
   ['hopper', 'saute par-dessus les murs pour te prendre à revers : vise l’anneau vert où elle va retomber'],
   ['watcher', 'son faisceau balaie la table : s’il t’éclaire, sa fusée suit la lumière ; hors du faisceau, il ne voit rien'],
   ['mechanic', 'répare les épaves de ses amis, qui repartent rafistolés : abats-le en premier, ou pendant qu’il travaille'],
+  ['spectre', 'ses obus traversent le premier mur qu’ils touchent : aucun abri ne tient, alors bouge, et fonce pendant qu’il recharge'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -3340,6 +3343,7 @@ function tankSvg(kind: string, known: boolean) {
     : kind === 'train' ? '<rect x="10" y="17" width="18" height="14" rx="3" fill="#2a1d12" opacity=".35"/><circle cx="31" cy="24" r="3.4" fill="#2a1d12"/><path d="M40 14 l5 10 l-5 10" fill="none" stroke="#f2c14e" stroke-width="2.6" stroke-linejoin="round"/>'
     : kind === 'wagon' ? '<rect x="7" y="22" width="4" height="4" fill="#2a1d12"/><rect x="37" y="22" width="4" height="4" fill="#2a1d12"/>'
     : kind === 'mechanic' ? '<path d="M14 24 H34" stroke="#dfe5ea" stroke-width="4" stroke-linecap="round"/><path d="M36 19.5 a5 5 0 1 0 0 9" fill="none" stroke="#dfe5ea" stroke-width="3.4"/><rect x="5" y="19" width="7" height="10" rx="1.5" fill="#d8392f" stroke="#2a1d12" stroke-width="1"/>'
+    : kind === 'spectre' ? '<path d="M15 31 V20 a9 9 0 0 1 18 0 V31 l-3 -2.5 l-3 2.5 l-3 -2.5 l-3 2.5 l-3 -2.5 Z" fill="#f4fffb" stroke="#2a1d12" stroke-width="1.1" opacity=".92"/><ellipse cx="21" cy="21" rx="1.6" ry="2.4" fill="#1d2b28"/><ellipse cx="27" cy="21" rx="1.6" ry="2.4" fill="#1d2b28"/><circle cx="24" cy="26.5" r="1.4" fill="#1d2b28"/>'
     : kind === 'watcher' ? '<path d="M24 24 L46 15 L46 33 Z" fill="#ffd648" opacity=".55"/><circle cx="24" cy="24" r="4" fill="#ffe680" stroke="#2a1d12" stroke-width="1.2"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
     : '';
@@ -3365,6 +3369,7 @@ function enemySheet(kind: string) {
   if (kind === 'hopper') tags.push('Saute les murs');
   if (kind === 'watcher') tags.push('Phare tournant');
   if (kind === 'mechanic') tags.push('Répare les épaves', 'Une fois par tank');
+  if (kind === 'spectre') tags.push('Obus fantômes', 'Traverse les murs');
   if (kind === 'train') tags.push('Roule sur des rails', 'Chasse-pierres');
   if (kind === 'wagon') tags.push('Suit la locomotive');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
@@ -3994,7 +3999,7 @@ if (params.has('demo')) {
     /** Play a stage of a daily challenge: today's, or the nearest day that has the given twist. */
     daily(stage = 1, twist?: DailyTwist) {
       let day = dayNumber();
-      if (twist) for (let k = 0; k < 7 && dailyTwist(day) !== twist; k++) day++;
+      if (twist) for (let k = 0; k < DAILY_TWISTS.length && dailyTwist(day) !== twist; k++) day++;
       attract = undefined;
       startAttract({ heroes: true, daily: { day, stage } });
       const lvl = dailyLevel(day, stage);
@@ -4105,7 +4110,7 @@ if (params.has('demo')) {
       newcomerCards(kinds, 0);
     },
     /** « Le manuel » (iteration 39): the home screen, then the manual opened on `tabs` one after the other (the bestiary page scrolls slowly). */
-    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'mechanic') {
+    manual(ms = 8000, tabs: ManualTab[] = ['bestiaire'], focusKind = 'spectre') {
       clearScene();
       show('home');
       const lead = Math.min(1500, ms / 4), each = (ms - lead - 400) / tabs.length;
@@ -4637,6 +4642,30 @@ if (params.has('demo')) {
         if (fired) { reelWanted = best.foe; return 1; }
       }
       return 0;
+    },
+    /** « Le Spectre » (iteration 56): every Spectre fires now, straight through a wall, at the nearest hero hidden behind it. */
+    spook() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const s of g.tanks) {
+        if (!s.alive || s.kind !== 'spectre') continue;
+        let best: { ang: number; d: number } | undefined;
+        for (const h of g.tanks) {
+          if (!h.alive || h.team === s.team) continue;
+          const ang = Math.atan2(h.y - s.y, h.x - s.x), d = Math.hypot(h.x - s.x, h.y - s.y);
+          const seg = castRicochet(g.tiles, s.x, s.y, ang, 0, 45, false)[0];
+          if (!seg || Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0) > d - h.r) continue; // in plain sight: no wall to go through
+          if (g.traceShot(s, ang, 0).hit !== h) continue;
+          if (!best || d < best.d) best = { ang, d };
+        }
+        if (!best) continue;
+        s.turret = best.ang;
+        if (s.ai) s.ai.aim = best.ang;
+        s.fireCd = 0;
+        if (g.tryFire(s)) n++;
+      }
+      return n;
     },
     /** « Les bonshommes de neige » (iteration 53): a hero fires straight at the nearest snowman in its line (its head flies off). */
     snowShot() {

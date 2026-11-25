@@ -1,7 +1,7 @@
 {
-  "iteration": 55,
+  "iteration": 56,
   "date": "2026-11-25",
-  "title": "Le ballon",
+  "title": "Le Spectre",
   "journal": [
     {
       "iteration": 1,
@@ -671,6 +671,18 @@
         "Quatre terrains se relaient : le stade, le terrain vague, les quatre piliers… et la patinoire, où le ballon file sur la glace.",
         "Seul ou à deux ? Les rivaux de l’ordinateur savent jouer : ils se placent derrière le ballon, tirent vers le but et gardent leur cage. Le fond de l’accueil montre parfois un match, et le manuel présente le nouveau mode.",
         "Sur les tables du blizzard, la pastille du vent compte maintenant les secondes avant la prochaine bourrasque : le temps de traverser à découvert… ou de te mettre à l’abri."
+      ]
+    },
+    {
+      "iteration": 56,
+      "date": "2026-11-25",
+      "title": "Le Spectre",
+      "notes": [
+        "Un nouvel ennemi hante la table : le Spectre, un tank vert d’eau caché sous un drap blanc. Chacun de ses obus traverse le premier mur qu’il touche : aucun abri ne te protège de lui.",
+        "Ses obus gémissent « wouuh » en entrant dans le mur : tends l’oreille et bouge. Il recharge lentement, c’est le moment de foncer sur lui.",
+        "Deux nouvelles missions : « Le manoir hanté » (la 71ᵉ), où tombent des caisses Passe-muraille pour lui rendre la pareille, et « Le grenier hanté » (la 72ᵉ), de nuit. Ensuite, le Spectre se glisse dans les missions générées.",
+        "Une huitième consigne pour le défi du jour, à partir du 26 novembre : « Nuit des spectres », cinq étapes de nuit où un ennemi sur trois est un Spectre.",
+        "Le Spectre a sa fiche au bestiaire et sa case dans l’atelier, pour hanter tes propres missions."
       ]
     }
   ]

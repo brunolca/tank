@@ -81,6 +81,8 @@ export const BRUSHES: Brush[] = [
   { ch: 'R', label: 'Mécano', group: 'tank' },
   // iteration 53: « Les bonshommes de neige » (share-code letter v)
   { ch: '8', label: 'Bonhomme de neige', group: 'sol' },
+  // iteration 56: « Le Spectre » (share-code letter w)
+  { ch: 'P', label: 'Spectre', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

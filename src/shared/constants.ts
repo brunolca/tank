@@ -76,6 +76,7 @@ export type TankKind =
   | 'hopper'
   | 'watcher'
   | 'mechanic'
+  | 'spectre'
   | 'train'
   | 'wagon';
 
@@ -138,6 +139,10 @@ export const SPECS: Record<TankKind, TankSpec> = {
   // iteration 51: « Le Mécano », a toy mechanic with a big spanner: it drives to the wreck of a fallen friend and puts
   // it back together (see MECA_*). It shoots little while it has a wreck in sight, never while it works.
   mechanic: { speed: 1.9, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.2, turretSpeed: 2, mines: 0, skill: 1, reaction: 0.6, aimError: 0.09, label: 'Mécano' },
+  // iteration 56: « Le Spectre », a toy tank under a sheet: every shell it fires is a ghost shell (it goes through the
+  // first wall it meets, as with the « Passe-muraille » crate), so no wall keeps you safe from it. Slow to reload, and
+  // its shells moan « wouuh » as they slip into the wall: listen, then dodge (see ghostGun in sim.ts).
+  spectre: { speed: 1.6, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.4, turretSpeed: 1.8, mines: 0, skill: 2, reaction: 0.75, aimError: 0.05, label: 'Spectre' },
   // iteration 49: the sixth boss, « le Tortillard », a toy locomotive that runs round its rails pulling gun wagons
   // (see TRAIN_*): it runs over whatever stands on the track, and its cowcatcher sends head-on shells back. The rails
   // drive it, never the AI (speed 0 here: nothing pushes it about either).
@@ -184,6 +189,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   hopper: 0xa8d02c,
   watcher: 0x3b3577,
   mechanic: 0xb8683a,
+  spectre: 0x7fd1ae,
   train: 0x2f7a4d,
   wagon: 0xd9a63a,
 };

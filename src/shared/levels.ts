@@ -13,9 +13,9 @@ import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR
 //         { } « Les ponts-levis » (iteration 48): a red drawbridge (raised at the start: a pit) and a blue one (lowered: a
 //           bridge) over a pit, flipped by the same switches; on a flip of the switches, the conveyor belts turn round too
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)  P spectre (the Spectre)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher', R: 'mechanic',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher', R: 'mechanic', P: 'spectre',
 };
 
 export interface LevelDef {
@@ -1129,6 +1129,56 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 56: « Le Spectre ». Two Spectres haunt the rooms of a manor, behind walls two tiles thick (a Maçon thickens
+  // them): their shells go straight through, yours bounce off… unless you pick up one of the « Passe-muraille » crates that fall here too
+  71: {
+    name: 'Le manoir hanté',
+    crates: ['ghost', 'shield'],
+    map: [
+      '......................',
+      '..1......##.......##..',
+      '.........##...P...##.b',
+      '..2......##.......##..',
+      '.........##.......##..',
+      '.........####..####...',
+      '......................',
+      '...oo..............p..',
+      '...oo.....HH..........',
+      '..........HH.......c..',
+      '.........####..####...',
+      '.........##.......##..',
+      '.........##...P...##..',
+      '.........##.......##.y',
+      '.........##.......##..',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 56: an attic at night, full of trunks and tall stacks: three Spectres shoot through everything, a white tank
+  // hides in the dark and a Maçon piles up cork. Listen for the « wouuh » of a shell slipping into a trunk, and keep moving
+  72: {
+    name: 'Le grenier hanté',
+    night: true,
+    map: [
+      '......................',
+      '..1.........#.....#...',
+      '.......#..........P...',
+      '..2.........#.....#...',
+      '....HHHHH.............',
+      '..........#...#...#...',
+      '.......w..............',
+      '..........#...#...#.g.',
+      '...oo.........HHH.....',
+      '...oo.....#...#...#...',
+      '...................P..',
+      '..........#...#...#...',
+      '....HHHHH.............',
+      '.........P..#.....#...',
+      '.......#..............',
+      '............#.....#.c.',
+      '......................',
+    ],
+  },
   // iteration 52: « Le passe-muraille ». Thick walls, two tiles deep, hide the enemies from every angle but the long way
   // round; only the crates of the « Passe-muraille » (through the wall!) and the « Détonateur » (a trap they cannot see) fall
   // here, a Pilleur races the players to them and a Maçon thickens the walls
@@ -1595,6 +1645,8 @@ export interface GenOptions {
   fog?: number | false;
   /** Share of the enemies swapped for steel tanks (iteration 10). Campaign missions from the 21st: 0.22; the daily challenge: 0 unless its twist says so. */
   armored?: number;
+  /** Share of the enemies swapped for Spectres (iteration 56): the daily twist « Nuit des spectres » only. */
+  spectres?: number;
 }
 
 export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLevel {
@@ -1745,6 +1797,17 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 68 && enemies.length >= 3) {
       const rr = rng(mission * 9241 + 101);
       for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'yellow' || e.kind === 'pink' || e.kind === 'marine' || e.kind === 'violet' || e.kind === 'green' || e.kind === 'mason') && rr() < 0.14) { e.kind = 'mechanic'; break; }
+    }
+    // the Spectre (iteration 56) haunts the missions from the 73rd: one more stream, at most one of them, in place of a plain tank
+    if (opt.seed === undefined && mission > 72 && enemies.length >= 2) {
+      const rs = rng(mission * 8363 + 103);
+      for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'pink' || e.kind === 'violet' || e.kind === 'marine' || e.kind === 'white') && rs() < 0.15) { e.kind = 'spectre'; break; }
+    }
+    // the daily twist « Nuit des spectres » (iteration 56): a share of the enemies (never the steel ones), at least one
+    if ((opt.spectres ?? 0) > 0 && enemies.length) {
+      const rs = rng((opt.seed ?? mission) * 4513 + 107);
+      for (const e of enemies) if (e.kind !== 'steel' && rs() < opt.spectres!) e.kind = 'spectre';
+      if (!enemies.some((e) => e.kind === 'spectre')) enemies[Math.floor(rs() * enemies.length)].kind = 'spectre';
     }
     // about a third of the later generated missions are played at night (own random stream again)
     const night = opt.night ?? (mission > 20 && rng(mission * 31337 + 5)() < 0.32);

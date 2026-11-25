@@ -215,6 +215,7 @@ interface TankView {
   leap?: { x0: number; y0: number; x1: number; y1: number }; // the leap it is in (from its « hop » event)
   leapRing?: THREE.Mesh; // and the ring on the floor where it will land
   squash?: number; // the bounce of its landing, fading out
+  sheet?: THREE.Group; // « Le Spectre » (iteration 56): its ghost sheet, floating over the turret (it puffs up when it fires)
   spanner?: THREE.Group; // « Le Mécano » (iteration 51): the big spanner on its turret (it turns while it works)
   patch?: THREE.Group; // a tank put back together by a Mécano: two crossed strips of plaster on its hull
   fixing?: boolean; // its wreck is being repaired right now (drawn half sunk and tilted, rising as the work goes on)
@@ -676,6 +677,33 @@ function buildSpanner(): THREE.Group {
   g.userData.arm = arm;
   return g;
 }
+// « Le Spectre » (iteration 56): a little ghost sheet over its turret (a dome with a wavy hem), two big dark eyes and a
+// round mouth, the barrel poking out of a hole in the front
+function spectreSheetGeo(): THREE.BufferGeometry {
+  const pts: THREE.Vector2[] = [];
+  for (let i = 0; i <= 12; i++) {
+    const u = i / 12; // 0 top … 1 hem
+    const r = u < 0.55 ? 0.27 * Math.sin((u / 0.55) * Math.PI / 2) : 0.27 + (u - 0.55) * 0.12;
+    pts.push(new THREE.Vector2(Math.max(0.001, r), 0.34 - u * 0.36));
+  }
+  const g = new THREE.LatheGeometry(pts, 28);
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y > 0.06) continue;
+    const a = Math.atan2(pos.getZ(i), pos.getX(i));
+    pos.setY(i, y + Math.sin(a * 7) * 0.035 * (0.06 - y) / 0.08); // the hem waves
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const spectreGeo = {
+  sheet: spectreSheetGeo(),
+  eye: new THREE.SphereGeometry(0.05, 10, 8),
+  mouth: new THREE.TorusGeometry(0.035, 0.014, 6, 12),
+};
+const sheetMat = new THREE.MeshStandardMaterial({ color: 0xf4fffb, emissive: 0x9fe8d8, emissiveIntensity: 0.25, roughness: 0.55, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
+const spookEyeMat = new THREE.MeshStandardMaterial({ color: 0x1d2b28, emissive: 0x3dffc0, emissiveIntensity: 0, roughness: 0.3 });
 // « Le Tortillard » (iteration 49): a toy steam locomotive (boiler, cab, chimney, cowcatcher, red wheels) and its flat
 // wagons, each with a little cannon; its rails on the floor (sleepers and two steel rails)
 const trainGeo = {
@@ -1254,6 +1282,28 @@ function buildTank(info: TankInfo): TankView {
     beam.frustumCulled = false;
     view.lantern = { glass, lens: lensMat, beam, pos, col, red: 0, reach: WATCH_RANGE };
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o !== room) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'spectre') {
+    // a ghost sheet floating over the turret, its eyes and round mouth facing the barrel
+    const g = new THREE.Group();
+    g.position.set(-0.02, 0.1, 0);
+    const sheet = new THREE.Mesh(spectreGeo.sheet, sheetMat);
+    const eyes = spookEyeMat.clone(); // its own: they flash when it fires
+    g.userData.eyes = eyes;
+    g.add(sheet);
+    for (const z of [-0.09, 0.09]) {
+      const eye = new THREE.Mesh(spectreGeo.eye, eyes);
+      eye.scale.set(0.6, 1.25, 1);
+      eye.position.set(0.235, 0.2, z);
+      g.add(eye);
+    }
+    const mouth = new THREE.Mesh(spectreGeo.mouth, eyes);
+    mouth.rotation.y = Math.PI / 2;
+    mouth.position.set(0.255, 0.09, 0);
+    g.add(mouth);
+    turret.add(g);
+    view.sheet = g;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (info.kind === 'mechanic') {
     // a short barrel, the spanner on the turret, the toolbox on the back deck
@@ -3628,6 +3678,7 @@ export class Renderer {
       if (v.fixing) { v.fixing = false; v.root.rotation.set(0, 0, 0); }
       if (!v.patch && (t.fx ?? 0) & FLAG_PATCHED) this.addPatch(v);
       if (v.spanner) this.tankMechanic(v, t, dt, visible);
+      if (v.sheet) this.tankSpectre(v, t, dt, visible);
       v.root.position.set(t.x, 0, t.y);
       v.hull.rotation.y = -t.body;
       v.turret.rotation.y = -t.turret;
@@ -3893,6 +3944,22 @@ export class Renderer {
     if (Math.random() < 0.45) {
       const a = Math.random() * Math.PI * 2;
       this.glow.emit({ x: rep.x + Math.cos(a) * 0.25, y: 0.35, z: rep.y + Math.sin(a) * 0.25, vx: Math.cos(a) * 1.8, vy: 1.2 + Math.random() * 1.5, vz: Math.sin(a) * 1.8, life: 0.3 + Math.random() * 0.2, s0: 0.05, s1: 0.01, c0: 0xfff6c0, c1: 0xffa030, drag: 1, grav: 7 });
+    }
+  }
+
+  /** « Le Spectre » (iteration 56): its sheet floats and sways, puffs up when it fires (« Bouh ! »), and trails pale wisps. */
+  private tankSpectre(v: TankView, t: RTank, dt: number, visible: boolean) {
+    const g = v.sheet!;
+    const ph = t.id * 1.7;
+    const puff = v.recoil; // 1 right after a shot, fading out
+    g.position.y = 0.1 + Math.sin(this.time * 2.6 + ph) * 0.035 + puff * 0.06;
+    g.rotation.x = Math.sin(this.time * 1.9 + ph) * 0.08;
+    g.rotation.z = Math.sin(this.time * 2.3 + ph * 0.5) * 0.06;
+    g.scale.set(1 + puff * 0.12, 1 + puff * 0.22, 1 + puff * 0.12);
+    const eyes = g.userData.eyes as THREE.MeshStandardMaterial;
+    eyes.emissiveIntensity = Math.max(puff * 1.4, this.night * 0.7);
+    if (visible && Math.random() < dt * 7) {
+      this.glow.emit({ x: t.x + (Math.random() - 0.5) * 0.4, y: 0.6 + Math.random() * 0.2, z: t.y + (Math.random() - 0.5) * 0.4, vy: 0.25 + Math.random() * 0.3, life: 0.7, s0: 0.09, s1: 0.01, c0: 0xffffff, c1: 0x9fe8d8 });
     }
   }
 

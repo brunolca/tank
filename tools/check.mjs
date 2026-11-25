@@ -17,17 +17,18 @@ run('build client', 'npm run build --silent');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tanks-'));
 run('bundle de la simulation', `npx esbuild tools/simtest.ts --bundle --platform=node --log-level=warning --outfile=${tmp}/simtest.cjs`);
 // Some checks are matches played by the AI (does it ever beat this mission?): they are random, and one unlucky run in
-// three or four used to fail on its own (iteration 53). A real bug fails every attempt; bad luck does not, three times running.
+// three or four used to fail on its own (iteration 53). A real bug fails every attempt; bad luck does not, five times running
+// (iteration 56: with some forty AI matches in a run, about one run in three still loses one by bad luck).
 {
   let last = '';
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     try { execSync(`node ${tmp}/simtest.cjs`, { stdio: 'pipe' }); console.log(`✓ simulation des missions${attempt > 1 ? ` (essai ${attempt})` : ''}`); last = ''; break; }
     catch (e) {
       last = `${(e.stdout ?? '') + (e.stderr ?? '')}`.split('\n').filter((l) => l.trim() && !/^M\d/.test(l) && !/ OK\b/.test(l)).join('\n') || String(e.stderr ?? e);
       console.log(`… simulation des missions, essai ${attempt} raté :\n${last}`);
     }
   }
-  if (last) { errors.push(`simulation des missions (3 essais) :\n${last}`); console.log('✗ simulation des missions'); }
+  if (last) { errors.push(`simulation des missions (5 essais) :\n${last}`); console.log('✗ simulation des missions'); }
 }
 
 const m = readMeta();

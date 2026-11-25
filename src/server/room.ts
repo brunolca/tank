@@ -574,6 +574,8 @@ export class Room extends DurableObject<Env> {
     if (!att?.v || att.v < 47) tanks = tanks.map((t) => (t.kind === 'watcher' ? { ...t, kind: 'brown' } : t));
     // tabs older than iteration 51 draw the Mécano as a plain grey tank (its wrecks just come back to life)
     if (!att?.v || att.v < 51) tanks = tanks.map((t) => (t.kind === 'mechanic' ? { ...t, kind: 'ash' } : t));
+    // tabs older than iteration 56 draw the Spectre as a plain grey tank (its ghost shells already show since iteration 52)
+    if (!att?.v || att.v < 56) tanks = tanks.map((t) => (t.kind === 'spectre' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 49 draw the Tortillard as a Colosse and its wagons as grey tanks (gliding round the table)
     if (!att?.v || att.v < 49) tanks = tanks.map((t) => (t.kind === 'train' ? { ...t, kind: 'boss' } : t.kind === 'wagon' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {

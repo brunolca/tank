@@ -2,7 +2,7 @@ import { TallyCount, cleanTally, parSeconds, shotBudget, starCount } from '../sr
 import { RUSH_BOSSES, RUSH_DUO_HP, RUSH_DUO_HP_PER_PLAYER, RUSH_DUOS, RUSH_STAGES, rushDuo, rushLevel, rushOrder, rushStageBosses, weekNumber, weekStart } from '../src/shared/rush';
 import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decodeAtelier, encodeAtelier } from '../src/shared/atelier';
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
-import { applyTwist, DAILY_STAGES, DAILY_TWISTS, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
+import { applyTwist, DAILY_STAGES, DAILY_TWISTS, EIGHT_TWISTS_FROM, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
@@ -427,7 +427,7 @@ console.log('total', Date.now() - t0, 'ms');
         if (n !== 0 && n !== 2) fail(`jour ${day} étape ${stage} : ${n} portail(s)`);
       }
       if (twist === 'nuit' && !lvl.night) fail(`jour ${day} : étape ${stage} de jour malgré « nuit »`);
-      if (twist !== 'nuit' && lvl.night) fail(`jour ${day} : étape ${stage} de nuit sans la consigne`);
+      if (twist !== 'nuit' && twist !== 'spectres' && lvl.night) fail(`jour ${day} : étape ${stage} de nuit sans la consigne`);
       if (twist === 'portails' && !lvl.tiles.includes(Tile.PortalA)) fail(`jour ${day} : étape ${stage} sans portail`);
       if ((twist === 'colosse' && stage === DAILY_STAGES) !== lvl.enemies.some((e) => e.kind === 'boss')) fail(`jour ${day} étape ${stage} : Colosse mal placé`);
       // a quick fight to make sure the stage runs and stays cheap
@@ -525,7 +525,7 @@ console.log('total', Date.now() - t0, 'ms');
     seen.add(dailyTwist(day));
     for (let st = 1; st <= DAILY_STAGES; st++) if (!!dailyLevel(day, st).storm !== (dailyTwist(day) === 'orage')) fail(`jour ${day} étape ${st} : orage mal réglé`);
   }
-  if (seen.size !== DAILY_TWISTS.length) fail('une consigne manque à la rotation');
+  if (seen.size !== DAILY_TWISTS.length - 1) fail('une consigne manque à la rotation'); // (all but « Nuit des spectres », iteration 56, which comes later)
   for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).storm) fail('orage dans la taupe');
   // a strike: announced first, nobody hurt during the warning, then everything in reach goes
   const tiles = new Array(W * H).fill(Tile.Empty);
@@ -3656,4 +3656,105 @@ console.log('total', Date.now() - t0, 'ms');
   if (goals < 4) fail(`trop peu de buts (${goals} en 8 manches)`);
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`ballon OK (${goals}/8 manches avec un but, Bleus ${sides[0]} · ${sides[1]} Rouges, ${own} contre son camp, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
+}
+
+// « Le Spectre » (iteration 56): every shell it fires is a ghost shell (through the first wall it meets), its AI aims
+// through walls, old days keep their twist, the « Nuit des spectres » days have Spectres, missions 71 and 72 have them
+{
+  const fail = (m: string) => { console.error('SPECTRE:', m); process.exitCode = 1; };
+  const wall = () => {
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    for (let y = 3; y < 14; y++) { tiles[y * W + 10] = Tile.Wall; tiles[y * W + 11] = Tile.Wall; } // two tiles thick
+    return tiles;
+  };
+  {
+    const g = new Game(wall());
+    const p = g.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const s = g.addTank('spectre', 99, 16.5, 8.5, 0);
+    g.frozen = false;
+    s.turret = Math.PI;
+    s.fireCd = 0;
+    if (!g.tryFire(s)) fail('le Spectre ne tire pas');
+    if (g.bullets[0]?.ghost !== 1) fail('l’obus du Spectre n’est pas fantôme');
+    if (!g.events.some((e) => e[0] === 'shot' && ((e[4] as number) & SHELL_GHOST))) fail('le tir du Spectre n’est pas annoncé fantôme');
+    s.ai = undefined; // just the shell
+    let killed = false;
+    for (let i = 0; i < 90 && !killed; i++) { g.step(new Map()); if (!p.alive) killed = true; g.events = []; }
+    if (!killed) fail('l’obus du Spectre ne traverse pas le mur');
+  }
+  {
+    // its AI finds the shot through the wall by itself
+    let hits = 0;
+    for (let k = 0; k < 4; k++) {
+      const g = new Game(wall());
+      const p = g.addTank('player', 0, 5.5, 6.5 + k, 0x3d7bff, 'p1', 'P');
+      g.addTank('spectre', 99, 16.5, 8.5, 0);
+      g.frozen = false;
+      for (let i = 0; i < 30 * 12 && p.alive; i++) { g.step(new Map()); g.events = []; }
+      if (!p.alive) hits++;
+    }
+    if (hits === 0) fail('l’IA du Spectre ne tire jamais à travers le mur');
+    // a plain grey tank behind the same wall never gets through
+    const g = new Game(wall());
+    const p = g.addTank('player', 0, 5.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const a = g.addTank('ash', 99, 16.5, 8.5, 0);
+    a.ai = undefined;
+    a.turret = Math.PI; a.fireCd = 0;
+    g.frozen = false;
+    g.tryFire(a);
+    for (let i = 0; i < 90; i++) { g.step(new Map()); g.events = []; }
+    if (!p.alive) fail('un obus ordinaire a traversé le mur');
+    if (killXp('spectre') !== 2) fail('galons du Spectre');
+  }
+  // where it shows up
+  for (let mission = 1; mission <= 70; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'spectre')) fail(`Spectre avant la 71ᵉ mission (${mission})`);
+  for (const m of [71, 72]) if (getMission(m).enemies.filter((e) => e.kind === 'spectre').length < 2) fail(`la mission ${m} manque de Spectres`);
+  let gen = 0;
+  for (let mission = 73; mission <= 200; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'spectre')) gen++;
+  if (gen < 5) fail(`trop peu de Spectres dans les missions générées (${gen})`);
+  for (let day = SEVEN_TWISTS_FROM; day < EIGHT_TWISTS_FROM; day++) {
+    if (dailyTwist(day) === 'spectres') fail(`le jour passé ${day} est devenu « Nuit des spectres »`);
+    for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'spectre')) fail(`jour passé ${day} : un Spectre est apparu`);
+  }
+  if (dailyTwist(EIGHT_TWISTS_FROM) !== 'spectres') fail('le 26 novembre devrait être la « Nuit des spectres »');
+  if (dailyTwist(EIGHT_TWISTS_FROM - 1) !== DAILY_TWISTS[(EIGHT_TWISTS_FROM - 1 - SEVEN_TWISTS_FROM + 6) % 7]) fail('la veille a changé de consigne');
+  const seen = new Set<string>();
+  for (let day = EIGHT_TWISTS_FROM; day < EIGHT_TWISTS_FROM + 16; day++) {
+    const tw = dailyTwist(day);
+    seen.add(tw);
+    for (let st = 1; st <= DAILY_STAGES; st++) {
+      const l = dailyLevel(day, st);
+      const n = l.enemies.filter((e) => e.kind === 'spectre').length;
+      if (tw === 'spectres' && (n === 0 || !l.night)) fail(`jour ${day} « Nuit des spectres » : étape ${st} sans Spectre ou de jour`);
+      if (tw !== 'spectres' && n > 0) fail(`jour ${day} : Spectre sans la consigne`);
+    }
+  }
+  if (seen.size !== DAILY_TWISTS.length) fail('une consigne manque à la rotation à huit');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'spectre')) fail('Spectre dans la taupe');
+  // the atelier knows it (and its share code round-trips)
+  const am = { name: 'Hanté', map: blankMap() };
+  am.map[8] = am.map[8].slice(0, 15) + 'P' + am.map[8].slice(16);
+  const back = decodeAtelier(encodeAtelier(am));
+  if (!back || back.map[8][15] !== 'P') fail('le Spectre se perd dans le code de partage de l’atelier');
+  // its missions: AI duos clear them, the tick stays cheap
+  let cleared = 0, spent = 0, steps = 0;
+  for (let run2 = 0; run2 < 8 && cleared < 2; run2++) {
+    const l = getMission(run2 % 2 ? 72 : 71);
+    const s2 = new Game(l.tiles, l.belts);
+    if (l.night) s2.night = true;
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions du Spectre');
+  if (process.exitCode !== 1) console.log(`Spectre OK (${gen} missions générées hantées, ${cleared} partie(s) gagnée(s) par l’IA, ${per.toFixed(3)} ms/tick)`);
 }
