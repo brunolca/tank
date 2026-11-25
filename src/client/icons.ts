@@ -24,6 +24,7 @@ const P: Record<string, string> = {
   crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/><path d="M5 19h14"/>',
   swords: '<path d="M4 4l10 10M14 14l-2 3M14 14l3-2M17 17l3 3M20 4L10 14M10 14l2 3M10 14l-3-2M7 17l-3 3"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>',
+  ball: '<circle cx="12" cy="12" r="9"/><path d="M12 3c-3.5 3-3.5 15 0 18M12 3c3.5 3 3.5 15 0 18M3.6 9h16.8"/>',
   mask: '<path d="M3 8c3-2 15-2 18 0 0 5-2 9-5 9-2 0-2.5-2-4-2s-2 2-4 2c-3 0-5-4-5-9z"/><path d="M7 11c1-1 2.5-1 3.5 0M13.5 11c1-1 2.5-1 3.5 0"/>',
   hammer: '<path d="M14 6l4 4M12.5 7.5l-8.6 8.6a2 2 0 0 0 2.9 2.9l8.6-8.6"/><path d="M11 6l3-3 3 1 4 4-2 2-2-1-2 2"/>',
   // the weathers

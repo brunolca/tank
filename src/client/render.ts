@@ -10,6 +10,7 @@ import { isRivalId } from '../shared/rivals';
 import { CTF_RETURN, TEAM_COLORS } from '../shared/drapeau';
 import { GOLD_COLOR as GOLD } from '../shared/caisses';
 import { CROWN_RETURN } from '../shared/couronne';
+import { BALL_COLORS, BALL_R, GOAL_BOTTOM, GOAL_LINE, GOAL_TOP } from '../shared/ballon';
 import type { TankInfo } from '../shared/protocol';
 
 export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
@@ -2085,6 +2086,7 @@ export class Renderer {
     for (let i = this.quakes.length - 1; i >= 0; i--) this.dropQuake(i);
     this.setCtf(undefined);
     this.setCrown(undefined);
+    this.setBall(false);
 
     this.sandCells = new Set(belts.flatMap((b, i) => (b === SAND && tiles[i] === Tile.Empty ? [i] : [])));
     this.paintFloor(tiles);
@@ -5148,6 +5150,174 @@ export class Renderer {
   }
 
   // -------------------------------------------------------------- « Drapeaux » (iteration 24)
+
+  // ------------------------------------------------------------ « Le ballon » (iteration 55)
+
+  private ballView?: {
+    group: THREE.Group; ball: THREE.Mesh; nets: THREE.MeshBasicMaterial[]; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; tex: THREE.Texture[];
+    rings: THREE.Mesh[]; x: number; y: number; placed: boolean; pop: number; flash: [number, number];
+  };
+
+  /** The beach ball (six painted segments and two white caps), the two goals with their nets, and the lines of the pitch. */
+  setBall(on: boolean, teamOf?: (id: number) => number | undefined) {
+    const v = this.ballView;
+    if (v) {
+      this.scene.remove(v.group);
+      for (const r of v.rings) r.parent?.remove(r);
+      for (const m of v.mats) m.dispose();
+      for (const g of v.geos) g.dispose();
+      for (const t of v.tex) t.dispose();
+      this.ballView = undefined;
+    }
+    if (!on) return;
+    const geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [], tex: THREE.Texture[] = [];
+    const G = <T extends THREE.BufferGeometry>(g: T) => (geos.push(g), g);
+    const M = <T extends THREE.Material>(m: T) => (mats.push(m), m);
+    // the ball's skin: six coloured segments around it, white caps at the poles
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 128;
+    const c2 = cv.getContext('2d')!;
+    BALL_COLORS.forEach((col, i) => { c2.fillStyle = `#${col.toString(16).padStart(6, '0')}`; c2.fillRect((i * 256) / 6, 0, 256 / 6 + 1, 128); });
+    c2.fillStyle = '#fffaf0';
+    c2.fillRect(0, 0, 256, 18); c2.fillRect(0, 110, 256, 18);
+    c2.strokeStyle = 'rgba(0,0,0,0.18)'; c2.lineWidth = 2;
+    for (let i = 0; i < 6; i++) { c2.beginPath(); c2.moveTo((i * 256) / 6, 18); c2.lineTo((i * 256) / 6, 110); c2.stroke(); }
+    const skin = new THREE.CanvasTexture(cv);
+    skin.colorSpace = THREE.SRGBColorSpace;
+    tex.push(skin);
+    const ball = new THREE.Mesh(G(new THREE.SphereGeometry(BALL_R, 28, 18)), M(new THREE.MeshStandardMaterial({ map: skin, roughness: 0.35, metalness: 0, emissive: 0x222222, emissiveIntensity: 0.25 })));
+    ball.castShadow = true;
+    ball.rotation.set(0.6, 0, 0.4);
+    const group = new THREE.Group();
+    group.add(ball);
+    // the nets: a white mesh drawn on a transparent canvas
+    const nv = document.createElement('canvas');
+    nv.width = nv.height = 64;
+    const n2 = nv.getContext('2d')!;
+    n2.strokeStyle = 'rgba(255,255,255,0.9)'; n2.lineWidth = 3;
+    n2.strokeRect(0, 0, 64, 64);
+    const netTex = new THREE.CanvasTexture(nv);
+    netTex.wrapS = netTex.wrapT = THREE.RepeatWrapping;
+    tex.push(netTex);
+    const mouth = GOAL_BOTTOM - GOAL_TOP, depth = GOAL_LINE + 0.05, tall = 0.8, mid = (GOAL_TOP + GOAL_BOTTOM) / 2;
+    const nets: THREE.MeshBasicMaterial[] = [];
+    const lineMat = M(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+    for (const side of [0, 1]) {
+      const team = side + 1; // the goal on the left is the Bleus', the one on the right the Rouges'
+      const color = TEAM_COLORS[side];
+      const x0 = side === 0 ? 0 : W, dir = side === 0 ? 1 : -1;
+      const post = M(new THREE.MeshStandardMaterial({ color, roughness: 0.4, emissive: color, emissiveIntensity: 0.25 }));
+      const netMat = M(new THREE.MeshBasicMaterial({ map: netTex, color: 0xffffff, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+      nets.push(netMat);
+      const back = new THREE.Mesh(G(new THREE.PlaneGeometry(mouth, tall)), netMat);
+      back.rotation.y = Math.PI / 2;
+      back.position.set(x0 + dir * 0.04, tall / 2, mid);
+      (back.geometry.attributes.uv as THREE.BufferAttribute).array.forEach((_, i, a) => { (a as Float32Array)[i] *= i % 2 ? 3 : 18; });
+      const top = new THREE.Mesh(G(new THREE.PlaneGeometry(depth, mouth)), netMat);
+      top.rotation.x = -Math.PI / 2;
+      top.position.set(x0 + dir * depth / 2, tall, mid);
+      (top.geometry.attributes.uv as THREE.BufferAttribute).array.forEach((_, i, a) => { (a as Float32Array)[i] *= i % 2 ? 18 : 3; });
+      group.add(back, top);
+      for (const z of [GOAL_TOP + 0.04, GOAL_BOTTOM - 0.04]) {
+        const wing = new THREE.Mesh(G(new THREE.PlaneGeometry(depth, tall)), netMat);
+        wing.position.set(x0 + dir * depth / 2, tall / 2, z);
+        (wing.geometry.attributes.uv as THREE.BufferAttribute).array.forEach((_, i, a) => { (a as Float32Array)[i] *= 3; });
+        const p = new THREE.Mesh(G(new THREE.CylinderGeometry(0.06, 0.06, tall, 10)), post);
+        p.position.set(x0 + dir * depth, tall / 2, z);
+        p.castShadow = true;
+        group.add(wing, p);
+      }
+      const bar = new THREE.Mesh(G(new THREE.CylinderGeometry(0.055, 0.055, mouth, 10)), post);
+      bar.rotation.x = Math.PI / 2;
+      bar.position.set(x0 + dir * depth, tall, mid);
+      bar.castShadow = true;
+      const floor = new THREE.Mesh(G(new THREE.PlaneGeometry(depth, mouth)), M(new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })));
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(x0 + dir * depth / 2, 0.015, mid);
+      group.add(bar, floor);
+      // the goal area: three white lines in front of the goal
+      const box = 3.2, wide = mouth + 2;
+      for (const [w, h, x, z] of [[0.06, wide, x0 + dir * box, mid], [box, 0.06, x0 + dir * box / 2, mid - wide / 2], [box, 0.06, x0 + dir * box / 2, mid + wide / 2]] as const) {
+        const l = new THREE.Mesh(G(new THREE.PlaneGeometry(w, h)), lineMat);
+        l.rotation.x = -Math.PI / 2;
+        l.position.set(x, 0.034, z);
+        group.add(l);
+      }
+      void team;
+    }
+    // the halfway line and the centre circle
+    const half = new THREE.Mesh(G(new THREE.PlaneGeometry(0.06, H)), lineMat);
+    half.rotation.x = -Math.PI / 2;
+    half.position.set(W / 2, 0.034, H / 2);
+    const circle = new THREE.Mesh(G(new THREE.RingGeometry(1.75, 1.82, 48).rotateX(-Math.PI / 2)), lineMat);
+    circle.position.set(W / 2, 0.034, H / 2);
+    const spot = new THREE.Mesh(G(new THREE.CircleGeometry(0.1, 16).rotateX(-Math.PI / 2)), lineMat);
+    spot.position.set(W / 2, 0.034, H / 2);
+    group.add(half, circle, spot);
+    // a ring of its team's colour under each tank, as in « Drapeaux »
+    const rings: THREE.Mesh[] = [];
+    if (teamOf) {
+      const ringMats = TEAM_COLORS.map((c) => M(new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85, depthWrite: false })));
+      for (const [id, tv] of this.tanks) {
+        const team = teamOf(id);
+        if (team !== 1 && team !== 2) continue;
+        const r = new THREE.Mesh(this.flagGeo.teamRing, ringMats[team - 1]);
+        r.position.y = 0.026;
+        tv.root.add(r);
+        rings.push(r);
+      }
+    }
+    this.scene.add(group);
+    this.ballView = { group, ball, nets, mats, geos, tex, rings, x: W / 2, y: H / 2, placed: false, pop: 0, flash: [0, 0] };
+    this.syncBall(W / 2, H / 2, 0);
+  }
+
+  /** Put the ball where it is (it rolls on itself as it goes), and let the nets and the bounce of a kick fade. */
+  syncBall(x: number, y: number, dt: number) {
+    const v = this.ballView;
+    if (!v) return;
+    const dx = x - v.x, dz = y - v.y, d = Math.hypot(dx, dz);
+    if (v.placed && d > 1e-4 && d < 2) {
+      // rolling without sliding: a turn of d / r around the axis lying across the way it goes
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(dz / d, 0, -dx / d), d / BALL_R);
+      v.ball.quaternion.premultiply(q);
+    }
+    v.x = x; v.y = y; v.placed = true;
+    v.pop = Math.max(0, v.pop - dt * 4);
+    const squash = 1 + Math.sin(v.pop * Math.PI) * 0.18;
+    v.ball.scale.set(squash, 2 - squash, squash);
+    v.ball.position.set(x, BALL_R * (2 - squash) + Math.sin(v.pop * Math.PI) * 0.25, y);
+    for (let i = 0; i < 2; i++) {
+      v.flash[i] = Math.max(0, v.flash[i] - dt * 0.8);
+      const f = v.flash[i];
+      v.nets[i].color.setHex(0xffffff).lerp(new THREE.Color(TEAM_COLORS[i === 0 ? 1 : 0]), Math.min(1, f * 1.5));
+      v.nets[i].opacity = 0.75 + f * 0.25;
+    }
+  }
+
+  /** A shell hits the ball: a little hop, and sparks of the shooter's colour. */
+  ballKick(x: number, y: number, color?: number) {
+    const v = this.ballView;
+    if (v) v.pop = 1;
+    this.spark(x, y);
+    if (color !== undefined) for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 2;
+      this.glow.emit({ x, y: 0.35, z: y, vx: Math.cos(a) * s, vy: 0.5 + Math.random() * 1.5, vz: Math.sin(a) * s, life: 0.25 + Math.random() * 0.2, s0: 0.08, s1: 0.01, c0: 0xffffff, c1: color, drag: 3, grav: 2 });
+    }
+  }
+
+  /** A goal: the net glows in the colours of the team that scored, and confetti fly out of it. */
+  goal(team: number, x: number, y: number) {
+    const v = this.ballView;
+    const side = x < W / 2 ? 0 : 1;
+    if (v) v.flash[side] = 1.2;
+    const color = team === 1 || team === 2 ? TEAM_COLORS[team - 1] : 0xffffff;
+    this.bonusBurst(x, y, color, true);
+    for (let i = 0; i < 3; i++) setTimeout(() => {
+      this.bonusBurst(x + (side === 0 ? 1.2 : -1.2) * (i + 1), y + (Math.random() - 0.5) * 3, i % 2 ? 0xffc93a : color, true);
+    }, 120 * (i + 1));
+    this.shake = Math.max(this.shake, 0.3);
+  }
 
   private ctf?: { group: THREE.Group; flags: FlagView[]; rings: THREE.Mesh[]; mats: THREE.Material[] };
   private flagGeo = {

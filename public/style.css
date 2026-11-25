@@ -232,6 +232,7 @@ kbd {
 /* wind (iteration 23): where it blows and how hard, under the enemy count */
 #hud-wind { display: flex; align-items: center; gap: 8px; background: var(--panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
 #hud-wind[hidden] { display: none; }
+#hud-wind span { font-variant-numeric: tabular-nums; white-space: nowrap; }
 #hud-wind i { font-style: normal; display: inline-block; color: #d8f0e0; transition: transform 0.2s linear; }
 #hud-wind b { width: 46px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
 #hud-wind u { display: block; height: 100%; width: 50%; background: linear-gradient(90deg, #9bd3b0, #f6efe2); border-radius: 3px; transition: width 0.2s linear; }
@@ -1710,6 +1711,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #banner.wind:not(.storm):not(.night) .b-kicker::before { --pi: var(--ico-leaf); }
 #banner.fog:not(.storm):not(.wind) .b-kicker::before { --pi: var(--ico-fog); }
 #banner.ctf .b-kicker::before { --pi: var(--ico-flag); }
+#banner.ctf.ball .b-kicker::before { --pi: var(--ico-ball); } /* « Le ballon » (iteration 55) */
 #banner.hunt .b-kicker::before { --pi: var(--ico-crate); }
 #banner.crown .b-kicker::before { --pi: var(--ico-crown); color: #ffc93a; }
 .bubble span svg.ico { width: 17px; height: 17px; vertical-align: -0.18em; }

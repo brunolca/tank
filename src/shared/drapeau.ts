@@ -176,7 +176,7 @@ const HALVES: { name: string; half: string[]; night?: boolean; wind?: number }[]
 ];
 
 const MIRROR: Record<string, string> = { '>': '<', '<': '>' };
-function mirrorRow(half: string) {
+export function mirrorRow(half: string) {
   return half + [...half].reverse().map((c) => MIRROR[c] ?? c).join('');
 }
 

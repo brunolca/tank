@@ -12,7 +12,8 @@ import type { NetFlag } from './drapeau';
 // 'rush' (« La ronde des boss »: the four bosses, then two at once) came with iteration 28: older tabs are told to reload (welcome.v).
 // 'caisses' (« La chasse aux caisses »: every crate is a point) came with iteration 37: older tabs are told to reload (welcome.v).
 // 'couronne' (« La couronne »: wear the crown the longest) came with iteration 50: older tabs are told to reload (welcome.v).
-export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush' | 'caisses' | 'couronne';
+// 'ballon' (« Le ballon »: a match, Bleus against Rouges, with a ball and two goals) came with iteration 55, the same way.
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush' | 'caisses' | 'couronne' | 'ballon';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
@@ -108,6 +109,7 @@ export type GameEvent =
   | ['emote', number, number, number, number] // x y tankId line: « Les bulles » (iteration 30), a quick-chat bubble (index in EMOTES) above that tank; older clients ignore it
   | ['hunt', number, number, number, number, number] // x y tankId points total: « La chasse aux caisses » (iteration 37), a crate picked up (points 1 or 3), dropped by a destroyed tank (-1), or the golden crate drops (tankId 0)
   | ['crown', number, number, number, number] // x y tankId what: « La couronne » (iteration 50), 0 put on, 1 dropped (its wearer was hit), 2 flown back to its cushion (tankId 0), 3 a reign of CROWN_HOLD seconds (the round is won), 4 five seconds of reign left
+  | ['ball', number, number, number, number, number] // x y what a b: « Le ballon » (iteration 55), 0 a shell kicks it (a: shooter), 1 a goal (a: the team that scores, b: the tank that touched it last), 2 back to the kick-off spot (a b: where), 3 it bounces off a wall (a: tenths of tiles/s), 4 a blast throws it (a: whose)
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
 
 /** A mission drawn in the workshop (iteration 14): 17 rows of 22 map characters. */
@@ -156,7 +158,7 @@ export interface Results {
   taupe?: TaupeResult & { cleared: number; stages: number };
   rush?: { state: RushState; cleared: number; board?: BoardDay }; // « La ronde des boss » (iteration 28): the weekly board
   atelier?: { name: string; won: boolean }; // workshop mission (iteration 14)
-  drapeau?: { teams: [number, number]; winner: number }; // « Drapeaux » (iteration 24): rounds won by each team, the winning team (1 or 2)
+  drapeau?: { teams: [number, number]; winner: number }; // « Drapeaux » (iteration 24): rounds won by each team, the winning team (1 or 2); « Le ballon » (iteration 55) too, in goals
   // ff: teammates destroyed (coop-like modes, iteration 8)
   // g: galons earned in the coop campaign (iteration 19)
   // team: « Drapeaux », 1 Bleus or 2 Rouges; caps: flags they brought home
@@ -186,6 +188,7 @@ export type ServerMsg =
       rush?: RushState; // « La ronde des boss » (iteration 28)
       bases?: number[]; // « Drapeaux » (iteration 24): x1 y1 x2 y2, the bases of the Bleus (team 1) and the Rouges (team 2)
       crown?: number[]; // « La couronne » (iteration 50): x y of the crown's cushion
+      ball?: 1; // « Le ballon » (iteration 55): there is a ball and two goals on the table
       rail?: number[]; // « Le Tortillard » (iteration 49): the loop of rails, flat closed [x, y…] (older tabs see the train glide on bare floor)
     }
   | {
@@ -200,7 +203,7 @@ export type ServerMsg =
       tally?: Tally; // « Le bilan » (iteration 45), end of a coop-like mission: the count and the three stars (older tabs ignore it)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string; C?: number[] } // C: « La couronne » (iteration 50), [x, y, holder, state (0 cushion, 1 worn, 2 dropped), tenths before it flies home, then pairs (tankId, tenths of reign)]; N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
+  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string; C?: number[]; O?: number[] } // O: « Le ballon » (iteration 55), the ball [x, y, vx, vy]; C: « La couronne » (iteration 50), [x, y, holder, state (0 cushion, 1 worn, 2 dropped), tenths before it flies home, then pairs (tankId, tenths of reign)]; N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

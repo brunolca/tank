@@ -560,6 +560,33 @@ export const sfx = {
       tone(t + 0.55, 0.25, 98, 60, 0.4, 'sine');
     }
   },
+  /**
+   * « Le ballon » (iteration 55): 0 a shell kicks the beach ball (a hollow rubber « pok »), 1 a goal (the referee's
+   * whistle, then the stands roar; a little fanfare when it is your team's), 2 the ball goes back to the middle (a short
+   * whistle), 3 it bounces off a wall (a soft thud, louder the faster it rolls).
+   */
+  ball(what: number, mine = false, speed = 3) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (what === 0) {
+      tone(t, 0.13, 330, 150, 0.16, 'sine');
+      tone(t, 0.06, 660, 420, 0.05, 'triangle');
+      noise(t, 0.05, 900, 1, 0.08, 'lowpass');
+    } else if (what === 1) {
+      for (let i = 0; i < 9; i++) tone(t + i * 0.045, 0.045, i % 2 ? 2900 : 3350, i % 2 ? 2900 : 3350, 0.06, 'sine');
+      tone(t + 0.45, 0.5, 3100, 3000, 0.07, 'sine');
+      noise(t + 0.5, 1.6, 900, 0.5, 0.22, 'bandpass', 1500);
+      noise(t + 0.6, 1.2, 2600, 0.8, 0.07, 'bandpass', 3200);
+      if (mine) [[523, 0.6], [659, 0.75], [784, 0.9], [1047, 1.05]].forEach(([f, d]) => tone(t + d, d > 1 ? 0.5 : 0.14, f, f, 0.11, 'square'));
+    } else if (what === 2) {
+      tone(t, 0.12, 2900, 3200, 0.05, 'sine');
+      tone(t + 0.16, 0.22, 3200, 3200, 0.05, 'sine');
+    } else {
+      const v = Math.min(0.2, 0.04 + speed * 0.02);
+      tone(t, 0.1, 140, 80, v, 'sine');
+      noise(t, 0.06, 420, 1, v * 0.6, 'lowpass');
+    }
+  },
   /** « Le blizzard » (iteration 54): a squall rises, a long howl of wind that swells and whistles through the walls. */
   squall() {
     if (!ctx) return;

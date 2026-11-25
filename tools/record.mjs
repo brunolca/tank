@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 54, arms: ['canon', 'ricochet'], hud: true, seconds: 19, squalls: [0.4], caption: 'Itération 54 : le blizzard', sub: 'Une bourrasque, et plus personne n’y voit à trois cases' },
-  { mission: 75, arms: ['canon', 'sapeur'], hud: true, seconds: 17, squalls: [0.4], watches: [6], snowShots: [3.5], caption: 'Nuit blanche', sub: 'Même le faisceau du Veilleur se perd dans la neige' },
-  { mission: 54, arms: ['canon', 'fusee'], hud: true, seconds: 11, squalls: [0.2], gusts: [6.5, 8], caption: 'Le vent redouble', sub: 'Dans la bourrasque, il courbe les obus encore plus fort' },
-  { still: true, hud: true, seconds: 6, friend: [0.3, 5], caption: 'Gare au tir ami', sub: 'Le réticule rougit… et bipe, maintenant' },
-  { manual: [7, ['terrain']], seconds: 7, caption: 'Le blizzard entre au manuel', sub: 'Entre deux bourrasques, frappe vite' },
+  { ballon: [0, [2, 2, 2, 2], 45, true], seconds: 16, goalShots: [8.5], caption: 'Itération 55 : le ballon', sub: 'Bleus contre Rouges, un ballon de plage et deux buts' },
+  { ballon: [2, [2, 2, 2, 2], 40, true], seconds: 14, goalShots: [7], caption: 'Sur la patinoire', sub: 'Le ballon file sur la glace… et les tanks glissent' },
+  { ballon: [1, [2, 2, 1, 2], 40], seconds: 12, goalShots: [8], caption: 'Obus, chenilles ou mines', sub: 'Tout ce qui le touche le fait rouler' },
+  { rivals: 6, lobby: 'ballon', seconds: 7, caption: 'Seul ? Ajoute des rivaux', sub: 'Le ballon se joue de 2 à 4, en ligne' },
+  { manual: [7, ['modes']], seconds: 7, caption: 'Le ballon entre au manuel', sub: 'Première équipe à 3 buts' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -65,6 +65,7 @@ try {
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
+      else if (shot.ballon) d.ballon(shot.ballon[0], shot.ballon[1], shot.arms, shot.ballon[2], !!shot.ballon[3]); // « Le ballon » (iteration 55)
       else if (shot.couronne) d.couronne(shot.couronne[0], shot.couronne[1], shot.arms, shot.couronne[2], !!shot.couronne[4], shot.couronne[3]); // « La couronne » (iteration 50)
       else if (shot.caisses) d.caisses(shot.caisses[0], shot.caisses[1], shot.arms, shot.caisses[2], !!shot.caisses[3]); // « La chasse aux caisses » (iteration 37)
       else if (shot.drapeau) d.drapeau(shot.drapeau[0], shot.drapeau[1], shot.arms, true, !!shot.drapeau[2]); // « Drapeaux » (iteration 24)
@@ -94,6 +95,7 @@ try {
       for (const s of shot.rallies ?? []) setTimeout(() => d.rally?.(), s * 1000); // « Suis-moi ! » (iteration 20)
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
+      for (const s of shot.goalShots ?? []) setTimeout(() => d.goalShot?.(), s * 1000); // « Le ballon » (iteration 55): a Bleu lines up a shot at the goal
       for (const s of shot.crowns ?? []) setTimeout(() => d.crown?.(), s * 1000); // « La couronne » (iteration 50): the crown onto the nearest rival's head
       for (const s of shot.trainMines ?? []) setTimeout(() => d.trainMine?.(), s * 1000); // « Le Tortillard » (iteration 49): a mine on the track ahead of the train
       for (const s of shot.reverses ?? []) setTimeout(() => d.reverse?.(), s * 1000); // and it stops whistling, then backs up

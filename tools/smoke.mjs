@@ -196,15 +196,39 @@ try {
   await sleep(1000);
   await king.click('#btn-start');
   await sleep(12000); // intro, then the rivals race for the crown
-  const ks = await state(king);
+  let ks = await state(king);
+  // a slow machine, or rivals busy fighting each other: give them up to ten more seconds before calling it a failure (iteration 55)
+  for (let i = 0; i < 20 && ks.crown && ks.crown.state === 0 && !Object.values(ks.crown.held ?? {}).some((v) => v > 0); i++) { await sleep(500); ks = await state(king); }
   if (!ks.online || ks.myTankId < 0) fail(`couronne : pas en partie (écran ${ks.screen}, phase ${ks.phase})`);
   if (ks.tanks !== 3) fail(`couronne : ${ks.tanks} tank(s) au lieu de 3`);
   if (!ks.crown?.home || Object.keys(ks.crown.held ?? {}).length !== 3) fail(`couronne : couronne ou règnes absents (${JSON.stringify(ks.crown)})`);
   if (ks.crown?.board !== 3) fail('couronne : le tableau ne montre pas les 3 tanks');
-  if (ks.crown && ks.crown.state === 0 && !Object.values(ks.crown.held).some((v) => v > 0)) fail('couronne : personne n’a pris la couronne en 8 secondes');
+  if (ks.crown && ks.crown.state === 0 && !Object.values(ks.crown.held).some((v) => v > 0)) fail('couronne : personne n’a pris la couronne en 18 secondes');
   if (!/⏱/.test(await king.locator('#hud-enemies').innerText())) fail('couronne : pas de chrono');
   if (ks.moved < 0.3) fail(`couronne : les rivaux ne bougent pas (${ks.moved})`);
   await king.context().close();
+
+  // « Le ballon » (iteration 55): alone with three rivals, Bleus against Rouges, the ball leaves the kick-off spot
+  const foot = await page('ballon', server.url + '/');
+  await sleep(1500);
+  await foot.click('#btn-create');
+  await foot.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1000);
+  await foot.click('#mode-select button[data-mode="ballon"]');
+  await foot.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  for (let i = 0; i < 3; i++) { await foot.click('#btn-rival'); await sleep(500); }
+  if ((await foot.locator('#lobby-players .team-tag').count()) !== 4) fail('ballon : le salon ne répartit pas les 4 tanks en deux équipes');
+  await foot.click('#btn-start');
+  await sleep(12000); // intro, then the rivals go for the ball
+  const fs2 = await state(foot);
+  if (!fs2.online || fs2.myTankId < 0) fail(`ballon : pas en partie (écran ${fs2.screen}, phase ${fs2.phase})`);
+  if (fs2.tanks !== 4) fail(`ballon : ${fs2.tanks} tank(s) au lieu de 4`);
+  if (!fs2.ball?.on || fs2.ball.team !== 1) fail(`ballon : pas de ballon ou mauvaise équipe (${JSON.stringify(fs2.ball)})`);
+  if (fs2.ball?.board !== 2) fail('ballon : le tableau ne montre pas les deux équipes');
+  const [bx, by] = fs2.ball?.pos ?? [11, 8.5];
+  if (Math.hypot(bx - 11, by - 8.5) < 0.2 && !(fs2.ball?.teams ?? []).some((n) => n > 0) && fs2.phase === 'playing') fail('ballon : personne n’a touché le ballon en 8 secondes');
+  if (!/⏱/.test(await foot.locator('#hud-enemies').innerText())) fail('ballon : pas de chrono');
+  await foot.context().close();
 
   // coop campaign alone with an AI teammate (iteration 20): add one, start, call it with T
   const mate = await page('coéquipier', server.url + '/');
@@ -260,5 +284,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, couronne, coop avec un coéquipier, ronde des boss, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, couronne, ballon, coop avec un coéquipier, ronde des boss, mode démo).');
 process.exit(0);

@@ -5,6 +5,7 @@ import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type Parsed
 import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags, type NetFlag } from '../shared/drapeau';
 import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROUND, HUNT_TARGET, huntArena, newHunt, HUNT_CRATES } from '../shared/caisses';
 import { CROWN_COLOR, CROWN_HOLD, CROWN_HURRY, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, CROWN_TARGET, crownArena, newCrown } from '../shared/couronne';
+import { BALL_HURRY, BALL_RESPAWN, BALL_ROUND, BALL_TARGET, ballArena, goalOf, newBall } from '../shared/ballon';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
 import { angDiff, beltStep, castRicochet, floorSpeed, segCircle } from '../shared/physics';
@@ -62,9 +63,11 @@ let bestMission = Math.max(1, Number(localStorage.getItem('tanks.best')) || 1);
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 /** The coop campaign and the daily challenge share their rules (lives, enemies, results). */
-const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses' && m !== 'couronne';
+const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses' && m !== 'couronne' && m !== 'ballon';
 /** Free-for-all modes that need at least two tanks (rivals count). */
-const needsTwo = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne';
+const needsTwo = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne' || m === 'ballon';
+/** Modes played Bleus against Rouges: « Drapeaux » (iteration 24) and « Le ballon » (iteration 55). */
+const teamPlay = (m: Mode) => m === 'drapeau' || m === 'ballon';
 
 function renderProfile(el: HTMLElement) {
   el.innerHTML = `
@@ -209,7 +212,7 @@ setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 
 // ------------------------------------------------------------------ online game state
 
-interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; C?: number[]; at: number }
+interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; C?: number[]; O?: number[]; at: number }
 
 let online = false;
 let tiles: number[] = [];
@@ -261,6 +264,9 @@ let crownHeld = new Map<number, number>();
 let crownHolder = 0;
 let crownKey = '';
 const CROWN_RESPAWN_TXT = String(CROWN_RESPAWN).replace('.', ',');
+/** « Le ballon » (iteration 55): there is a ball on the table this round (it comes with the snapshots). */
+let ballOn = false;
+const BALL_RESPAWN_TXT = String(BALL_RESPAWN).replace('.', ',');
 const INTERP = 3;
 let lastTanks: RTank[] = [];
 let lastBullets: RBullet[] = [];
@@ -390,15 +396,19 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   // « Drapeaux » (iteration 24): the two bases, and a ring of the team's colour under each tank
   const bs = msg.mode === 'drapeau' && Array.isArray(msg.bases) && msg.bases.length >= 4 ? msg.bases.map(Number) : undefined;
   ctfBases = bs && bs.every(Number.isFinite) ? [[bs[0], bs[1]], [bs[2], bs[3]]] : undefined;
-  myTeam = ctfBases ? (myInfo?.team ?? 0) : 0;
+  myTeam = ctfBases || msg.mode === 'ballon' ? (myInfo?.team ?? 0) : 0;
   renderer.setCtf(ctfBases, (id) => infos.get(id)?.team);
+  // « Le ballon » (iteration 55): the ball on the kick-off spot, the goals, the lines of the pitch
+  ballOn = msg.mode === 'ballon' && msg.ball === 1;
+  renderer.setBall(ballOn, (id) => infos.get(id)?.team);
+  if (ballOn) { ctfLeft = BALL_ROUND; ctfLeftAt = performance.now(); }
   renderer.setNight(!!msg.night);
   renderer.setStorm(!!msg.storm);
   levelWind = typeof msg.wind === 'number' && Number.isFinite(msg.wind) ? msg.wind : undefined;
   renderer.setWind(levelWind);
   // the fog (iteration 26): you see through it around you, and around your teammates (in coop, or in your flag team)
   levelFog = typeof msg.fog === 'number' && Number.isFinite(msg.fog) ? msg.fog : undefined;
-  renderer.fogAlly = coopLike(msg.mode) ? (id) => infos.get(id)?.team !== 99 : msg.mode === 'drapeau' ? (id) => !!myTeam && infos.get(id)?.team === myTeam : undefined;
+  renderer.fogAlly = coopLike(msg.mode) ? (id) => infos.get(id)?.team !== 99 : teamPlay(msg.mode) ? (id) => !!myTeam && infos.get(id)?.team === myTeam : undefined;
   renderer.setFog(levelFog);
   levelBlizzard = msg.blizzard === 1 && levelWind !== undefined;
   renderer.setBlizzard(levelBlizzard);
@@ -427,6 +437,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     ? `<b>Manche ${msg.mission}</b><span>Chasse aux caisses · premier à ${HUNT_TARGET}</span>`
     : msg.mode === 'couronne'
     ? `<b>Manche ${msg.mission}</b><span>La couronne · premier à ${CROWN_TARGET}</span>`
+    : msg.mode === 'ballon'
+    ? `<b>Manche ${msg.mission}</b><span>Le ballon · premier à ${BALL_TARGET} buts</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
@@ -458,6 +470,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   } else if (msg.mode === 'drapeau') {
     banner(`Drapeaux · manche ${msg.mission}${wx}`, msg.name,
       `${myTeam ? `Tu joues chez les ${TEAM_NAMES[myTeam - 1]} (${myTeam === 1 ? 'à gauche' : 'à droite'}) : ` : ''}rapporte le drapeau adverse à ta base !`, `intro ctf team${myTeam}${wxCls}`);
+  } else if (msg.mode === 'ballon') {
+    banner(`Le ballon · manche ${msg.mission}${wx}`, msg.name,
+      `${myTeam ? `Tu joues chez les ${TEAM_NAMES[myTeam - 1]} : marque dans le but ${myTeam === 1 ? 'de droite' : 'de gauche'}, ` : 'Marque dans le but adverse, '}à coups d’obus ou de chenilles !`, `intro ctf ball team${myTeam}${wxCls}`);
   } else if (msg.mode === 'caisses') {
     banner(`Chasse aux caisses · manche ${msg.mission}${wx}`, 'Ramasse un max de caisses !',
       `Chaque caisse vaut un point, la caisse dorée en vaut ${HUNT_GOLD}. Touché ? Tu en lâches une.`, `intro hunt${wxCls}`);
@@ -497,11 +512,13 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (tiles.some(isPortal)) setTimeout(() => toast('Portails : entre dans l’un, ressors par l’autre. Les obus aussi !', 3500), 2200);
 }
 
-/** The wind chip of the HUD says « Blizzard » on such a table, and turns white while a squall blows (iteration 54). */
+/** The wind chip of the HUD says « Blizzard » on such a table, and turns white while a squall blows (iteration 54); it counts down to the next one (iteration 55). */
 function windChip(tick: number) {
   const el = $('#hud-wind');
   el.classList.toggle('squall', levelBlizzard && whiteoutAt(tick) > 0.2);
-  const label = levelBlizzard ? 'Blizzard' : 'Vent';
+  // and counts down to the next squall (iteration 55): time to cross the open ground, or to find cover
+  const next = levelBlizzard ? Math.ceil(squallIn(tick)) : 0;
+  const label = !levelBlizzard ? 'Vent' : next > 0 ? `Blizzard · ${next} s` : 'Bourrasque !';
   const sp = el.querySelector('span');
   if (sp && sp.textContent !== label) sp.textContent = label;
 }
@@ -589,7 +606,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   }
   if (council) { council = undefined; $('#council').hidden = true; }
   if (prev === msg.phase && msg.phase === 'playing') return;
-  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || (msg.phase === 'roundEnd' && currentMode !== 'caisses' && currentMode !== 'couronne'))) queueReel();
+  if (prev === 'playing' && (msg.phase === 'cleared' || msg.phase === 'failed' || (msg.phase === 'roundEnd' && currentMode !== 'caisses' && currentMode !== 'couronne' && currentMode !== 'ballon'))) queueReel(); // (the film has no ball in it: no replay of a goal)
   else if (msg.phase !== 'cleared' && msg.phase !== 'failed' && msg.phase !== 'roundEnd') stopReel();
   switch (msg.phase) {
     case 'intro':
@@ -637,6 +654,10 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
         const w = msg.win ?? 0;
         banner(w ? (w === myTeam ? 'Manche gagnée !' : myTeam ? 'Manche perdue…' : 'Fin de manche') : 'Fin de manche', msg.text ?? '',
           `Bleus ${teamScores[0]} · ${teamScores[1]} Rouges`, `${w && myTeam && w !== myTeam ? 'bad' : 'good'} ctf team${w}`);
+      } else if (currentMode === 'ballon') {
+        const w = msg.win ?? 0;
+        banner(w ? (w === myTeam ? 'But !' : myTeam ? 'But encaissé…' : 'But !') : 'Fin de manche', msg.text ?? '',
+          `Bleus ${teamScores[0]} · ${teamScores[1]} Rouges`, `${w && myTeam && w !== myTeam ? 'bad' : 'good'} ctf ball team${w}`);
       } else if (currentMode === 'caisses') {
         const mine = huntGot.get(myTankId);
         banner('Temps écoulé !', msg.text ?? '', mine !== undefined ? `Tu as ramassé ${mine} caisse${mine > 1 ? 's' : ''}` : '', 'good hunt');
@@ -661,7 +682,7 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
 }
 
 function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
-  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], C: Array.isArray(msg.C) && msg.C.length >= 5 ? msg.C : undefined, at: performance.now() };
+  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], C: Array.isArray(msg.C) && msg.C.length >= 5 ? msg.C : undefined, O: Array.isArray(msg.O) && msg.O.length >= 4 && msg.O.every(Number.isFinite) ? msg.O : undefined, at: performance.now() };
   snaps.push(s);
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
@@ -989,11 +1010,11 @@ function onlineFrame(dt: number) {
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
   updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
-  if (currentMode === 'drapeau' || currentMode === 'caisses' || currentMode === 'couronne') {
+  if (currentMode === 'drapeau' || currentMode === 'caisses' || currentMode === 'couronne' || currentMode === 'ballon') {
     // the round clock: it runs while the round is being played (« La chasse aux caisses » too, iteration 37)
     const left = Math.max(0, Math.ceil(phase === 'playing' ? ctfLeft - (performance.now() - ctfLeftAt) / 1000 : ctfLeft));
     $('#hud-enemies').textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-    $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : currentMode === 'couronne' ? CROWN_HURRY : 30) && phase === 'playing');
+    $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : currentMode === 'couronne' ? CROWN_HURRY : currentMode === 'ballon' ? BALL_HURRY : 30) && phase === 'playing');
   } else if (!coopLike(currentMode)) {
     plainEnemies($('#hud-enemies'), '');
     $('#hud-enemies').classList.remove('hurry');
@@ -1030,6 +1051,11 @@ function onlineFrame(dt: number) {
   const flags: RFlag[] | undefined = ctfBases ? a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
   if (crownHome && a.C) renderer.syncCrown({ x: a.C[0], y: a.C[1], holder: a.C[2], state: a.C[3], left: a.C[4] / 10 });
+  if (ballOn && a.O) {
+    // « Le ballon » (iteration 55): it rolls between two snapshots like the tanks do
+    const o = b.O ?? a.O;
+    renderer.syncBall(lerp(a.O[0], o[0], u), lerp(a.O[1], o[1], u), dt);
+  }
   // the Mortier's cannonballs (iteration 34): their time in the air runs on between two snapshots, like everything else
   const lobs: RLob[] = a.L.map((l) => ({ id: l[0], x0: l[1], y0: l[2], x1: l[3], y1: l[4], t: l[5] + u * DT * (b.k - a.k), dur: l[6] }));
   renderer.syncLobs(lobs);
@@ -1063,6 +1089,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (online && audible && currentMode === 'drapeau' && e[3] === myTankId) toast(`Touché ! Retour à la base dans ${CTF_RESPAWN} secondes…`, 2600);
       if (online && audible && currentMode === 'caisses' && e[3] === myTankId) toast(`Touché ! Retour dans ton coin dans ${HUNT_RESPAWN_TXT} secondes…`, 2400);
       if (online && audible && currentMode === 'couronne' && e[3] === myTankId) toast(`Touché ! Retour dans ton coin dans ${CROWN_RESPAWN_TXT} secondes…`, 2400);
+      if (online && audible && currentMode === 'ballon' && e[3] === myTankId) toast(`Touché ! Retour sur ton terrain dans ${BALL_RESPAWN_TXT} secondes…`, 2400);
       if (isBossKind(renderer.tankKind(e[3]) ?? '')) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
@@ -1201,6 +1228,33 @@ function handleEvent(e: GameEvent, audible: boolean) {
       const color = online ? infos.get(who)?.color : attract?.tankById(who)?.color;
       floater(x, y - 0.5, pts > 1 ? `+${pts} ! (${total})` : `+1 (${total})`, pts > 1 ? GOLD_COLOR : color ?? 0xffffff);
       if (audible) sfx.hunt(pts, me);
+      break;
+    }
+    case 'ball': {
+      // « Le ballon » (iteration 55): [x, y, what, a, b] 0 a shell kicks it, 1 a goal, 2 back to the middle, 3 off a wall, 4 a blast throws it
+      const [, x, y, what, a, bb] = e;
+      if (what === 0) {
+        renderer.ballKick(x, y, renderer.tankColor(a));
+        if (audible) sfx.ball(0);
+      } else if (what === 1) {
+        const team = a === 1 || a === 2 ? a : 0;
+        const color = team ? TEAM_COLORS[team - 1] : 0xffffff;
+        renderer.goal(team, x, y);
+        const who = online ? infos.get(bb)?.name : attract?.tankById(bb)?.name;
+        const scorerTeam = online ? infos.get(bb)?.team : attract?.tankById(bb)?.team;
+        const own = scorerTeam !== undefined && scorerTeam !== team; // the last touch was the other team's
+        floater(x + (x < W / 2 ? 2.2 : -2.2), y - 0.6, 'BUT !', color);
+        if (who && !own) setTimeout(() => floater(x + (x < W / 2 ? 2.2 : -2.2), y + 0.4, who, color), 260);
+        else if (own) setTimeout(() => floater(x + (x < W / 2 ? 2.2 : -2.2), y + 0.4, 'contre son camp', color), 260);
+        if (audible) sfx.ball(1, !!myTeam && team === myTeam);
+        if (online && audible && myTeam) toast(team === myTeam ? 'Buuut ! Ton équipe marque !' : 'Aïe, but pour l’équipe d’en face…', 2600);
+      } else if (what === 2) {
+        renderer.bonusBurst(a, bb, 0xfff4dc);
+        floater(a, bb - 0.7, 'Remise en jeu', 0xfff4dc);
+        if (audible) sfx.ball(2);
+      } else if (what === 3) {
+        if (audible) sfx.ball(3, false, a / 10);
+      }
       break;
     }
     case 'crown': {
@@ -1843,7 +1897,7 @@ function renderHud() {
   $('#hud-emote').hidden = !online;
   if (!online) closeEmotePad();
   const sb = $('#scoreboard');
-  if (currentMode === 'drapeau') {
+  if (teamPlay(currentMode)) {
     sb.innerHTML = TEAM_NAMES.map((n, i) => `<div class="sb-row ctf${myTeam === i + 1 ? ' mine' : ''}"><i style="--c:${hex(TEAM_COLORS[i])}"></i><span>${n}</span><b>${teamScores[i]}</b></div>`).join('');
   } else if (currentMode === 'caisses') {
     // « La chasse aux caisses » (iteration 37): crates this round, then rounds won
@@ -1883,7 +1937,7 @@ function renderLobby() {
   // « Drapeaux » (iteration 24): the tanks of the list take turns, one for the Bleus, one for the Rouges
   const order = lobbyPlayers.filter((p) => p.connected);
   const teamTag = (p: PlayerInfo) => {
-    if (lobbyMode !== 'drapeau') return '';
+    if (!teamPlay(lobbyMode)) return '';
     const k = order.indexOf(p);
     return k < 0 ? '' : `<b class="team-tag" style="--c:${hex(TEAM_COLORS[ctfTeam(k) - 1])}">${TEAM_NAMES[ctfTeam(k) - 1]}</b>`;
   };
@@ -1938,6 +1992,8 @@ function renderLobby() {
     ? `Drapeaux : les Bleus contre les Rouges (les tanks de la liste sont répartis un sur deux). Chaque équipe a son drapeau planté à sa base : file prendre celui d’en face et rapporte-le chez toi pour gagner la manche. Un tank touché revient à sa base ${CTF_RESPAWN} secondes plus tard ; le porteur touché lâche le drapeau, et un coéquipier le renvoie à la base d’un simple contact. Sans drapeau rapporté en ${Math.floor(CTF_ROUND / 60)} min ${CTF_ROUND % 60}, c’est l’égalité. Première équipe à ${CTF_TARGET} manches. Les rivaux pilotés par l’ordinateur complètent les équipes.`
     : lobbyMode === 'caisses'
     ? `La chasse aux caisses : chacun pour soi, ${HUNT_ROUND} secondes par manche, et les caisses pleuvent. Chaque caisse ramassée vaut un point (et son bonus). Un tank touché lâche une de ses caisses et revient dans son coin ${HUNT_RESPAWN_TXT} secondes plus tard. À ${HUNT_GOLD_AT} secondes de la fin tombe la caisse dorée : ${HUNT_GOLD} points d’un coup ! Le plus gros tas gagne la manche, premier à ${HUNT_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
+    : lobbyMode === 'ballon'
+    ? `Le ballon : les Bleus contre les Rouges (les tanks de la liste sont répartis un sur deux), un gros ballon de plage au milieu de la table et un but de chaque côté. Chaque obus qui frappe le ballon le fait rouler, chaque tank qui fonce dedans le pousse, et le souffle d’une mine l’envoie valser. Un but gagne la manche, et la première équipe à ${BALL_TARGET} buts remporte le match. Un tank touché revient sur son terrain ${BALL_RESPAWN_TXT} secondes plus tard. Gare aux ricochets : le tir ami compte ! Pas assez de joueurs ? Ajoute des rivaux.`
     : lobbyMode === 'couronne'
     ? `La couronne : chacun pour soi, et une seule couronne posée sur son coussin au milieu de la table. Roule dessus pour la mettre : chaque seconde passée couronné compte, et ${CROWN_HOLD} secondes en tout font gagner la manche. Touché ? Elle tombe là où tu es, et le premier qui passe la ramasse ; laissée à terre ${CROWN_RETURN} secondes, elle rentre sur son coussin. Un tank touché revient dans son coin ${CROWN_RESPAWN_TXT} secondes plus tard. Au bout de ${Math.floor(CROWN_ROUND / 60)} min ${CROWN_ROUND % 60}, le plus long règne l’emporte. Premier à ${CROWN_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
@@ -2191,6 +2247,7 @@ function showResults(r: Results) {
     : r.rush ? (r.rush.cleared >= r.rush.state.stages ? 'La ronde des boss est bouclée !' : `Ronde des boss · ${r.rush.cleared}/${r.rush.state.stages} boss`)
     : r.taupe ? (r.taupe.winner === 'taupe' ? 'La taupe l’emporte !' : 'Les loyaux l’emportent !')
     : r.atelier ? (r.atelier.won ? `« ${r.atelier.name} » réussie !` : `« ${r.atelier.name} » : plus de vies…`)
+    : r.mode === 'ballon' && r.drapeau ? (r.drapeau.winner ? `Les ${TEAM_NAMES[r.drapeau.winner - 1]} remportent le match ! (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})` : `Match nul (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})`)
     : r.drapeau ? (r.drapeau.winner ? `Les ${TEAM_NAMES[r.drapeau.winner - 1]} remportent les drapeaux ! (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})` : `Égalité aux drapeaux (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})`)
     : r.mode === 'caisses' ? `${r.players[0]?.name ?? ''} remporte la chasse aux caisses !`
     : r.mode === 'couronne' ? `${r.players[0]?.name ?? ''} règne sur la table !`
@@ -2204,7 +2261,7 @@ function showResults(r: Results) {
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? '<th title="Drapeaux rapportés à la base">Drapeaux</th>' : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}${reign ? '<th title="Secondes passées couronné pendant la partie">Règne</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? (r.mode === 'ballon' ? '<th title="Buts marqués">Buts</th>' : '<th title="Drapeaux rapportés à la base">Drapeaux</th>') : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}${reign ? '<th title="Secondes passées couronné pendant la partie">Règne</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
@@ -2242,7 +2299,9 @@ interface AttractFlags { round: number; levels?: number[]; teams?: [number, numb
 interface AttractHunt { round: number; levels?: number[]; scores?: number[]; chain?: boolean; seconds?: number } // seconds: how long the round lasts (videos)
 /** « La couronne » (iteration 50): four AI rivals fighting over the crown, for the videos and the home-screen background. */
 interface AttractCrown { round: number; levels?: number[]; scores?: number[]; chain?: boolean; seconds?: number; head?: number } // seconds: how long the round lasts at most (videos); head: seconds of reign every rival starts with
-interface AttractOpts { couronne?: AttractCrown; caisses?: AttractHunt; drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
+/** « Le ballon » (iteration 55): two AI rivals against two, a ball and two goals, for the videos and the home-screen background. */
+interface AttractBall { round: number; levels?: number[]; teams?: [number, number]; chain?: boolean; seconds?: number } // seconds: how long the round lasts at most (videos)
+interface AttractOpts { ballon?: AttractBall; couronne?: AttractCrown; caisses?: AttractHunt; drapeau?: AttractFlags; versus?: AttractVersus; atelier?: AtelierMap; mission?: number; heroes?: boolean; rich?: boolean; bossHp?: number; night?: boolean; storm?: boolean; daily?: { day: number; stage: number }; rush?: { week: number; stage: number }; arms?: Weapon[]; taupe?: { seed: number; stage: number }; ranks?: Ranks }
 let attractOpts: AttractOpts = {};
 
 function attractMission() {
@@ -2264,13 +2323,16 @@ function startAttract(opts: AttractOpts = attractOpts) {
   clearBubbles();
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
-  if (!opts.versus && !opts.drapeau && !opts.caisses && !opts.couronne && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
+  if (!opts.versus && !opts.drapeau && !opts.caisses && !opts.couronne && !opts.ballon && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
     const r = Math.random();
     if (r < 0.1) { startAttractVersus({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; }
     if (r < 0.2) { startAttractFlags({ round: Math.floor(Math.random() * 12), levels: [1, 2, 2, 1] }); return; } // and, from iteration 24, a flag round
     if (r < 0.3) { startAttractHunt({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 37, a crate hunt
     if (r < 0.4) { startAttractCrown({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 50, a fight over the crown
+    if (r < 0.5) { startAttractBall({ round: Math.floor(Math.random() * 12), levels: [2, 2, 1, 2] }); return; } // and, from iteration 55, a match
   }
+  if (opts.ballon) { startAttractBall(opts.ballon, opts.arms); return; }
+  attractBall = undefined;
   if (opts.couronne) { startAttractCrown(opts.couronne, opts.arms); return; }
   attractCrown = undefined;
   renderer.setCrown(undefined);
@@ -2544,6 +2606,73 @@ function endAttractCrown(g: Game) {
   }
 }
 
+let attractBall: (AttractBall & { teams: [number, number] }) | undefined;
+let attractBallPrev: [number, number] = [W / 2, H / 2];
+
+/** « Le ballon » (iteration 55): two AI rivals against two on a pitch, the ball on the kick-off spot. */
+function startAttractBall(c: AttractBall, arms?: Weapon[]) {
+  const lvl = ballArena(c.round);
+  const g = new Game(lvl.tiles, lvl.belts);
+  g.bonusOn = true;
+  g.bonusNext = 5; g.bonusEvery = [8, 12];
+  g.ball = newBall();
+  g.ball.time = Math.max(0, BALL_ROUND - (c.seconds ?? BALL_ROUND)); // a shorter round for the videos
+  attractBallPrev = [g.ball.x, g.ball.y];
+  lvl.spawns.slice(0, 4).forEach(([x, y], i) => {
+    const team = ctfTeam(i);
+    const t = g.addTank('player', team, x, y, TEAM_TANK_COLORS[team - 1][Math.floor(i / 2) % 2], `ia:${i + 1}`, RIVAL_NAMES[(c.round + i * 3 + 1) % RIVAL_NAMES.length]);
+    g.arm(t, (arms?.length ? arms : VS_ARMS)[i % (arms?.length || VS_ARMS.length)]);
+    t.body = t.turret = Math.atan2(8.5 - y, 11 - x);
+    makeRival(g, t, c.levels?.[i] ?? 2);
+  });
+  g.frozen = false;
+  attract = g;
+  attractOpts = { ballon: c, arms };
+  attractVs = undefined;
+  attractCtf = undefined;
+  attractBall = { ...c, teams: c.teams ?? [0, 0] };
+  attractEnd = 0;
+  attractPrev.clear();
+  renderer.setLevel(g.tiles, g.tankInfos(), g.belts);
+  renderer.setBall(true, (id) => g.tankById(id)?.team);
+  renderer.setNight(false);
+  renderer.setStorm(false);
+  renderer.setWind(undefined);
+  renderer.setFog(undefined);
+  renderer.setBlizzard(false);
+  renderBallBoard(g);
+}
+
+/** The score of the demo match and its clock (once a second). */
+let ballBoardKey = '';
+function renderBallBoard(g?: Game) {
+  const c = attractBall;
+  if (!c || !document.body.classList.contains('demo') || screen !== 'game') return;
+  const left = Math.max(0, Math.ceil(BALL_ROUND - (g?.ball?.time ?? 0)));
+  const key = `${c.round}|${c.teams.join(',')}|${left}`;
+  if (key === ballBoardKey && document.body.classList.contains('vs-demo')) return;
+  ballBoardKey = key;
+  document.body.classList.add('vs-demo');
+  $('#hud').hidden = false;
+  $('#hud-enemies').textContent = `Le ballon · manche ${c.round + 1} · ⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  $('#hud-enemies').classList.toggle('hurry', left <= BALL_HURRY && !attractEnd);
+  $('#scoreboard').innerHTML = TEAM_NAMES.map((n, i) => `<div class="sb-row ctf"><i style="--c:${hex(TEAM_COLORS[i])}"></i><span>${n} <em>IA</em></span><b>${c.teams[i]}</b></div>`).join('');
+}
+
+function endAttractBall(g: Game) {
+  const c = attractBall!, b = g.ball!;
+  const w = b.scored;
+  if (w) { c.teams[w - 1]++; g.cheer(w); } // the scorers celebrate
+  ballBoardKey = '';
+  renderBallBoard(g);
+  if (document.body.classList.contains('demo') && screen === 'game') {
+    const scorer = g.tankById(b.scorer);
+    banner(w ? 'But !' : `Le ballon · manche ${c.round + 1}`, w ? (scorer?.name ? `${scorer.name} marque pour les ${TEAM_NAMES[w - 1]} !` : `Un point pour les ${TEAM_NAMES[w - 1]} !`) : 'Pas de but : égalité !',
+      `Bleus ${c.teams[0]} · ${c.teams[1]} Rouges`, `intro ctf ball team${w}`);
+    setTimeout(hideBanner, 2400);
+  }
+}
+
 /** Two AI rivals against two on a flag arena (iteration 24): a flag brought home takes the round (tanks come back at their base). */
 function startAttractFlags(c: AttractFlags, arms?: Weapon[]) {
   const lvl = ctfArena(c.round);
@@ -2713,6 +2842,7 @@ function attractFrame(dt: number) {
   while (attractAcc >= DT) {
     attractAcc -= DT;
     for (const t of g.tanks) attractPrev.set(t.id, { x: t.x, y: t.y, body: t.body, turret: t.turret });
+    if (g.ball) attractBallPrev = [g.ball.x, g.ball.y];
     g.step(new Map());
     if (attractTally && !g.frozen && !attractEnd) {
       attractTally.ticks++;
@@ -2747,6 +2877,7 @@ function attractFrame(dt: number) {
   const flags: RFlag[] | undefined = g.flags ? g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
   if (g.crown) renderer.syncCrown({ x: g.crown.x, y: g.crown.y, holder: g.crown.holder, state: g.crown.state, left: CROWN_RETURN - g.crown.dropT });
+  if (g.ball) renderer.syncBall(lerp(attractBallPrev[0], g.ball.x, u), lerp(attractBallPrev[1], g.ball.y, u), dt);
   const lobs: RLob[] = g.lobs.map((l) => ({ id: l.id, x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1, t: l.t + u * DT, dur: l.dur }));
   renderer.syncLobs(lobs);
   film.frame(dt, tanks, bullets, mines, bonuses, flags, lobs);
@@ -2760,6 +2891,15 @@ function attractFrame(dt: number) {
       attract = undefined;
       if (c.chain && Math.max(...c.teams) < CTF_TARGET) startAttract({ drapeau: { ...c, round: c.round + 1, teams: c.teams, carry: false }, arms: attractOpts.arms });
       else { attractOpts = {}; startAttract({}); }
+    }
+  } else if (attractOpts.ballon && attractBall) {
+    renderBallBoard(g);
+    if (!attractEnd && g.ball && (g.ball.scored || g.ball.time >= BALL_ROUND)) { attractEnd = g.tick + TICK_RATE * 3; g.frozen = true; endAttractBall(g); }
+    if (attractEnd && g.tick > attractEnd) {
+      const c = attractBall;
+      attract = undefined;
+      if (c.chain && Math.max(...c.teams) < BALL_TARGET) startAttract({ ballon: { ...c, round: c.round + 1, teams: c.teams }, arms: attractOpts.arms });
+      else { attractOpts = {}; attractBall = undefined; startAttract({}); }
     }
   } else if (attractOpts.couronne && attractCrown) {
     attractCrownClock(g);
@@ -2799,7 +2939,7 @@ function attractFrame(dt: number) {
     }
     if (attractEnd && g.tick > attractEnd) { attract = undefined; startAttract(); }
   }
-  if (!ended && attractEnd && attract === g && !attractOpts.couronne) queueReel(); // a crown round does not end on a shot: no replay
+  if (!ended && attractEnd && attract === g && !attractOpts.couronne && !attractOpts.ballon) queueReel(); // a crown round does not end on a shot: no replay (nor a goal: the film has no ball)
   attractState = { tick: g.tick, heroes: g.aliveCount(1), enemies: g.aliveCount(2), mission: attractOpts.mission, flags: g.flags?.map((f) => f.state), teams: attractCtf?.teams, replays };
 }
 
@@ -3235,6 +3375,7 @@ const MODES: [string, string, string, string][] = [
   ['crown', 'Ronde des boss', '1 à 4', 'Les boss l’un après l’autre, puis deux à la fois. L’ordre change chaque lundi : le meilleur chrono de la semaine gagne.'],
   ['swords', 'Versus', '2 à 4', 'Chacun pour soi : le dernier tank debout marque un point, premier à 5 manches. Seul ? Ajoute des rivaux pilotés par l’ordinateur.'],
   ['flag', 'Drapeaux', '2 à 4', `Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi. Première équipe à ${CTF_TARGET} manches.`],
+  ['ball', 'Le ballon', '2 à 4', `Les Bleus contre les Rouges, un ballon de plage et deux buts : pousse-le à coups d’obus, de chenilles ou de mines. Première équipe à ${BALL_TARGET} buts.`],
   ['crate', 'La chasse aux caisses', '2 à 4', `Les caisses pleuvent, chacune vaut un point, et la caisse dorée en vaut ${HUNT_GOLD}. Premier à ${HUNT_TARGET} manches.`],
   ['crown', 'La couronne', '2 à 4', `Une seule couronne au milieu de la table : mets-la et garde-la ${CROWN_HOLD} secondes. Touché ? Elle tombe de ta tête. Premier à ${CROWN_TARGET} manches.`],
   ['mask', 'La taupe', `${TAUPE_MIN_PLAYERS} ou 4`, 'Une campagne coop… avec un traître tiré au sort en secret. Après chaque mission, le conseil vote pour le démasquer.'],
@@ -3632,7 +3773,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, crown: currentMode === 'couronne' || attractCrown ? { home: !!crownHome || !!attract?.crown, holder: attract?.crown ? attract.crown.holder : crownHolder, state: attract?.crown ? attract.crown.state : snaps[snaps.length - 1]?.C?.[3], held: Object.fromEntries(attract?.crown ? [...attract.crown.held].map(([k, v]) => [k, Math.floor(v * 10)]) : crownHeld), board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, crown: currentMode === 'couronne' || attractCrown ? { home: !!crownHome || !!attract?.crown, holder: attract?.crown ? attract.crown.holder : crownHolder, state: attract?.crown ? attract.crown.state : snaps[snaps.length - 1]?.C?.[3], held: Object.fromEntries(attract?.crown ? [...attract.crown.held].map(([k, v]) => [k, Math.floor(v * 10)]) : crownHeld), board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, ball: currentMode === 'ballon' || attractBall ? { on: ballOn || !!attract?.ball, team: myTeam, teams: attractBall ? attractBall.teams : teamScores, pos: attract?.ball ? [attract.ball.x, attract.ball.y] : snaps[snaps.length - 1]?.O?.slice(0, 2), board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -3671,6 +3812,38 @@ if (params.has('demo')) {
      * « Drapeaux » (iteration 24): two AI rivals against two on the flag arena of that round. `levels`: their level
      * (0 Novice, 1 Malin, 2 Redoutable), `chain`: the next rounds follow, with the team scores.
      */
+    /**
+     * « Le ballon » (iteration 55): two AI rivals against two on the pitch of that round. `seconds`: how long the round
+     * lasts at most (shorter for the videos), `chain`: the next rounds follow, with the score.
+     */
+    ballon(round = 0, levels?: number[], arms?: Weapon[], seconds?: number, chain = false) {
+      show('game');
+      attract = undefined;
+      startAttract({ ballon: { round, levels, chain, seconds }, arms: arms?.filter(isWeapon) });
+      return ballArena(round).name;
+    },
+    /**
+     * « Le ballon »: a Bleu lines up a shot, the ball between it and the goal on the right, and fires (for the videos).
+     * Returns the striker's tank id (0: no match on the table).
+     */
+    goalShot() {
+      const g = attract;
+      const b = g?.ball;
+      if (!g || !b || b.scored) return 0;
+      const t = g.tanks.find((o) => o.alive && o.kind === 'player' && o.team === 1);
+      if (!t) return 0;
+      const [gx, gy] = goalOf(1);
+      const busy = g.tanks.filter((o) => o !== t && o.alive).map((o): [number, number] => [o.x, o.y]);
+      const [bx, by] = nearestFree(g.tiles, Math.floor(gx - 6), Math.floor(gy), busy);
+      b.x = bx; b.y = by; b.vx = b.vy = 0;
+      [t.x, t.y] = nearestFree(g.tiles, Math.floor(bx - 2.6), Math.floor(by), busy);
+      t.vx = t.vy = 0;
+      t.body = t.turret = Math.atan2(by - t.y, bx - t.x);
+      t.fireCd = 0;
+      if (t.ai) { t.ai.kick = t.turret; t.ai.hesitate = 0; }
+      g.tryFire(t);
+      return t.id;
+    },
     drapeau(round = 0, levels?: number[], arms?: Weapon[], chain = true, carry = false) {
       show('game');
       attract = undefined;
@@ -3745,7 +3918,7 @@ if (params.has('demo')) {
       const me: PlayerInfo = { id: pid, name: myName, color: PLAYER_COLORS[0], host: true, connected: true, score: 0, weapon: myWeapon };
       const bots: PlayerInfo[] = [0, 1, 2].map((i) => ({ id: `ia:${i + 1}`, name: RIVAL_NAMES[i * 3], color: PLAYER_COLORS[i + 1], host: false, connected: true, score: 0, weapon: VS_ARMS[i], bot: i }));
       lobbyPlayers = [me];
-      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' || mode === 'couronne' ? mode : 'versus';
+      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' || mode === 'couronne' || mode === 'ballon' ? mode : 'versus';
       roomCode = 'SOLO7';
       phase = 'lobby';
       renderLobby();
@@ -3755,7 +3928,7 @@ if (params.has('demo')) {
       setTimeout(() => {
         lobbyPlayers = keep.players; lobbyMode = keep.mode; roomCode = keep.room; phase = keep.phase;
         show('game');
-        if (attractOpts.versus) renderVsBoard(); else if (attractOpts.drapeau) renderCtfBoard(); else if (attractOpts.caisses) renderAttractHunt(); else if (attractOpts.couronne) renderAttractCrown(); else $('#hud').hidden = true;
+        if (attractOpts.versus) renderVsBoard(); else if (attractOpts.ballon) { ballBoardKey = ''; renderBallBoard(attract); } else if (attractOpts.drapeau) renderCtfBoard(); else if (attractOpts.caisses) renderAttractHunt(); else if (attractOpts.couronne) renderAttractCrown(); else $('#hud').hidden = true;
       }, ms);
     },
     /** « Le réticule » (iteration 44): the coop HUD and the reticle over the demo mission (the first hero is « me »). */

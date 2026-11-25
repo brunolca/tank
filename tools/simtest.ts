@@ -13,6 +13,7 @@ import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
 import { BLIZZARD_PERIOD, BLIZZARD_REFILL, SQUALL_FULL, SQUALL_RISE, squallIn, whiteoutAt } from '../src/shared/blizzard';
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { HUNT_CRATES, HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, huntArena, huntLeader, newHunt } from '../src/shared/caisses';
+import { BALL_IDLE, BALL_PITCH_COUNT, BALL_R, BALL_ROUND, GOAL_BOTTOM, GOAL_TOP, KICKOFF, ballArena, goalAt, newBall } from '../src/shared/ballon';
 import { CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, crownArena, crownLeader, newCrown } from '../src/shared/couronne';
 import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
@@ -3564,4 +3565,95 @@ console.log('total', Date.now() - t0, 'ms');
   if (vs.some((l) => l.blizzard && (l.wind === undefined || l.night || l.fog !== undefined))) fail('un blizzard de versus sans vent, de nuit ou dans la brume');
   if (Array.from({ length: VERSUS_ARENAS * 2 }, (_, r) => crownArena(r).blizzard || huntArena(r).blizzard).some(Boolean)) fail('un blizzard sur la couronne ou la chasse aux caisses');
   if (process.exitCode !== 1) console.log(`blizzard OK (${won} partie(s) gagnée(s) par l’IA, ${(lost / 30).toFixed(0)} s de bourrasque, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le ballon » (iteration 55): shells kick the ball, tanks push it, walls bounce it, mines throw it, goals score, the AI plays
+{
+  const fail = (m: string) => { console.error('BALLON :', m); process.exitCode = 1; };
+  const open = new Array(W * H).fill(Tile.Empty);
+  {
+    // a shell from the left sends the ball to the right, and dies on it
+    const g = new Game(open);
+    g.ball = newBall();
+    g.ball.x = 16; g.ball.y = 3.5; // (not in front of the goal)
+    const a = g.addTank('player', 1, 12.5, 3.5, 0x3d7bff, 'a');
+    g.frozen = false;
+    a.turret = 0;
+    a.fireCd = 0;
+    if (!g.tryFire(a)) fail('le tank ne tire pas');
+    for (let i = 0; i < 60 && !g.events.some((e) => e[0] === 'ball' && e[3] === 0); i++) g.step(new Map());
+    if (!g.events.some((e) => e[0] === 'ball' && e[3] === 0 && e[4] === a.id)) fail('un obus ne frappe pas le ballon');
+    if (g.ball.vx < 3 || Math.abs(g.ball.vy) > 0.5) fail(`le ballon ne part pas dans le sens du tir (${g.ball.vx.toFixed(2)}, ${g.ball.vy.toFixed(2)})`);
+    if (g.bullets.length) fail('l’obus survit au ballon');
+    if (g.ball.last !== a.id) fail('le dernier tireur n’est pas retenu');
+    // it rolls, slows down and bounces off the edge of the table
+    let bounced = false;
+    for (let i = 0; i < 30 * 8; i++) { g.events = []; g.step(new Map()); if (g.events.some((e) => e[0] === 'ball' && e[3] === 3)) bounced = true; }
+    if (!bounced && g.ball.vx >= 0) fail('le ballon ne rebondit pas sur le bord');
+    if (Math.hypot(g.ball.vx, g.ball.vy) > 1.5) fail('le ballon ne ralentit pas');
+    if (g.ball.x < BALL_R - 0.01 || g.ball.x > W - BALL_R + 0.01) fail('le ballon sort de la table');
+  }
+  {
+    // a tank driving into it pushes it along; a goal on the right is the Bleus', on the left the Rouges'
+    const g = new Game(open);
+    g.ball = newBall();
+    g.ball.x = W - 4; g.ball.y = KICKOFF[1];
+    const a = g.addTank('player', 1, W - 6, KICKOFF[1], 0x3d7bff, 'a');
+    g.frozen = false;
+    const inp = new Map([['a', { s: 1, mx: 1, my: 0, a: 0, f: 0 as const, m: 0 as const }]]);
+    for (let i = 0; i < 30 * 4 && !g.ball.scored; i++) g.step(inp);
+    if (g.ball.scored !== 1) fail(`pousser le ballon dans le but de droite ne marque pas pour les Bleus (${g.ball.x.toFixed(2)}, ${g.ball.y.toFixed(2)})`);
+    if (g.ball.scorer !== a.id) fail('le buteur n’est pas retenu');
+    if (goalAt(0.5, (GOAL_TOP + GOAL_BOTTOM) / 2) !== 2 || goalAt(0.5, GOAL_TOP - 0.5) !== 0 || goalAt(W / 2, 8) !== 0) fail('goalAt se trompe');
+  }
+  {
+    // a mine's blast throws the ball; the ball sets a mine off; a forgotten ball goes back to the kick-off spot
+    const g = new Game(open);
+    g.ball = newBall();
+    const a = g.addTank('player', 1, 3.5, 3.5, 0x3d7bff, 'a');
+    g.frozen = false;
+    g.mines.push({ id: 999, owner: a.id, team: 1, x: KICKOFF[0] - 1, y: KICKOFF[1], t: 1, fuse: 0.05, dead: false });
+    for (let i = 0; i < 4; i++) g.step(new Map());
+    if (g.ball.vx < 2) fail('le souffle d’une mine ne pousse pas le ballon');
+    g.ball.x = 15.5; g.ball.y = 3.5; g.ball.vx = g.ball.vy = 0;
+    g.mines.push({ id: 1000, owner: a.id, team: 1, x: 15.5, y: 4.2, t: 1, fuse: -1, dead: false });
+    g.step(new Map());
+    const m2 = g.mines.find((m) => m.id === 1000);
+    if (m2 && m2.fuse < 0) fail('le ballon ne déclenche pas une mine');
+    g.ball.idle = BALL_IDLE;
+    g.ball.vx = g.ball.vy = 0;
+    for (let i = 0; i < 30; i++) g.step(new Map());
+    if (Math.hypot(g.ball.x - KICKOFF[0], g.ball.y - KICKOFF[1]) > 1.5) fail('le ballon oublié ne revient pas au centre');
+  }
+  // the pitches: kick-off spot and goal mouths free, posts in place, spawns two by two on each side
+  for (let r = 0; r < BALL_PITCH_COUNT; r++) {
+    const l = ballArena(r);
+    for (const x of [0, 1, W - 2, W - 1]) for (let y = GOAL_TOP; y < GOAL_BOTTOM; y++) if (l.tiles[y * W + x] !== Tile.Empty) fail(`${l.name} : le but est bouché en (${x}, ${y})`);
+    for (const x of [0, W - 1]) for (const y of [GOAL_TOP - 1, GOAL_BOTTOM]) if (l.tiles[y * W + x] !== Tile.Wall) fail(`${l.name} : il manque un poteau en (${x}, ${y})`);
+    for (const x of [10, 11]) if (l.tiles[8 * W + x] !== Tile.Empty) fail(`${l.name} : le centre est bouché`);
+    if (l.spawns.length < 4 || l.spawns[0][0] > W / 2 || l.spawns[1][0] < W / 2 || l.spawns[2][0] > W / 2 || l.spawns[3][0] < W / 2) fail(`${l.name} : départs mal placés`);
+  }
+  // the AI plays matches that end in goals, quickly enough per tick
+  let goals = 0, own = 0, spent = 0, steps = 0, worst = 0;
+  const sides = [0, 0];
+  for (let round = 0; round < 8; round++) {
+    const l = ballArena(round);
+    const g = new Game(l.tiles, l.belts);
+    g.ball = newBall();
+    g.bonusOn = true; g.bonusNext = 5; g.bonusEvery = [8, 12];
+    l.spawns.slice(0, round % 3 === 2 ? 2 : 4).forEach(([x, y], i) => makeRival(g, g.addTank('player', (i % 2) + 1, x, y, 0, `ia:${i + 1}`, `R${i}`), 2));
+    g.frozen = false;
+    while (g.ball.time < BALL_ROUND && !g.ball.scored) {
+      const t1 = performance.now();
+      g.step(new Map());
+      const dt = performance.now() - t1;
+      spent += dt; steps++; worst = Math.max(worst, dt);
+      g.events = [];
+    }
+    if (g.ball.scored) { goals++; sides[g.ball.scored - 1]++; if (!g.ball.scorer) own++; }
+  }
+  const per = spent / Math.max(1, steps);
+  if (goals < 4) fail(`trop peu de buts (${goals} en 8 manches)`);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`ballon OK (${goals}/8 manches avec un but, Bleus ${sides[0]} · ${sides[1]} Rouges, ${own} contre son camp, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
 }

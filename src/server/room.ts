@@ -12,6 +12,7 @@ import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRiv
 import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
 import { HUNT_CRATES, HUNT_ROUND, HUNT_TARGET, huntArena, huntLeader, newHunt } from '../shared/caisses';
 import { CROWN_HOLD, CROWN_ROUND, CROWN_TARGET, crownArena, crownLeader, newCrown } from '../shared/couronne';
+import { BALL_ROUND, BALL_TARGET, ballArena, newBall } from '../shared/ballon';
 import { CTF_ROUND, CTF_TARGET, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags } from '../shared/drapeau';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
 
@@ -56,9 +57,11 @@ const VERSUS_TARGET = 5;
 /** Modes played in rounds between players and rivals: free-for-all versus, and « Drapeaux » in two teams (iteration 24). */
 /** Seconds between the end of a mission (or round) and what comes next: room for « Le ralenti » (iteration 32, was 3.5). */
 const END_PAUSE = 4.5;
-const pvp = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne'; // « La chasse aux caisses » (iteration 37) and « La couronne » (iteration 50) too
+const pvp = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne' || m === 'ballon'; // « La chasse aux caisses » (iteration 37), « La couronne » (iteration 50) and « Le ballon » (iteration 55) too
 /** Free-for-all modes played in rounds on the versus arenas: one team per tank. */
 const ffa = (m: Mode) => m === 'versus' || m === 'caisses' || m === 'couronne';
+/** Modes played in two teams, Bleus against Rouges: « Drapeaux » (iteration 24) and « Le ballon » (iteration 55). */
+const teamPlay = (m: Mode) => m === 'drapeau' || m === 'ballon';
 const EMPTY_INPUT: Input = { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 };
 
 export class Room extends DurableObject<Env> {
@@ -235,7 +238,7 @@ export class Room extends DurableObject<Env> {
         }
         break;
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush' || msg.mode === 'caisses' || msg.mode === 'couronne')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush' || msg.mode === 'caisses' || msg.mode === 'couronne' || msg.mode === 'ballon')) {
           this.mode = msg.mode;
           if (!rivalMode(this.mode)) this.rivals = [];
           await this.ctx.storage.put('mode', this.mode);
@@ -398,7 +401,7 @@ export class Room extends DurableObject<Env> {
   private startGame() {
     const active = [...this.players.values()].filter((p) => p.ws);
     if (pvp(this.mode) && active.length + this.versusRivals().length < 2) {
-      for (const p of active) this.send(p.ws!, { t: 'error', msg: this.mode === 'drapeau' ? 'Il faut au moins 2 tanks pour jouer aux drapeaux : invite un ami ou ajoute un rival.' : this.mode === 'caisses' ? 'Il faut au moins 2 tanks pour la chasse aux caisses : invite un ami ou ajoute un rival.' : this.mode === 'couronne' ? 'Il faut au moins 2 tanks pour se disputer la couronne : invite un ami ou ajoute un rival.' : 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
+      for (const p of active) this.send(p.ws!, { t: 'error', msg: this.mode === 'drapeau' ? 'Il faut au moins 2 tanks pour jouer aux drapeaux : invite un ami ou ajoute un rival.' : this.mode === 'caisses' ? 'Il faut au moins 2 tanks pour la chasse aux caisses : invite un ami ou ajoute un rival.' : this.mode === 'couronne' ? 'Il faut au moins 2 tanks pour se disputer la couronne : invite un ami ou ajoute un rival.' : this.mode === 'ballon' ? 'Il faut au moins 2 tanks pour jouer au ballon : invite un ami ou ajoute un rival.' : 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
       return;
     }
     if (this.mode === 'atelier' && !this.atelier) {
@@ -459,6 +462,7 @@ export class Room extends DurableObject<Env> {
       : this.mode === 'drapeau' ? ctfArena(this.round)
       : this.mode === 'caisses' ? huntArena(this.round)
       : this.mode === 'couronne' ? crownArena(this.round)
+      : this.mode === 'ballon' ? ballArena(this.round)
       : versusArena(this.arenaBase + this.round);
     this.bases = this.mode === 'drapeau' ? (this.level as ReturnType<typeof ctfArena>).bases : undefined;
     this.council = undefined;
@@ -479,9 +483,9 @@ export class Room extends DurableObject<Env> {
         pos = nearestFree(this.level!.tiles, Math.floor(base[0]), Math.floor(base[1]) + (i >= 2 ? 2 : -2), [...spawns, ...used]);
       }
       used.push(pos);
-      const team = ffa(this.mode) ? i + 1 : this.mode === 'drapeau' ? ctfTeam(i) : 0;
+      const team = ffa(this.mode) ? i + 1 : teamPlay(this.mode) ? ctfTeam(i) : 0;
       // « Drapeaux »: tanks wear their team's colours (blue and cyan, red and orange)
-      const color = this.mode === 'drapeau' ? TEAM_TANK_COLORS[team - 1][Math.floor(i / 2) % 2] : p.color;
+      const color = teamPlay(this.mode) ? TEAM_TANK_COLORS[team - 1][Math.floor(i / 2) % 2] : p.color;
       const t = game.addTank('player', team, pos[0], pos[1], color, p.pid, p.name);
       game.arm(t, p.weapon ?? 'canon');
       if (this.mode === 'coop' && p.player?.prog) game.train(t, p.player.prog.r);
@@ -526,6 +530,7 @@ export class Room extends DurableObject<Env> {
       const [cx, cy] = (this.level as ReturnType<typeof crownArena>).crown;
       game.crown = newCrown(cx, cy);
     }
+    if (this.mode === 'ballon') game.ball = newBall(); // « Le ballon » (iteration 55): on the kick-off spot
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
     game.onKill = (victim, killer) => this.onKill(victim, killer);
     game.onRevive = (t) => { // « Le Mécano » (iteration 51): a repaired enemy is no longer destroyed for the next try
@@ -590,6 +595,7 @@ export class Room extends DurableObject<Env> {
       rush: this.rushState(),
       bases: this.bases?.flat(),
       crown: this.game.crown ? [this.game.crown.hx, this.game.crown.hy] : undefined,
+      ball: this.game.ball ? 1 : undefined,
       rail: this.level.rail,
     });
     if (this.mode === 'taupe') {
@@ -619,7 +625,7 @@ export class Room extends DurableObject<Env> {
     if (killer?.pid) {
       const kp = this.entrant(killer.pid);
       const coop = !pvp(this.mode);
-      const mate = this.mode === 'drapeau' && killer.team === victim.team; // a teammate's shell: no trophy
+      const mate = teamPlay(this.mode) && killer.team === victim.team; // a teammate's shell: no trophy
       if (kp && killer.pid !== victim.pid && !(coop && victim.pid) && !mate) {
         const key: TankKind = victim.kind;
         kp.kills[key] = (kp.kills[key] ?? 0) + 1;
@@ -691,11 +697,12 @@ export class Room extends DurableObject<Env> {
       prog: this.progress(),
       training: this.phase === 'cleared' && this.training.size ? [...this.training] : undefined,
       tally: this.phase === 'cleared' && this.tally && this.tally.mission === this.mission ? this.tally.sheet(TICK_RATE) : undefined,
-      teams: this.mode === 'drapeau' ? [this.teams[0], this.teams[1]] : undefined,
-      win: this.mode === 'drapeau' && this.phase === 'roundEnd' ? this.roundWin : undefined,
+      teams: teamPlay(this.mode) ? [this.teams[0], this.teams[1]] : undefined,
+      win: teamPlay(this.mode) && this.phase === 'roundEnd' ? this.roundWin : undefined,
       left: this.mode === 'drapeau' && this.game ? Math.max(0, +(CTF_ROUND - this.game.ctfTime).toFixed(1))
         : this.mode === 'caisses' && this.game?.hunt ? Math.max(0, +(HUNT_ROUND - this.game.hunt.time).toFixed(1))
-        : this.mode === 'couronne' && this.game?.crown ? Math.max(0, +(CROWN_ROUND - this.game.crown.time).toFixed(1)) : undefined,
+        : this.mode === 'couronne' && this.game?.crown ? Math.max(0, +(CROWN_ROUND - this.game.crown.time).toFixed(1))
+        : this.mode === 'ballon' && this.game?.ball ? Math.max(0, +(BALL_ROUND - this.game.ball.time).toFixed(1)) : undefined,
     };
   }
 
@@ -749,8 +756,8 @@ export class Room extends DurableObject<Env> {
       .concat(this.versusRivals().map((r) => ({ id: r.pid, name: r.name, color: r.color, kills: r.kills, deaths: r.deaths, score: r.score, bot: r.level })))
       .sort((a, b) => b.score - a.score);
     let drapeau: Results['drapeau'];
-    if (this.mode === 'drapeau') {
-      // each entrant keeps the team and colours of the last round
+    if (teamPlay(this.mode)) {
+      // each entrant keeps the team and colours of the last round (caps: flags brought home, or goals scored)
       for (const pl of players) {
         const t = this.game?.tanks.find((o) => o.pid === pl.id);
         if (t) { pl.team = t.team; pl.color = t.color; }
@@ -774,7 +781,7 @@ export class Room extends DurableObject<Env> {
       ? { ...this.taupeEnd, cleared: this.taupeEnd.why === 'missions' ? TAUPE_STAGES : this.mission - 1, stages: TAUPE_STAGES }
       : undefined;
     const atelier = this.mode === 'atelier' && this.atelier ? { name: this.atelier.name, won: this.atelierWon } : undefined;
-    return { mode: this.mode, mission: this.mode === 'drapeau' || this.mode === 'caisses' || this.mode === 'couronne' ? this.round + 1 : this.mission, players, winner: pvp(this.mode) ? players[0]?.id : undefined, daily, rush, taupe, atelier, drapeau };
+    return { mode: this.mode, mission: teamPlay(this.mode) || this.mode === 'caisses' || this.mode === 'couronne' ? this.round + 1 : this.mission, players, winner: pvp(this.mode) ? players[0]?.id : undefined, daily, rush, taupe, atelier, drapeau };
   }
 
   private tick() {
@@ -808,10 +815,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), O = game.netBall(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C, O });
     }
 
     this.phaseTimer -= DT;
@@ -857,7 +864,7 @@ export class Room extends DurableObject<Env> {
       case 'roundEnd':
         if (this.phaseTimer <= 0) {
           const best = Math.max(...[...this.players.values(), ...this.versusRivals()].map((p) => p.score));
-          if (this.mode === 'drapeau' ? Math.max(...this.teams) >= CTF_TARGET : best >= (this.mode === 'caisses' ? HUNT_TARGET : this.mode === 'couronne' ? CROWN_TARGET : VERSUS_TARGET)) { this.setPhase('gameover', 8); this.broadcastPhase(); }
+          if (teamPlay(this.mode) ? Math.max(...this.teams) >= (this.mode === 'ballon' ? BALL_TARGET : CTF_TARGET) : best >= (this.mode === 'caisses' ? HUNT_TARGET : this.mode === 'couronne' ? CROWN_TARGET : VERSUS_TARGET)) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else { this.round++; this.loadStage(); }
         }
         break;
@@ -926,6 +933,7 @@ export class Room extends DurableObject<Env> {
     if (this.mode === 'drapeau') { this.checkFlags(game); return; }
     if (this.mode === 'caisses') { this.checkHunt(game); return; }
     if (this.mode === 'couronne') { this.checkCrown(game); return; }
+    if (this.mode === 'ballon') { this.checkBall(game); return; }
     if (this.mode !== 'versus') {
       const playersAlive = game.aliveCount(0);
       const enemiesAlive = game.aliveCount(99);
@@ -981,6 +989,20 @@ export class Room extends DurableObject<Env> {
       return;
     }
     if (game.ctfTime >= CTF_ROUND) this.endFlagRound(game, 0, 'Temps écoulé : aucun drapeau rapporté, égalité !');
+  }
+
+  /** « Le ballon » (iteration 55): a goal takes the round at once; otherwise the clock calls a draw. */
+  private checkBall(game: Game) {
+    const b = game.ball;
+    if (!b) return;
+    if (b.scored) {
+      const scorer = game.tankById(b.scorer);
+      if (scorer?.pid) this.caps.set(scorer.pid, (this.caps.get(scorer.pid) ?? 0) + 1);
+      const team = TEAM_NAMES[b.scored - 1];
+      this.endFlagRound(game, b.scored, scorer?.name ? `${scorer.name} marque pour les ${team} !` : `Contre son camp : un point pour les ${team} !`);
+      return;
+    }
+    if (b.time >= BALL_ROUND) this.endFlagRound(game, 0, 'Temps écoulé : pas de but, égalité !');
   }
 
   /** « La chasse aux caisses » (iteration 37): when the clock runs out, the tank with the most crates takes the round. */

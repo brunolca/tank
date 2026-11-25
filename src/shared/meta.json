@@ -1,7 +1,7 @@
 {
-  "iteration": 54,
-  "date": "2026-11-24",
-  "title": "Le blizzard",
+  "iteration": 55,
+  "date": "2026-11-25",
+  "title": "Le ballon",
   "journal": [
     {
       "iteration": 1,
@@ -658,6 +658,19 @@
         "Deux nouvelles missions : « Le blizzard » (la 54ᵉ), un champ de neige semé de bonshommes, et « Nuit blanche » (la 75ᵉ), un col de nuit où même le faisceau du Veilleur se perd dans la neige. Certaines arènes enneigées du versus ont aussi leurs bourrasques.",
         "Gare au tir ami : quand le réticule rougit, un petit double bip te prévient maintenant aussi à l’oreille.",
         "Le manuel présente le blizzard dans « Le temps qu’il fait »."
+      ]
+    },
+    {
+      "iteration": 55,
+      "date": "2026-11-25",
+      "title": "Le ballon",
+      "notes": [
+        "Nouveau mode : « Le ballon ». Les Bleus contre les Rouges, un gros ballon de plage au milieu de la table et un but de chaque côté, avec son filet et ses poteaux.",
+        "Chaque obus qui frappe le ballon le fait rouler, chaque tank qui fonce dedans le pousse, et le souffle d’une mine l’envoie valser. Vise bien : il part à l’opposé de l’endroit où tu le touches, comme une boule de billard.",
+        "Un but gagne la manche, la première équipe à 3 buts remporte le match. Un tank touché revient sur son terrain 2,5 secondes plus tard. Le terrain est légèrement creusé : un ballon coincé contre un bord finit toujours par revenir au jeu.",
+        "Quatre terrains se relaient : le stade, le terrain vague, les quatre piliers… et la patinoire, où le ballon file sur la glace.",
+        "Seul ou à deux ? Les rivaux de l’ordinateur savent jouer : ils se placent derrière le ballon, tirent vers le but et gardent leur cage. Le fond de l’accueil montre parfois un match, et le manuel présente le nouveau mode.",
+        "Sur les tables du blizzard, la pastille du vent compte maintenant les secondes avant la prochaine bourrasque : le temps de traverser à découvert… ou de te mettre à l’abri."
       ]
     }
   ]

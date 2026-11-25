@@ -9,6 +9,7 @@ import { BLIZZARD_PUSH, BLIZZARD_REFILL, blizzardHides, whiteoutAt } from './bli
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
+import { BALL_BLAST, BALL_BOUNCE, BALL_CAMBER, BALL_SLOPE, BALL_DRAG, BALL_ICE_DRAG, BALL_IDLE, BALL_KICK, BALL_MAX, BALL_PUSH, BALL_R, BALL_RESPAWN, GOAL_BOTTOM, GOAL_TOP, KICKOFF, goalAt, goalOf, ownGoal, type BallState } from './ballon';
 import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
@@ -244,6 +245,10 @@ interface AIState {
   aimValid: boolean;
   /** « Les bonshommes de neige » (iteration 53): no shot at a foe, but a snowman stands in the way: knock it down. */
   snow?: boolean;
+  /** « Le ballon » (iteration 55): the angle of a shot that sends the ball toward the right goal (undefined: none). */
+  kick?: number;
+  /** « Le ballon »: driving through the ball on purpose (its cells are not avoided). */
+  dribble?: boolean;
   wanderAim: number;
   wanderT: number;
   path: number[];
@@ -423,6 +428,10 @@ export class Game {
   hunt?: HuntState;
   /** « La couronne » (iteration 50): the crown of the round (undefined in every other mode). */
   crown?: CrownState;
+  /** « Le ballon » (iteration 55): the ball of the match (undefined in every other mode). */
+  ball?: BallState;
+  /** Where each tank stood last tick (« Le ballon »: how fast it drives into the ball). */
+  private ballPrev = new Map<number, [number, number]>();
   /**
    * « Les interrupteurs » (iteration 40): the table has switch blocks. A shell hitting one flips every gate: the red
    * ones sink into the floor and the blue ones rise, or the other way round. A gate never rises onto a tank, a mine or
@@ -609,6 +618,7 @@ export class Game {
     if (this.flags) this.stepFlags(DT);
     if (this.hunt) this.stepHunt(DT);
     if (this.crown) this.stepCrown(DT);
+    if (this.ball) this.stepBall(DT);
   }
 
   // -------------------------------------------------------------- « Les interrupteurs » (iteration 40)
@@ -788,6 +798,193 @@ export class Game {
     const out = [r2(c.x), r2(c.y), c.holder, c.state, c.state === 2 ? Math.max(0, Math.ceil((CROWN_RETURN - c.dropT) * 10)) : 0];
     for (const t of this.tanks) if (t.kind === 'player') out.push(t.id, Math.floor((c.held.get(t.id) ?? 0) * 10));
     return out;
+  }
+
+  // -------------------------------------------------------------- « Le ballon » (iteration 55)
+
+  /**
+   * The ball rolls (and slows down), bounces off the walls, is kicked by shells and pushed by the tanks driving into it,
+   * sets off the mines it rolls over; in a goal, the round is won. Destroyed tanks come back on their side.
+   */
+  stepBall(dt: number) {
+    const b = this.ball!;
+    b.time += dt;
+    b.idle += dt;
+    this.ctfRespawn(dt, BALL_RESPAWN);
+    if (b.scored) { b.vx *= 0.8; b.vy *= 0.8; return; } // in the net: it stays there
+    // shells: each one that touches the ball dies and sends it rolling away from the impact
+    for (const s of this.bullets) {
+      if (s.dead) continue;
+      const dx = b.x - s.x, dy = b.y - s.y, d = Math.hypot(dx, dy);
+      if (d >= BALL_R + BULLET_R + 0.02) continue;
+      s.dead = true;
+      const sp = Math.hypot(s.vx, s.vy) || 1;
+      // mostly along the line from the impact to the centre (a billiard shot), a little along the shell's own path
+      let kx = (d > 1e-6 ? dx / d : s.vx / sp) * 0.7 + (s.vx / sp) * 0.3, ky = (d > 1e-6 ? dy / d : s.vy / sp) * 0.7 + (s.vy / sp) * 0.3;
+      const k = Math.hypot(kx, ky) || 1;
+      kx /= k; ky /= k;
+      const kick = BALL_KICK * (s.heavy ? 1.6 : s.rocket ? 1.25 : 1);
+      b.vx += kx * kick; b.vy += ky * kick;
+      b.last = s.owner; b.idle = 0;
+      this.events.push(['ball', r2(s.x), r2(s.y), 0, s.owner, 0]);
+    }
+    this.bullets = this.bullets.filter((s) => !s.dead);
+    // tanks: the ball is pushed out of the hull, and rolls on at least at the speed the tank drove into it
+    for (const t of this.tanks) {
+      if (!t.alive || under(t)) { this.ballPrev.delete(t.id); continue; }
+      const prev = this.ballPrev.get(t.id);
+      this.ballPrev.set(t.id, [t.x, t.y]);
+      let nx = b.x - t.x, ny = b.y - t.y;
+      const d = Math.hypot(nx, ny), min = t.r + BALL_R;
+      if (d >= min) continue;
+      if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
+      b.x = t.x + nx * min; b.y = t.y + ny * min;
+      const tvx = prev ? (t.x - prev[0]) / dt : 0, tvy = prev ? (t.y - prev[1]) / dt : 0;
+      const into = tvx * nx + tvy * ny; // how fast the tank drives into the ball
+      const want = Math.max(into * 1.25, into > 0.3 ? BALL_PUSH * 0.6 : 0.4);
+      const vn = b.vx * nx + b.vy * ny;
+      if (vn < want) { b.vx += nx * (want - vn); b.vy += ny * (want - vn); }
+      if (into > 0.3) { b.last = t.id; b.idle = 0; }
+      // pinned against a wall: the tank is held back instead
+      const [rx, ry] = resolveCircle(this.tiles, b.x, b.y, BALL_R);
+      if (Math.hypot(rx - b.x, ry - b.y) > 0.01) {
+        b.x = rx; b.y = ry;
+        const ex = t.x - b.x, ey = t.y - b.y, e = Math.hypot(ex, ey) || 1;
+        if (e < min) { t.x = b.x + (ex / e) * min; t.y = b.y + (ey / e) * min; [t.x, t.y] = resolveCircle(this.tiles, t.x, t.y, t.r); }
+      }
+    }
+    // rolling, in two halves (fast balls do not go through walls), bouncing off what is solid for tanks
+    let sp = Math.hypot(b.vx, b.vy);
+    if (sp > BALL_MAX) { b.vx *= BALL_MAX / sp; b.vy *= BALL_MAX / sp; sp = BALL_MAX; }
+    let thud = 0;
+    const steps = Math.max(1, Math.ceil((sp * dt) / (BALL_R * 0.5)));
+    for (let i = 0; i < steps; i++) {
+      const h = dt / steps;
+      const nx = b.x + b.vx * h;
+      if (this.ballBlocked(nx, b.y)) { thud = Math.max(thud, Math.abs(b.vx)); b.vx = -b.vx * BALL_BOUNCE; b.vy *= 0.9; } else b.x = nx;
+      const ny = b.y + b.vy * h;
+      if (this.ballBlocked(b.x, ny)) { thud = Math.max(thud, Math.abs(b.vy)); b.vy = -b.vy * BALL_BOUNCE; b.vx *= 0.9; } else b.y = ny;
+    }
+    [b.x, b.y] = resolveCircle(this.tiles, b.x, b.y, BALL_R);
+    if (thud > 1.6) this.events.push(['ball', r2(b.x), r2(b.y), 3, Math.round(thud * 10), 0]);
+    if (this.belts.length && !onIce(this.belts, b.x, b.y)) [b.x, b.y] = beltStep(this.tiles, this.belts, b.x, b.y, BALL_R, dt); // the belts carry it along too
+    // the pitch is slightly hollow: near its edges (but not in front of the goals), the ball rolls back toward the middle
+    const ey = b.y < BALL_CAMBER ? BALL_CAMBER - b.y : b.y > H - BALL_CAMBER ? H - BALL_CAMBER - b.y : 0;
+    const mouth = b.y > GOAL_TOP && b.y < GOAL_BOTTOM;
+    const ex = mouth ? 0 : b.x < BALL_CAMBER ? BALL_CAMBER - b.x : b.x > W - BALL_CAMBER ? W - BALL_CAMBER - b.x : 0;
+    b.vx += ex * BALL_SLOPE * dt; b.vy += ey * BALL_SLOPE * dt;
+    const drag = this.ice && onIce(this.belts, b.x, b.y) ? BALL_ICE_DRAG : BALL_DRAG;
+    const f = Math.max(0, 1 - drag * dt);
+    b.vx *= f; b.vy *= f;
+    if (Math.hypot(b.vx, b.vy) < 0.04 && !ex && !ey) b.vx = b.vy = 0;
+    // mines: the ball sets them off like a tank would
+    for (const m of this.mines) {
+      if (m.dead || m.fuse >= 0 || m.t < 0.4 || m.seed !== undefined || m.remote) continue;
+      if (Math.hypot(m.x - b.x, m.y - b.y) < BALL_R + MINE_R + 0.1) { m.fuse = 0.55; m.by ??= b.last || undefined; }
+    }
+    // a goal?
+    const team = goalAt(b.x, b.y);
+    if (team) {
+      const last = this.tankById(b.last);
+      b.scored = team;
+      b.scorer = last && last.team === team ? last.id : 0; // an own goal counts, but nobody scored it
+      this.events.push(['ball', r2(b.x), r2(b.y), 1, team, last?.id ?? 0]);
+      const scorer = this.tankById(b.scorer);
+      if (scorer) this.botSay(scorer, EMOTE_HEHE);
+      return;
+    }
+    if (b.idle >= BALL_IDLE) {
+      // nobody has touched it for a long while (stuck in a corner?): back to the kick-off spot, if it is free
+      const [kx, ky] = KICKOFF;
+      if (!this.tanks.some((t) => t.alive && Math.hypot(t.x - kx, t.y - ky) < t.r + BALL_R + 0.1)) {
+        this.events.push(['ball', r2(b.x), r2(b.y), 2, r2(kx), r2(ky)]);
+        b.x = kx; b.y = ky; b.vx = b.vy = 0; b.idle = 0; b.last = 0;
+      }
+    }
+    this.ballBrains();
+  }
+
+  /** Would the ball at (x, y) overlap something solid for the tanks (walls, cork, holes, the edge of the table)? */
+  private ballBlocked(x: number, y: number): boolean {
+    for (let cy = Math.floor(y - BALL_R); cy <= Math.floor(y + BALL_R); cy++)
+      for (let cx = Math.floor(x - BALL_R); cx <= Math.floor(x + BALL_R); cx++) {
+        if (!isSolidTank(tileAt(this.tiles, cx, cy))) continue;
+        const px = Math.max(cx, Math.min(x, cx + 1)), py = Math.max(cy, Math.min(y, cy + 1));
+        if ((px - x) ** 2 + (py - y) ** 2 < BALL_R * BALL_R) return true;
+      }
+    return false;
+  }
+
+  /** A blast throws the ball away from it (harder the closer it is). */
+  blastBall(x: number, y: number, R: number, by: number) {
+    const b = this.ball;
+    if (!b || b.scored) return;
+    const dx = b.x - x, dy = b.y - y, d = Math.hypot(dx, dy), reach = R + 1.6;
+    if (d >= reach) return;
+    const k = BALL_BLAST * (0.45 + 0.55 * (1 - d / reach));
+    const a = d > 1e-6 ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
+    b.vx += Math.cos(a) * k; b.vy += Math.sin(a) * k;
+    b.last = by; b.idle = 0;
+    this.events.push(['ball', r2(b.x), r2(b.y), 4, by, 0]);
+  }
+
+  /**
+   * AI tanks of a match: get behind the ball (on the far side from the goal they attack), then drive through it or
+   * shoot it toward that goal. With two on a side, the one nearer home guards the goal while the ball is in its half.
+   * They still shoot at the foes they see on the way.
+   */
+  private ballBrains() {
+    const b = this.ball!;
+    for (const t of this.tanks) {
+      if (!t.alive || !t.ai || t.kind !== 'player') continue;
+      const ai = t.ai;
+      const [gx] = goalOf(t.team), [ox, oy] = ownGoal(t.team);
+      const gy = Math.max(GOAL_TOP + 0.9, Math.min(GOAL_BOTTOM - 0.9, b.y)); // the nearest point of the goal mouth
+      let ux = gx - b.x, uy = gy - b.y;
+      const ul = Math.hypot(ux, uy) || 1;
+      ux /= ul; uy /= ul;
+      const dx = b.x - t.x, dy = b.y - t.y, d = Math.hypot(dx, dy) || 1;
+      const behind = (dx * ux + dy * uy) / d; // 1: the tank, the ball and the goal are lined up
+      // a shot: the ball within reach, in a straight line, and the kick would send it the right way (or clear it from home)
+      ai.kick = undefined;
+      if (d < 8 && this.lineClear(t.x, t.y, b.x, b.y) && !this.mateInLine(t, b.x, b.y)) {
+        const homeD = Math.hypot(b.x - ox, b.y - oy);
+        const toOwn = ((ox - b.x) * dx + (oy - b.y) * dy) / ((Math.hypot(ox - b.x, oy - b.y) || 1) * d);
+        if (behind > (d < 3.5 ? 0.6 : 0.8) || (homeD < 6 && toOwn < -0.2)) ai.kick = Math.atan2(dy, dx);
+      }
+      // where to drive
+      const mates = this.tanks.filter((o) => o.alive && o.kind === 'player' && o.team === t.team);
+      const guard = mates.length >= 2 && mates.every((o) => o === t || Math.hypot(o.x - ox, o.y - oy) > Math.hypot(t.x - ox, t.y - oy));
+      const inOurHalf = (t.team === 1) === (b.x < W / 2);
+      let px: number, py: number;
+      ai.dribble = false;
+      if (guard && inOurHalf && Math.hypot(b.x - ox, b.y - oy) > 3) {
+        // the goalkeeper: on the line from its goal to the ball, three tiles out
+        const hx = b.x - ox, hy = b.y - oy, hl = Math.hypot(hx, hy) || 1;
+        px = ox + (hx / hl) * 3; py = oy + (hy / hl) * 3;
+      } else if (behind > 0.7 && d < 2.4) {
+        ai.dribble = true; // lined up: drive through the ball
+        px = b.x + ux * 1.3; py = b.y + uy * 1.3;
+      } else {
+        px = b.x - ux * (BALL_R + t.r + 0.7); py = b.y - uy * (BALL_R + t.r + 0.7);
+      }
+      px = Math.max(0.5, Math.min(W - 0.5, px)); py = Math.max(0.5, Math.min(H - 0.5, py));
+      let cell = Math.floor(py) * W + Math.floor(px);
+      if (isSolidTank(this.tiles[cell])) cell = Math.floor(b.y) * W + Math.floor(b.x);
+      if (cell !== ai.goal) { ai.goal = cell; ai.path = []; ai.pathT = 0; }
+    }
+  }
+
+  /** Is a teammate of t (alive) in the way of a straight shot from t to (x, y)? */
+  private mateInLine(t: Tank, x: number, y: number): boolean {
+    const seg = { x0: t.x, y0: t.y, x1: x, y1: y };
+    return this.tanks.some((o) => o !== t && o.alive && o.team === t.team && segCircle(seg, o.x, o.y, o.r + 0.12) >= 0);
+  }
+
+  /** The ball for the snapshots: [x, y, vx, vy]. */
+  netBall(): number[] | undefined {
+    const b = this.ball;
+    return b ? [r2(b.x), r2(b.y), r2(b.vx), r2(b.vy)] : undefined;
   }
 
   // -------------------------------------------------------------- « Le Givré » (iteration 31)
@@ -2540,6 +2737,7 @@ export class Game {
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
     }
+    if (this.ball) this.blastBall(m.x, m.y, R, m.by ?? m.owner);
     if (this.frost.size) this.meltFrost(m.x, m.y, R); // the blast melts the Givré's frost (iteration 31)
     if (this.snowy) this.clearSnow(m.x, m.y, R); // and blows the snow away (iteration 42)
     for (const o of this.mines) {
@@ -2921,6 +3119,7 @@ export class Game {
       }
     }
 
+    if (ai.kick !== undefined) { ai.aim = ai.kick; ai.aimValid = true; } // « Le ballon » (iteration 55): the ball first
     // turret
     if (!ai.aimValid && spec.skill === 0) {
       ai.wanderT -= DT;
@@ -2937,7 +3136,10 @@ export class Game {
       const aligned = spec.skill === 0 || Math.abs(angDiff(t.turret, ai.aim)) < 0.06;
       const res = aligned ? this.traceShot(t, t.turret, spec.bounces) : undefined;
       const seed = ai.seed;
-      if (seed && !seed.dead && Math.abs(angDiff(t.turret, Math.atan2(seed.y - t.y, seed.x - t.x))) < 0.05) {
+      if (ai.kick !== undefined && Math.abs(angDiff(t.turret, ai.kick)) < 0.07) {
+        // « Le ballon » (iteration 55): a shot into the ball, toward the right goal
+        if (this.tryFire(t)) { ai.kick = undefined; ai.hesitate = 0.3 + Math.random() * 0.3; }
+      } else if (seed && !seed.dead && Math.abs(angDiff(t.turret, Math.atan2(seed.y - t.y, seed.x - t.x))) < 0.05) {
         // the seed is in the sights: no hesitation, it will not dodge
         if (this.tryFire(t)) { ai.seed = undefined; ai.hesitate = 0.3; }
       } else if (ai.snow && aligned && !res?.hit) {
@@ -3196,6 +3398,13 @@ export class Game {
       for (let cy = Math.floor(m.y - k); cy <= Math.floor(m.y + k); cy++)
         for (let cx = Math.floor(m.x - k); cx <= Math.floor(m.x + k); cx++)
           if (cx >= 0 && cy >= 0 && cx < W && cy < H && Math.hypot(cx + 0.5 - m.x, cy + 0.5 - m.y) < (this.tiles[cy * W + cx] === Tile.Bridge ? R + BRIDGE_REACH : R)) blocked[cy * W + cx] = 1;
+    }
+    if (this.ball && !ai.dribble) {
+      // « Le ballon » (iteration 55): around the ball, not through it (that would push it the wrong way)
+      const b = this.ball;
+      for (let cy = Math.floor(b.y - 1.2); cy <= Math.floor(b.y + 1.2); cy++)
+        for (let cx = Math.floor(b.x - 1.2); cx <= Math.floor(b.x + 1.2); cx++)
+          if (cx >= 0 && cy >= 0 && cx < W && cy < H && cy * W + cx !== start && Math.hypot(cx + 0.5 - b.x, cy + 0.5 - b.y) < BALL_R + 0.75) blocked[cy * W + cx] = 1;
     }
     for (const bo of this.bolts) {
       for (let cy = Math.floor(bo.y - 2); cy <= Math.floor(bo.y + 2); cy++)
