@@ -212,7 +212,7 @@ setInterval(() => send({ t: 'ping', c: performance.now() }), 2000);
 
 // ------------------------------------------------------------------ online game state
 
-interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; C?: number[]; O?: number[]; at: number }
+interface Snap { k: number; a: number; T: Map<number, NetTank>; B: Map<number, NetBullet>; M: NetMine[]; P: NetBonus[]; F: NetFlag[]; L: number[][]; C?: number[]; O?: number[]; D: Map<number, number[]>; at: number } // D: « L’Illusionniste » (iteration 58), its mirages by id: [owner, x, y, body, turret]
 
 let online = false;
 let tiles: number[] = [];
@@ -487,6 +487,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (trainFight) setTimeout(() => toast('Le Tortillard : « Tchou-tchou ! » Ne reste jamais sur les rails devant lui. Son chasse-pierres renvoie les obus de face : vise ses flancs, son dos… ou pose une mine sur la voie ! Quand il siffle à l’arrêt, il repart en marche arrière.', 6000), 2200);
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
+  else if (enemies.some((e) => e.kind === 'conjurer')) setTimeout(() => toast('L’Illusionniste : « Abracadabra ! » Pouf, il se dédouble en trois tanks identiques. Deux sont des mirages : leurs obus ne font que des étoiles… mais lequel est le vrai ? Un obus suffit à dissiper un mirage, et ton tank passe à travers.', 6200), 2200);
   else if (enemies.some((e) => e.kind === 'spectre')) setTimeout(() => toast('Le Spectre : ses obus passent à travers le premier mur qu’ils touchent. Aucun abri ne te protège ! Écoute le « wouuh » d’un obus qui entre dans le mur… et bouge. Il recharge lentement : fonce-lui dessus.', 5600), 2200);
   else if (enemies.some((e) => e.kind === 'watcher')) setTimeout(() => toast(msg.night ? 'Le Veilleur balaie la nuit de son faisceau. S’il t’éclaire, l’alarme sonne, tous les ennemis savent où tu es… et sa fusée suit la lumière : sors du faisceau !' : 'Le Veilleur balaie la table de son faisceau. S’il t’éclaire, l’alarme sonne et sa fusée suit la lumière : sors du faisceau ! Hors de sa lumière, il ne voit rien.', 5400), 2200);
   else if (levelBlizzard) setTimeout(() => toast(coopLike(msg.mode) ? 'Blizzard : toutes les quinze secondes, une bourrasque blanchit la table. Plus personne ne voit à plus de trois cases… les ennemis non plus ! Profite-en pour avancer, et tire entre deux bourrasques.' : 'Blizzard : pendant les bourrasques, personne ne voit à plus de trois cases. Glisse-toi dans le dos des autres… mais chaque tir te trahit !', 6000), 2200);
@@ -683,8 +684,18 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
   }
 }
 
+/** « L’Illusionniste » (iteration 58): the flat list of its mirages, [id, owner, x, y, body, turret…], by id. */
+function netDecoys(d: unknown): Map<number, number[]> {
+  const out = new Map<number, number[]>();
+  if (!Array.isArray(d)) return out;
+  for (let i = 0; i + 5 < d.length; i += 6) {
+    const r = d.slice(i, i + 6) as number[];
+    if (r.every(Number.isFinite)) out.set(r[0], r.slice(1));
+  }
+  return out;
+}
 function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
-  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], C: Array.isArray(msg.C) && msg.C.length >= 5 ? msg.C : undefined, O: Array.isArray(msg.O) && msg.O.length >= 4 && msg.O.every(Number.isFinite) ? msg.O : undefined, at: performance.now() };
+  const s: Snap = { k: msg.k, a: msg.a, T: new Map(msg.T.map((t) => [t[0], t])), B: new Map(msg.B.map((b) => [b[0], b])), M: msg.M, P: msg.P ?? [], F: Array.isArray(msg.F) ? msg.F : [], L: Array.isArray(msg.L) ? msg.L.filter((l) => Array.isArray(l) && l.length >= 7) : [], C: Array.isArray(msg.C) && msg.C.length >= 5 ? msg.C : undefined, O: Array.isArray(msg.O) && msg.O.length >= 4 && msg.O.every(Number.isFinite) ? msg.O : undefined, D: netDecoys(msg.D), at: performance.now() };
   snaps.push(s);
   if (snaps.length > 40) snaps.shift();
   latestK = msg.k;
@@ -1010,6 +1021,12 @@ function onlineFrame(dt: number) {
     const tw = jumped(ta[1], ta[2], tb[1], tb[2], u); // through a portal: no sliding across the map
     tanks.push({ id: ta[0], x: lerp(ta[1], tb[1], tw), y: lerp(ta[2], tb[2], tw), body: lerpAng(ta[3], tb[3], u), turret: lerpAng(ta[4], tb[4], u), alive, invisible: !!(ta[5] & 2), fx: ta[5], hp: ta[6] ?? undefined });
   }
+  // « L’Illusionniste » (iteration 58): its mirages, drawn like it (and wand raised when it raises its own)
+  for (const [id, da] of a.D) {
+    const db = b.D.get(id) ?? da;
+    const fx = a.T.get(da[0])?.[5] ?? 1;
+    tanks.push({ id, x: lerp(da[1], db[1], u), y: lerp(da[2], db[2], u), body: lerpAng(da[3], db[3], u), turret: lerpAng(da[4], db[4], u), alive: true, invisible: false, fx: fx | 1, decoy: da[0] });
+  }
   renderer.syncTanks(tanks, myTankId, dt);
   lastTanks = tanks;
   updateBoss(tanks, (id) => a.T.get(id)?.[6] ?? 0, (id) => infos.get(id)?.hp ?? 0);
@@ -1079,6 +1096,19 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (e[5] === myTankId && online) break;
       renderer.muzzle(e[1], e[2], e[3], !!(e[4] & 1), e[5]);
       if (audible) { if (e[4] & SHELL_HEAVY) sfx.heavyShot(); else sfx.shot(!!(e[4] & 1)); if (e[4] & SHELL_GHOST) sfx.ghostShot(); }
+      break;
+    case 'abra': // « L’Illusionniste » (iteration 58) raises its wand
+      floater(e[1], e[2], 'Abracadabra !', enemyColor('conjurer'));
+      if (audible) sfx.abra();
+      break;
+    case 'conjure':
+      renderer.conjure(e[1], e[2], (e as number[]).slice(4));
+      if (audible) sfx.conjure();
+      break;
+    case 'poof':
+      renderer.starPuff(e[1], e[2], e[3] === 0 ? 1 : 0.45);
+      if (e[3] === 0) floater(e[1], e[2], 'Pouf !', enemyColor('conjurer'));
+      if (audible) sfx.poof(e[3] === 0);
       break;
     case 'bounce':
       renderer.spark(e[1], e[2]);
@@ -2854,6 +2884,7 @@ function attractFrame(dt: number) {
   while (attractAcc >= DT) {
     attractAcc -= DT;
     for (const t of g.tanks) attractPrev.set(t.id, { x: t.x, y: t.y, body: t.body, turret: t.turret });
+    for (const d of g.decoys) attractPrev.set(d.id, { x: d.x, y: d.y, body: d.body, turret: d.turret });
     if (g.ball) attractBallPrev = [g.ball.x, g.ball.y];
     g.step(new Map());
     if (attractTally && !g.frozen && !attractEnd) {
@@ -2872,6 +2903,11 @@ function attractFrame(dt: number) {
     const w = jumped(p.x, p.y, t.x, t.y, u);
     return { id: t.id, x: lerp(p.x, t.x, w), y: lerp(p.y, t.y, w), body: lerpAng(p.body, t.body, u), turret: lerpAng(p.turret, t.turret, u), alive: t.alive, invisible: false, fx: g.buffFlags(t), hp: t.maxHp > 1 ? t.hp : undefined };
   });
+  for (const d of g.decoys) { // « L’Illusionniste » (iteration 58): its mirages
+    const p = attractPrev.get(d.id) ?? d;
+    const o = g.tankById(d.owner);
+    tanks.push({ id: d.id, x: lerp(p.x, d.x, u), y: lerp(p.y, d.y, u), body: lerpAng(p.body, d.body, u), turret: lerpAng(p.turret, d.turret, u), alive: true, invisible: false, fx: (o ? g.buffFlags(o) : 0) | 1, decoy: d.owner });
+  }
   renderer.syncTanks(tanks, -1, dt);
   renderer.setFrost(g.frost.size || renderer.frostShown ? [...g.frost] : undefined); // the Givré's frost (iteration 31)
   if (g.snowy) renderer.setPacked(g.packed.keys()); // the trails in the snow (iteration 42)
@@ -2991,6 +3027,7 @@ function enemyName(kind: string) {
   if (kind === 'magnet') return 'l’Aimant';
   if (kind === 'mechanic') return 'le Mécano';
   if (kind === 'spectre') return 'le Spectre';
+  if (kind === 'conjurer') return 'l’Illusionniste';
   return `le ${label}`;
 }
 
@@ -3280,6 +3317,7 @@ const BESTIARY: [TankKind, string][] = [
   ['watcher', 'son faisceau balaie la table : s’il t’éclaire, sa fusée suit la lumière ; hors du faisceau, il ne voit rien'],
   ['mechanic', 'répare les épaves de ses amis, qui repartent rafistolés : abats-le en premier, ou pendant qu’il travaille'],
   ['spectre', 'ses obus traversent le premier mur qu’ils touchent : aucun abri ne tient, alors bouge, et fonce pendant qu’il recharge'],
+  ['conjurer', 'd’un coup de baguette, il devient trois : deux mirages aux obus d’étoiles et un seul vrai tank ; ton tank traverse les mirages'],
   ['boss', 'boss : salves d’obus tout autour de lui'],
   ['drill', 'boss : creuse sous la table et jaillit sous toi'],
   ['thunder', 'boss : appelle la foudre sur ta tête'],
@@ -3355,6 +3393,7 @@ function tankSvg(kind: string, known: boolean) {
     : kind === 'wagon' ? '<rect x="7" y="22" width="4" height="4" fill="#2a1d12"/><rect x="37" y="22" width="4" height="4" fill="#2a1d12"/>'
     : kind === 'mechanic' ? '<path d="M14 24 H34" stroke="#dfe5ea" stroke-width="4" stroke-linecap="round"/><path d="M36 19.5 a5 5 0 1 0 0 9" fill="none" stroke="#dfe5ea" stroke-width="3.4"/><rect x="5" y="19" width="7" height="10" rx="1.5" fill="#d8392f" stroke="#2a1d12" stroke-width="1"/>'
     : kind === 'spectre' ? '<path d="M15 31 V20 a9 9 0 0 1 18 0 V31 l-3 -2.5 l-3 2.5 l-3 -2.5 l-3 2.5 l-3 -2.5 Z" fill="#f4fffb" stroke="#2a1d12" stroke-width="1.1" opacity=".92"/><ellipse cx="21" cy="21" rx="1.6" ry="2.4" fill="#1d2b28"/><ellipse cx="27" cy="21" rx="1.6" ry="2.4" fill="#1d2b28"/><circle cx="24" cy="26.5" r="1.4" fill="#1d2b28"/>'
+    : kind === 'conjurer' ? '<rect x="18" y="15" width="12" height="11" rx="1.5" fill="#1e1a26"/><rect x="15" y="25" width="18" height="3" rx="1.5" fill="#1e1a26"/><rect x="18" y="22" width="12" height="2.4" fill="#c9a7f2"/><path d="M33 12 L41 6" stroke="#1e1a26" stroke-width="2"/><path d="M42 2.5 l1.2 2.6 l2.8 .3 l-2.1 1.9 l.6 2.8 l-2.5 -1.4 l-2.5 1.4 l.6 -2.8 l-2.1 -1.9 l2.8 -.3 Z" fill="#ffd34d"/>'
     : kind === 'watcher' ? '<path d="M24 24 L46 15 L46 33 Z" fill="#ffd648" opacity=".55"/><circle cx="24" cy="24" r="4" fill="#ffe680" stroke="#2a1d12" stroke-width="1.2"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
     : '';
@@ -3381,6 +3420,7 @@ function enemySheet(kind: string) {
   if (kind === 'watcher') tags.push('Phare tournant');
   if (kind === 'mechanic') tags.push('Répare les épaves', 'Une fois par tank');
   if (kind === 'spectre') tags.push('Obus fantômes', 'Traverse les murs');
+  if (kind === 'conjurer') tags.push('Deux mirages', 'Obus d’étoiles');
   if (kind === 'train') tags.push('Roule sur des rails', 'Chasse-pierres');
   if (kind === 'wagon') tags.push('Suit la locomotive');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
@@ -3719,7 +3759,7 @@ setupFeedback({
     const center = renderer.screenToArena((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
     return {
       arenaCenter: center && { x: r2(center.x), y: r2(center.y) },
-      tanks: lastTanks.filter((t) => inside(t.x, t.y)).map((t) => ({ ...tankLabel(t.id), x: r2(t.x), y: r2(t.y), alive: t.alive, invisible: t.invisible || undefined })),
+      tanks: lastTanks.filter((t) => inside(t.x, t.y)).map((t) => ({ ...tankLabel(t.id), x: r2(t.x), y: r2(t.y), alive: t.alive, invisible: t.invisible || undefined, mirage: t.decoy ? true : undefined })),
       bullets: lastBullets.filter((b) => inside(b.x, b.y, 0.45)).map((b) => ({ x: r2(b.x), y: r2(b.y), rocket: b.rocket || undefined })),
       mines: lastMines.filter((m) => inside(m.x, m.y, 0.1)).map((m) => ({ x: r2(m.x), y: r2(m.y), blinking: m.blink })),
       tiles: cells.slice(0, 40),
@@ -3746,7 +3786,7 @@ setupFeedback({
         teams: online && currentMode === 'drapeau' ? teamScores : undefined,
         players: lobbyPlayers.map((p) => ({ name: p.name, host: p.host, connected: p.connected, me: p.id === pid || undefined })),
         me: me ? { x: r2(me.x), y: r2(me.y), alive: me.alive, pendingInputs: pending.length } : undefined,
-        tanks: lastTanks.map((t) => ({ ...tankLabel(t.id), x: r2(t.x), y: r2(t.y), alive: t.alive })),
+        tanks: lastTanks.map((t) => ({ ...tankLabel(t.id), x: r2(t.x), y: r2(t.y), alive: t.alive, mirage: t.decoy ? true : undefined })),
         bullets: lastBullets.length,
         mines: lastMines.length,
         tick: online ? latestK : undefined,
@@ -4654,6 +4694,39 @@ if (params.has('demo')) {
         if (fired) { reelWanted = best.foe; return 1; }
       }
       return 0;
+    },
+    /** « L’Illusionniste » (iteration 58): every Illusionniste with no mirage out raises its wand now (the trick follows). */
+    conjure() {
+      const g = attract;
+      if (!g) return 0;
+      let n = 0;
+      for (const c of g.tanks) {
+        if (!c.alive || !c.conj || c.conj.warn > 0 || g.decoys.some((d) => d.owner === c.id)) continue;
+        c.conj.t = 0;
+        c.conj.warn = 0.7;
+        g.events.push(['abra', Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100, c.id]);
+        n++;
+      }
+      return n;
+    },
+    /** « L’Illusionniste » (iteration 58): the hero with the best clear line to a mirage fires at it (« Pouf ! »). */
+    decoyShot() {
+      const g = attract;
+      if (!g) return 0;
+      let best: { h: Tank; ang: number; d: number } | undefined;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player' || h.fireCd > 0.3) continue;
+        for (const d of g.decoys) {
+          const dist = Math.hypot(d.x - h.x, d.y - h.y);
+          if (dist > 12 || !g.lineClear(h.x, h.y, d.x, d.y)) continue;
+          if (!best || dist < best.d) best = { h, ang: Math.atan2(d.y - h.y, d.x - h.x), d: dist };
+        }
+      }
+      if (!best) return 0;
+      best.h.turret = best.ang;
+      if (best.h.ai) best.h.ai.aim = best.ang;
+      best.h.fireCd = 0;
+      return g.tryFire(best.h) ? 1 : 0;
     },
     /** « Le Spectre » (iteration 56): every Spectre fires now, straight through a wall, at the nearest hero hidden behind it. */
     spook() {

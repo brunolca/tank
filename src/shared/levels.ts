@@ -15,9 +15,9 @@ import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR
 //         / \\ « Les miroirs » (iteration 57): a mirror on the diagonal of its cell (a backslash is written twice in the
 //           strings); it stops tanks, turns shells a quarter turn (no bounce used up), and turns round on a flip of the switches
 //         1 2 player spawns
-//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)  P spectre (the Spectre)
+//         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)  P spectre (the Spectre)  I conjurer (the Illusionniste)
 export const ENEMY_CHARS: Record<string, TankKind> = {
-  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher', R: 'mechanic', P: 'spectre',
+  b: 'brown', a: 'ash', m: 'marine', y: 'yellow', p: 'pink', g: 'green', v: 'violet', w: 'white', k: 'black', s: 'steel', X: 'boss', D: 'drill', c: 'mason', t: 'thief', G: 'thunder', r: 'rampart', S: 'sower', A: 'magnet', f: 'frost', M: 'mortar', B: 'bombard', h: 'hopper', L: 'watcher', R: 'mechanic', P: 'spectre', I: 'conjurer',
 };
 
 export interface LevelDef {
@@ -1178,6 +1178,54 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '......................',
     ],
   },
+  // iteration 58: « L’Illusionniste ». A little theatre: rows of cork seats, the stage in the middle, and the conjurer
+  // in its top hat. When it sees you it taps its wand, vanishes in a puff of stars and comes back as three: only one is real
+  73: {
+    name: 'Le petit théâtre',
+    map: [
+      '......................',
+      '..1...................',
+      '.......o..o..o..o.....',
+      '..2...................',
+      '.......o..o..o..o.....',
+      '......................',
+      '.....###........###...',
+      '.....#..............a.',
+      '.....#.......I........',
+      '.....#..............r.',
+      '.....###........###...',
+      '......................',
+      '.......HH......HH.....',
+      '......................',
+      '..........s...........',
+      '......................',
+      '......................',
+    ],
+  },
+  // iteration 58: a hall of mirrors with two Illusionnistes: four mirages at once, shells of stars everywhere, and the real
+  // shells turned by the glass. Watch who drives through whom, and keep one shot for each
+  76: {
+    name: 'La galerie des glaces',
+    map: [
+      '......................',
+      '..1.....\\.....I...../.',
+      '......................',
+      '..2...##........##....',
+      '......#..........#..c.',
+      '......................',
+      '....../...HH...\\......',
+      '..........HH..........',
+      '...o......HH.......I..',
+      '...o......HH..........',
+      '....\\.....HH.../......',
+      '......................',
+      '......#..........#....',
+      '......##........##..r.',
+      '......................',
+      '.\\.......t........../.',
+      '......................',
+    ],
+  },
   // iteration 56: « Le Spectre ». Two Spectres haunt the rooms of a manor, behind walls two tiles thick (a Maçon thickens
   // them): their shells go straight through, yours bounce off… unless you pick up one of the « Passe-muraille » crates that fall here too
   71: {
@@ -1853,6 +1901,11 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
     if (opt.seed === undefined && mission > 72 && enemies.length >= 2) {
       const rs = rng(mission * 8363 + 103);
       for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'pink' || e.kind === 'violet' || e.kind === 'marine' || e.kind === 'white') && rs() < 0.15) { e.kind = 'spectre'; break; }
+    }
+    // the Illusionniste (iteration 58) plays its tricks from the 78th: one more stream, at most one of them, in place of a plain tank
+    if (opt.seed === undefined && mission > 77 && enemies.length >= 2) {
+      const ri = rng(mission * 6151 + 109);
+      for (const e of enemies) if ((e.kind === 'ash' || e.kind === 'pink' || e.kind === 'yellow' || e.kind === 'violet' || e.kind === 'green') && ri() < 0.15) { e.kind = 'conjurer'; break; }
     }
     // the daily twist « Nuit des spectres » (iteration 56): a share of the enemies (never the steel ones), at least one
     if ((opt.spectres ?? 0) > 0 && enemies.length) {

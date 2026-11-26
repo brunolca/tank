@@ -576,6 +576,8 @@ export class Room extends DurableObject<Env> {
     if (!att?.v || att.v < 51) tanks = tanks.map((t) => (t.kind === 'mechanic' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 56 draw the Spectre as a plain grey tank (its ghost shells already show since iteration 52)
     if (!att?.v || att.v < 56) tanks = tanks.map((t) => (t.kind === 'spectre' ? { ...t, kind: 'ash' } : t));
+    // tabs older than iteration 58 draw the Illusionniste as a pink tank (its mirages do not show, their shells look real)
+    if (!att?.v || att.v < 58) tanks = tanks.map((t) => (t.kind === 'conjurer' ? { ...t, kind: 'pink' } : t));
     // tabs older than iteration 49 draw the Tortillard as a Colosse and its wagons as grey tanks (gliding round the table)
     if (!att?.v || att.v < 49) tanks = tanks.map((t) => (t.kind === 'train' ? { ...t, kind: 'boss' } : t.kind === 'wagon' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {
@@ -817,10 +819,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), O = game.netBall(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), O = game.netBall(), D = game.netDecoys(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C, O });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C, O, D });
     }
 
     this.phaseTimer -= DT;

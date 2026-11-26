@@ -1,7 +1,7 @@
 {
-  "iteration": 57,
+  "iteration": 58,
   "date": "2026-11-26",
-  "title": "Les miroirs",
+  "title": "L’Illusionniste",
   "journal": [
     {
       "iteration": 1,
@@ -695,6 +695,18 @@
         "Là où il y a un interrupteur, chaque « Clac ! » fait pivoter tous les miroirs d’un quart de tour : les angles changent d’un coup, pour toi comme pour eux.",
         "Deux nouvelles missions : « Le palais des glaces » (la 47ᵉ) et « Les miroirs tournants » (la 62ᵉ, de nuit). Elles deviennent aussi des arènes de versus, et plus aucune arène ne se joue toujours dans le noir.",
         "Le ralenti s’écrie « Par le miroir ! » quand un reflet fait mouche, le manuel présente la nouvelle case, et l’atelier gagne deux pinceaux « miroir » (le tracé symétrique les penche dans l’autre sens)."
+      ]
+    },
+    {
+      "iteration": 58,
+      "date": "2026-11-26",
+      "title": "L’Illusionniste",
+      "notes": [
+        "Un nouvel ennemi lilas en chapeau haut-de-forme : l’Illusionniste. Quand il te voit, il lève sa baguette… « Abracadabra ! »",
+        "Pouf, il devient trois tanks identiques. Deux sont des mirages qui roulent en miroir et tirent en même temps que lui, mais leurs obus ne font que des étoiles.",
+        "Un seul obus dissipe un mirage. Les plus malins le remarquent : ton tank passe à travers les mirages, et les mines les ignorent.",
+        "Deux missions faites main : « Le petit théâtre » (mission 73) et « La galerie des glaces » (mission 76), avec deux Illusionnistes entre les miroirs. Ensuite, il se glisse dans les missions générées.",
+        "Sa fiche entre au bestiaire, et l’atelier gagne un pinceau « Illusionniste »."
       ]
     }
   ]

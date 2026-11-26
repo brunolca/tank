@@ -182,6 +182,29 @@ export const sfx = {
     tone(t + 0.04, 0.3, f * 2.01, f * 2.01, 0.025, 'sine');
     noise(t, 0.04, 7000, 2, 0.06, 'highpass');
   },
+  /** « L’Illusionniste » (iteration 58) raises its wand: a rising sparkle of little bells. */
+  abra() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [1046, 1318, 1568, 2093, 2637].forEach((f, i) => tone(t + i * 0.08, 0.2, f, f, 0.05, 'sine'));
+    noise(t, 0.5, 6000, 1, 0.04, 'highpass');
+  },
+  /** The trick: a soft « pff » of smoke and a glissando of bells down then up (three tanks where there was one). */
+  conjure() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.35, 1800, 0.7, 0.2, 'lowpass', 300);
+    tone(t, 0.3, 1900, 620, 0.06, 'triangle');
+    [784, 988, 1175].forEach((f, i) => { tone(t + 0.12 + i * 0.06, 0.4, f, f, 0.05, 'sine'); tone(t + 0.12 + i * 0.06, 0.3, f * 2, f * 2, 0.02, 'sine'); });
+  },
+  /** « Pouf ! » A mirage dispelled (a puff and a little falling chime), or a shell of stars bursting (just a fizz). */
+  poof(decoy: boolean) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, decoy ? 0.3 : 0.12, decoy ? 1400 : 3200, 0.8, decoy ? 0.22 : 0.1, 'lowpass', decoy ? 250 : 900);
+    if (decoy) { tone(t + 0.05, 0.25, 1568, 784, 0.06, 'sine'); tone(t + 0.1, 0.3, 2093, 1046, 0.03, 'sine'); }
+    else tone(t, 0.1, 2600, 3400, 0.03, 'sine');
+  },
   /** The mirrors turn on their pivots: a wooden creak and a glassy shimmer. */
   mirrorTurn() {
     if (!ctx) return;

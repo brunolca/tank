@@ -8,6 +8,7 @@ import { fogBanks, fogHides, type FogBank } from './fog';
 import { BLIZZARD_PUSH, BLIZZARD_REFILL, blizzardHides, whiteoutAt } from './blizzard';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
+import { CONJ_DECOYS, CONJ_EVERY, CONJ_FIRST, CONJ_LIFE, CONJ_MAX, CONJ_MIN, CONJ_RANGE, CONJ_WARN, POOF_DECOY, POOF_SHELL, type ConjureState, type Decoy } from './mirage';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
 import { BALL_BLAST, BALL_BOUNCE, BALL_CAMBER, BALL_SLOPE, BALL_DRAG, BALL_ICE_DRAG, BALL_IDLE, BALL_KICK, BALL_MAX, BALL_PUSH, BALL_R, BALL_RESPAWN, GOAL_BOTTOM, GOAL_TOP, KICKOFF, goalAt, goalOf, ownGoal, type BallState } from './ballon';
 import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, mirrorHit, mirrorTurn, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -61,6 +62,7 @@ export interface Tank {
   fixable?: boolean; // enemies: its wreck can be repaired (not fallen into a pit, not a boss, not patched already)
   rail?: RailState; // « Le Tortillard » (iteration 49): the locomotive
   car?: CarState; // and each of its wagons
+  conj?: ConjureState; // « L’Illusionniste » (iteration 58)
 }
 
 /**
@@ -216,6 +218,7 @@ export interface Bullet {
   ghost?: number; // « Passe-muraille » (iteration 52): 1 the next wall it meets lets it through, 2 inside that wall right now
   depth?: number; // how far it has flown inside the wall
   through?: boolean; // it went into a wall (the slow motion says « À travers le mur ! »)
+  mirage?: boolean; // « L’Illusionniste » (iteration 58): fired by a mirage, it bursts into harmless stars on whatever it hits
 }
 
 /** A lightning strike announced on the floor (storm missions): it falls when t reaches BOLT_WARN. */
@@ -281,7 +284,7 @@ type Pt = { x: number; y: number };
 const inTable = (x: number, y: number) => x - BULLET_R >= 0 && y - BULLET_R >= 0 && x + BULLET_R < W && y + BULLET_R < H;
 
 const PREF_DIST: Partial<Record<TankKind, number>> = {
-  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5, mechanic: 6.5, spectre: 5.5,
+  ash: 6, marine: 7, yellow: 5, pink: 5, violet: 4, white: 4.5, black: 3.5, steel: 6, mason: 4.5, thief: 3.5, rampart: 3, magnet: 4.5, frost: 3, mortar: 7, bombard: 6, hopper: 4.5, mechanic: 6.5, spectre: 5.5, conjurer: 5,
 };
 
 export type KillCb = (victim: Tank, killer: Tank | undefined) => void;
@@ -453,6 +456,8 @@ export class Game {
   gateWait = new Set<number>();
   /** « Le Tortillard » (iteration 49): the loop of rails its train runs on (undefined on every other table). */
   rail?: Rail;
+  /** « L’Illusionniste » (iteration 58): the mirages on the table. */
+  decoys: Decoy[] = [];
   tick = 0;
   frozen = true;
   private nextId = 1;
@@ -486,6 +491,7 @@ export class Game {
     if (kind === 'hopper') t.hop = { t: HOP_FIRST + Math.random() * 1.5, warn: 0, air: -1, dur: 1, x0: x, y0: y, x1: x, y1: y, foe: 0 };
     if (kind === 'watcher') t.watch = { dir: Math.random() < 0.5 ? 1 : -1, flipT: WATCH_FLIP[0] + Math.random() * (WATCH_FLIP[1] - WATCH_FLIP[0]), foe: 0, lock: 0, lost: 0 };
     if (kind === 'mechanic') t.fix = { wreck: 0, t: 0, look: 0.5 };
+    if (kind === 'conjurer') t.conj = { t: CONJ_FIRST + Math.random(), warn: 0, lx: x, ly: y };
     if (kind === 'train') this.putOnRail(t);
     if (kind === 'wagon') this.hookWagon(t);
     if (kind === 'frost') {
@@ -597,6 +603,11 @@ export class Game {
         this.rideBelt(t);
         continue;
       }
+      if (t.conj && this.updateConjurer(t)) { // « L’Illusionniste » (iteration 58): wand raised, it holds still
+        if (this.ice) this.driveTank(t, 0, 0, DT);
+        this.rideBelt(t);
+        continue;
+      }
       if (t.fix && this.updateMechanic(t)) { // « Le Mécano » (iteration 51): at work on a wreck, spanner turning
         if (this.ice) this.driveTank(t, 0, 0, DT);
         this.rideBelt(t);
@@ -612,6 +623,7 @@ export class Game {
       }
     }
     this.separateTanks();
+    if (this.decoys.length) this.stepDecoys(DT);
     if (this.frost.size || this.tanks.some((t) => t.kind === 'frost')) this.stepFrost(DT);
     if (this.snowy) this.stepSnow(DT);
     const sdt = DT / SUBSTEPS;
@@ -1774,6 +1786,144 @@ export class Game {
     return true;
   }
 
+  // -------------------------------------------------------------- « L’Illusionniste » (iteration 58)
+
+  /**
+   * Its trick, once a tick: true while it holds still, wand raised. With no mirage of its own left and a foe in
+   * sight, it starts the next one; at the end of the wand tap it conjures.
+   */
+  updateConjurer(t: Tank): boolean {
+    const c = t.conj!;
+    if (c.warn > 0) {
+      c.warn -= DT;
+      if (c.warn <= 0) this.conjure(t);
+      return true; // (the tick of the puff too: everyone reappears exactly on their spot)
+    }
+    if (this.decoys.some((d) => d.owner === t.id)) return false;
+    c.t -= DT;
+    if (c.t > 0) return false;
+    const foe = this.tanks.some((o) => o.alive && o.team !== t.team && !under(o) && Math.hypot(o.x - t.x, o.y - t.y) < CONJ_RANGE && this.canSee(t, o));
+    if (!foe) { c.t = 0.4; return false; }
+    c.warn = CONJ_WARN;
+    this.events.push(['abra', r2(t.x), r2(t.y), t.id]);
+    return true;
+  }
+
+  /**
+   * Puff! Three spots in sight of where it stood (that one included): it reappears on one of them at random, and a
+   * mirage on each of the others. With no room around it, the trick fizzles and it tries again a little later.
+   */
+  conjure(t: Tank) {
+    const c = t.conj!;
+    const spots: Pt[] = [{ x: t.x, y: t.y }];
+    for (let k = 0; k < 40 && spots.length < CONJ_DECOYS + 1; k++) {
+      const a = Math.random() * Math.PI * 2, d = CONJ_MIN + Math.random() * (CONJ_MAX - CONJ_MIN);
+      const x = t.x + Math.cos(a) * d, y = t.y + Math.sin(a) * d;
+      if (spots.some((s) => Math.hypot(s.x - x, s.y - y) < 1.5)) continue;
+      if (!this.hopOk(t, x, y) || !this.lineClear(t.x, t.y, x, y)) continue;
+      spots.push({ x, y });
+    }
+    if (spots.length < 2) { c.t = 1.2; return; }
+    const ox = t.x, oy = t.y;
+    const real = Math.floor(Math.random() * spots.length);
+    const me = spots[real];
+    if (real !== 0) {
+      t.x = me.x; t.y = me.y; t.vx = t.vy = 0;
+      if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; t.ai.goal = undefined; t.ai.lastX = t.x; t.ai.lastY = t.y; }
+    }
+    c.lx = t.x; c.ly = t.y;
+    c.t = CONJ_EVERY[0] + Math.random() * (CONJ_EVERY[1] - CONJ_EVERY[0]);
+    const ev: GameEvent = ['conjure', r2(ox), r2(oy), t.id];
+    let m = Math.floor(Math.random() * 2);
+    for (let i = 0; i < spots.length; i++) {
+      ev.push(r2(spots[i].x), r2(spots[i].y));
+      if (i === real) continue;
+      this.decoys.push({ id: this.nextId++, owner: t.id, team: t.team, x: spots[i].x, y: spots[i].y, body: t.body, turret: t.turret, life: CONJ_LIFE, m: m++ & 1 });
+    }
+    this.events.push(ev);
+  }
+
+  /** The mirages drive as mirror images of their Illusionniste, aim at the nearest foe, and fade away in time. */
+  stepDecoys(dt: number) {
+    for (const d of this.decoys) {
+      if (d.life <= 0) continue;
+      const t = this.tankById(d.owner);
+      if (!t || !t.alive || !t.conj) { this.poofDecoy(d); continue; }
+      d.life -= dt;
+      if (d.life <= 0) { this.poofDecoy(d); continue; }
+      let mx = t.x - t.conj.lx, my = t.y - t.conj.ly;
+      if (mx * mx + my * my > 0.25) mx = my = 0; // a portal jump: the mirage stays put
+      if (d.m === 0) mx = -mx; else my = -my;
+      if (mx * mx + my * my > 1e-6) {
+        [d.x, d.y] = moveCircle(this.tiles, d.x, d.y, mx, my, t.r);
+        d.body = d.m === 0 ? Math.PI - t.body : -t.body;
+      }
+      let best = Infinity, aim = d.turret;
+      for (const o of this.tanks) {
+        if (!o.alive || o.team === d.team || under(o)) continue;
+        const k = (o.x - d.x) ** 2 + (o.y - d.y) ** 2;
+        if (k < best) { best = k; aim = Math.atan2(o.y - d.y, o.x - d.x); }
+      }
+      d.turret = rotateToward(d.turret, aim, t.spec.turretSpeed * dt);
+    }
+    for (const t of this.tanks) if (t.conj) { t.conj.lx = t.x; t.conj.ly = t.y; }
+    if (this.decoys.some((d) => d.life <= 0)) this.decoys = this.decoys.filter((d) => d.life > 0);
+  }
+
+  /** The real one fired: each of its mirages fires too, a shell of stars straight down its own barrel. */
+  decoysFire(t: Tank, bounces: number) {
+    const sp = t.spec.rocket ? ROCKET_SPEED : BULLET_SPEED;
+    for (const d of this.decoys) {
+      if (d.owner !== t.id || d.life <= 0) continue;
+      const dx = Math.cos(d.turret), dy = Math.sin(d.turret), tip = t.r + 0.22;
+      const x = d.x + dx * tip, y = d.y + dy * tip;
+      this.events.push(['shot', r2(x), r2(y), r2(d.turret), t.spec.rocket ? 1 : 0, d.id]);
+      if (bulletBlocked(this.tiles, x, y, BULLET_R) || bulletBlocked(this.tiles, d.x + dx * t.r * 0.6, d.y + dy * t.r * 0.6, BULLET_R)) {
+        this.events.push(['poof', r2(x), r2(y), POOF_SHELL]);
+        continue;
+      }
+      this.bullets.push({ id: this.nextId++, owner: t.id, x, y, vx: dx * sp, vy: dy * sp, bounces, rocket: t.spec.rocket, dead: false, mirage: true });
+    }
+  }
+
+  /** Shells of the other side hitting a mirage: the shell is spent, the mirage gone. */
+  shootDecoys() {
+    for (const b of this.bullets) {
+      if (b.dead || b.mirage) continue;
+      const team = this.tankById(b.owner)?.team;
+      for (const d of this.decoys) {
+        if (d.life <= 0 || d.team === team) continue;
+        const rr = TANK_R + BULLET_R;
+        if ((d.x - b.x) ** 2 + (d.y - b.y) ** 2 < rr * rr) {
+          b.dead = true;
+          this.poofDecoy(d);
+          break;
+        }
+      }
+    }
+    if (this.decoys.some((d) => d.life <= 0)) this.decoys = this.decoys.filter((d) => d.life > 0);
+  }
+
+  /** A shell of stars meets a switch block or a snowman: it bursts there (nothing flips, nothing falls). */
+  mirageStops(x: number, y: number): boolean {
+    for (const [cx, cy] of [[x - BULLET_R, y - BULLET_R], [x + BULLET_R, y - BULLET_R], [x - BULLET_R, y + BULLET_R], [x + BULLET_R, y + BULLET_R]]) {
+      const tl = tileAt(this.tiles, Math.floor(cx), Math.floor(cy));
+      if (tl === Tile.Switch || isSnowman(tl)) return true;
+    }
+    return false;
+  }
+
+  poofShell(b: Bullet) {
+    b.dead = true;
+    this.events.push(['poof', r2(b.x), r2(b.y), POOF_SHELL]);
+  }
+
+  poofDecoy(d: Decoy) {
+    if (d.life === -Infinity) return; // already gone this tick
+    d.life = -Infinity;
+    this.events.push(['poof', r2(d.x), r2(d.y), POOF_DECOY, d.id]);
+  }
+
   /** A straight, wall-free line from (x0, y0) to (x1, y1) (what a shell would follow without bouncing). */
   lineClear(x0: number, y0: number, x1: number, y1: number): boolean {
     const d = Math.hypot(x1 - x0, y1 - y0);
@@ -2274,7 +2424,7 @@ export class Game {
 
   ownBullets(t: Tank) {
     let n = 0;
-    for (const b of this.bullets) if (b.owner === t.id && !b.dead) n++;
+    for (const b of this.bullets) if (b.owner === t.id && !b.dead && !b.mirage) n++;
     return n;
   }
   ownMines(t: Tank) {
@@ -2312,6 +2462,7 @@ export class Game {
         this.bullets.push({ id: this.nextId++, owner: t.id, x: fx, y: fy, vx: ex * sp, vy: ey * sp, bounces, rocket: t.spec.rocket, dead: false, volley: main.id, cork, heavy, ghost });
       }
     }
+    if (t.conj) this.decoysFire(t, bounces);
     return true;
   }
 
@@ -2531,6 +2682,7 @@ export class Game {
       if (b.ghost && this.ghostStep(b, dt)) continue; // « Passe-muraille » (iteration 52): through the wall, not off it
       const nx = b.x + b.vx * dt;
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
+        if (b.mirage && this.mirageStops(nx, b.y)) { this.poofShell(b); continue; } // a mirage flips no switch, knocks down no snowman
         if (this.gates) this.pressSwitch(nx, b.y, b.owner);
         if (this.snowmen && this.hitSnowman(nx, b.y, !!b.heavy)) {
           if (!b.heavy || bulletBlocked(this.tiles, nx, b.y, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
@@ -2542,6 +2694,7 @@ export class Game {
       } else b.x = nx;
       const ny = b.y + b.vy * dt;
       if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) {
+        if (b.mirage && this.mirageStops(b.x, ny)) { this.poofShell(b); continue; }
         if (this.gates) this.pressSwitch(b.x, ny, b.owner);
         if (this.snowmen && this.hitSnowman(b.x, ny, !!b.heavy)) {
           if (!b.heavy || bulletBlocked(this.tiles, b.x, ny, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
@@ -2572,6 +2725,7 @@ export class Game {
         if (!t.alive || under(t)) continue;
         const rr = t.r + BULLET_R;
         if ((t.x - b.x) ** 2 + (t.y - b.y) ** 2 < rr * rr) {
+          if (b.mirage) { this.poofShell(b); break; } // « L’Illusionniste » (iteration 58): only stars
           if ((t.kind === 'rampart' || t.kind === 'train') && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22), and the Tortillard's cowcatcher (iteration 49)
           if (t.mag?.on && b.owner !== t.id) { this.catchShell(t, b); break; } // the Aimant catches it (iteration 27)
           b.dead = true;
@@ -2580,6 +2734,7 @@ export class Game {
         }
       }
     }
+    if (this.decoys.length) this.shootDecoys();
     // bullet vs bullet
     for (let i = 0; i < this.bullets.length; i++) {
       const a = this.bullets[i];
@@ -2590,6 +2745,12 @@ export class Game {
         const rr = BULLET_R * 2 + 0.06;
         if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 < rr * rr) {
           // « Gros calibre »: a heavy shell smashes a lighter one and flies on (two heavy ones still cancel out)
+          if (a.mirage || b.mirage) { // a shell of stars bursts, a real one flies on
+            if (a.mirage) this.poofShell(a);
+            if (b.mirage) this.poofShell(b);
+            if (a.dead) break;
+            continue;
+          }
           if (a.heavy !== b.heavy) (a.heavy ? b : a).dead = true;
           else a.dead = b.dead = true;
           this.events.push(['pop', r2((a.x + b.x) / 2), r2((a.y + b.y) / 2)]);
@@ -2603,6 +2764,7 @@ export class Game {
       for (const m of this.mines) {
         if (m.dead || (m.seed !== undefined && m.t < SEED_FLIGHT)) continue; // a seed still in the air: the shell flies under it
         if (Math.hypot(m.x - b.x, m.y - b.y) < (m.seed !== undefined ? SEED_R : MINE_R) + BULLET_R) {
+          if (b.mirage) { this.poofShell(b); break; } // it sets nothing off
           b.dead = true;
           m.by = b.owner;
           this.explodeMine(m);
@@ -2766,6 +2928,7 @@ export class Game {
     for (const b of this.bullets) {
       if (!b.dead && Math.hypot(b.x - m.x, b.y - m.y) < R) b.dead = true;
     }
+    for (const d of this.decoys) if (d.life > 0 && Math.hypot(d.x - m.x, d.y - m.y) < R + TANK_R * 0.4) this.poofDecoy(d);
     if (this.ball) this.blastBall(m.x, m.y, R, m.by ?? m.owner);
     if (this.frost.size) this.meltFrost(m.x, m.y, R); // the blast melts the Givré's frost (iteration 31)
     if (this.snowy) this.clearSnow(m.x, m.y, R); // and blows the snow away (iteration 42)
@@ -2835,6 +2998,7 @@ export class Game {
     if (t.rail) this.derail(t, killer); // first, so the locomotive's own blast is the last one (the replay shows it)
     t.alive = false;
     t.chill = undefined;
+    if (t.conj) { t.conj.warn = 0; for (const d of this.decoys) if (d.owner === t.id) this.poofDecoy(d); } // the trick ends with it
     if (t.kind !== 'player') {
       // « Le Mécano » (iteration 51): an enemy's wreck it can put back together, unless it fell into a pit or was patched already
       t.diedAt = this.tick;
@@ -3003,7 +3167,7 @@ export class Game {
     return (b.shield ? BONUS_INFO.shield.flag : 0) | (b.turbo > 0 ? BONUS_INFO.turbo.flag : 0)
       | (b.bounce > 0 ? BONUS_INFO.bounce.flag : 0) | (b.fan > 0 ? BONUS_INFO.fan.flag : 0)
       | (b.heavy ? BONUS_INFO.heavy.flag : 0) | (b.ghost ? BONUS_INFO.ghost.flag : 0) | (b.remote ? BONUS_INFO.remote.flag : 0) | (t.chill !== undefined ? FLAG_FROZEN : 0)
-      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0) | (t.watch && t.watch.foe ? FLAG_SPOT : 0) | (t.fix && t.fix.t > 0 ? FLAG_REPAIR : 0) | (t.patched ? FLAG_PATCHED : 0)
+      | (t.boss && (t.boss.warn > 0 || t.boss.dig === 1) ? FLAG_CHARGING : 0) | (t.mortar && t.mortar.warn > 0 ? FLAG_CHARGING : 0) | (t.conj && t.conj.warn > 0 ? FLAG_CHARGING : 0) | (t.boss?.rage ? FLAG_RAGE : 0) | (under(t) && !t.hop ? FLAG_BURROW : 0) | (t.hop ? (t.hop.air >= 0 ? FLAG_AIR : t.hop.warn > 0 ? FLAG_CHARGING : 0) : 0) | (this.night && t.alert ? FLAG_ALERT : 0) | (t.watch && t.watch.foe ? FLAG_SPOT : 0) | (t.fix && t.fix.t > 0 ? FLAG_REPAIR : 0) | (t.patched ? FLAG_PATCHED : 0)
       | (t.mag ? (t.mag.on ? FLAG_MAGNET | (t.mag.held > 0 && t.mag.t < MAGNET_WARN ? FLAG_CHARGING : 0) : 0) | (Math.min(7, t.mag.held) << MAGNET_HELD_SHIFT) : 0);
   }
   /**
@@ -3022,6 +3186,13 @@ export class Game {
   }
   netBonuses(): NetBonus[] {
     return this.bonuses.map((c): NetBonus => c.gold ? [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), 0, 1] : [c.id, r2(c.x), r2(c.y), BONUS_KINDS.indexOf(c.kind), c.t > BONUS_LIFE - 3 ? 1 : 0]);
+  }
+  /** « L’Illusionniste » (iteration 58): its mirages, flat [id, owner, x, y, body, turret…] (undefined when there are none). */
+  netDecoys(): number[] | undefined {
+    if (!this.decoys.length) return undefined;
+    const out: number[] = [];
+    for (const d of this.decoys) out.push(d.id, d.owner, r2(d.x), r2(d.y), r2(d.body), r2(d.turret));
+    return out;
   }
   netBullets(): NetBullet[] {
     return this.bullets.map((b) => [b.id, r2(b.x), r2(b.y), r2(b.vx), r2(b.vy), (b.rocket ? 1 : 0) | (b.heavy ? SHELL_HEAVY : 0) | (b.ghost ? SHELL_GHOST : 0), b.owner]);

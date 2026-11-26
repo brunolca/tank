@@ -13,7 +13,7 @@ import { CROWN_RETURN } from '../shared/couronne';
 import { BALL_COLORS, BALL_R, GOAL_BOTTOM, GOAL_LINE, GOAL_TOP } from '../shared/ballon';
 import type { TankInfo } from '../shared/protocol';
 
-export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number } // hp: hit points left (tough tanks only)
+export interface RTank { id: number; x: number; y: number; body: number; turret: number; alive: boolean; invisible: boolean; fx?: number; hp?: number; decoy?: number } // hp: hit points left (tough tanks only); decoy: a mirage of that Illusionniste (iteration 58)
 export interface RBonus { id: number; x: number; y: number; kind: number; blink: boolean; gold?: boolean } // gold: « La chasse aux caisses » (iteration 37), the golden crate
 export interface RBullet { id: number; x: number; y: number; vx: number; vy: number; rocket: boolean; heavy?: boolean; ghost?: boolean; color?: number } // ghost: a shell of the « Passe-muraille » not yet through its wall (iteration 52) // color: the shooter's, for player shells
 export interface RMine { id: number; x: number; y: number; blink: boolean; seed?: number; remote?: boolean } // remote: a mine of the « Détonateur » (iteration 52) // seed: a seed of the Semeur (iteration 25), its age in seconds
@@ -216,6 +216,9 @@ interface TankView {
   leapRing?: THREE.Mesh; // and the ring on the floor where it will land
   squash?: number; // the bounce of its landing, fading out
   sheet?: THREE.Group; // « Le Spectre » (iteration 56): its ghost sheet, floating over the turret (it puffs up when it fires)
+  hat?: THREE.Group; // « L’Illusionniste » (iteration 58): its top hat (it jumps off the turret for a trick), and its wand
+  wand?: THREE.Group;
+  decoy?: boolean; // one of its mirages: drawn exactly like it (removed as soon as the snapshots drop it)
   spanner?: THREE.Group; // « Le Mécano » (iteration 51): the big spanner on its turret (it turns while it works)
   patch?: THREE.Group; // a tank put back together by a Mécano: two crossed strips of plaster on its hull
   fixing?: boolean; // its wreck is being repaired right now (drawn half sunk and tilted, rising as the work goes on)
@@ -715,6 +718,26 @@ const spectreGeo = {
   eye: new THREE.SphereGeometry(0.05, 10, 8),
   mouth: new THREE.TorusGeometry(0.035, 0.014, 6, 12),
 };
+// « L’Illusionniste » (iteration 58): a black top hat with a lilac ribbon on its turret, and a magic wand (black, white tip)
+const conjGeo = {
+  brim: new THREE.CylinderGeometry(0.2, 0.2, 0.025, 20),
+  crown: new THREE.CylinderGeometry(0.13, 0.14, 0.24, 18),
+  ribbon: new THREE.CylinderGeometry(0.142, 0.142, 0.05, 18),
+  wand: new THREE.CylinderGeometry(0.016, 0.016, 0.34, 8).rotateZ(Math.PI / 2).translate(0.17, 0, 0),
+  tip: new THREE.CylinderGeometry(0.019, 0.019, 0.07, 8).rotateZ(Math.PI / 2).translate(0.34, 0, 0),
+  star: starGeo(0.07, 0.03),
+};
+function starGeo(R: number, r: number): THREE.BufferGeometry {
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2, k = i % 2 ? r : R;
+    if (i === 0) sh.moveTo(Math.cos(a) * k, Math.sin(a) * k); else sh.lineTo(Math.cos(a) * k, Math.sin(a) * k);
+  }
+  return new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: false }).translate(0, 0, -0.01);
+}
+const topHatMat = new THREE.MeshStandardMaterial({ color: 0x1e1a26, roughness: 0.55, metalness: 0.05 });
+const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xc9a7f2, roughness: 0.4, emissive: 0x7a4fd0, emissiveIntensity: 0.15 });
+const wandTipMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 const sheetMat = new THREE.MeshStandardMaterial({ color: 0xf4fffb, emissive: 0x9fe8d8, emissiveIntensity: 0.25, roughness: 0.55, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
 const spookEyeMat = new THREE.MeshStandardMaterial({ color: 0x1d2b28, emissive: 0x3dffc0, emissiveIntensity: 0, roughness: 0.3 });
 // « Le Tortillard » (iteration 49): a toy steam locomotive (boiler, cab, chimney, cowcatcher, red wheels) and its flat
@@ -1316,6 +1339,35 @@ function buildTank(info: TankInfo): TankView {
     g.add(mouth);
     turret.add(g);
     view.sheet = g;
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
+  }
+  if (info.kind === 'conjurer') {
+    // a top hat on the turret, and a wand held up on its left, a golden star at its tip
+    const hat = new THREE.Group();
+    const brim = new THREE.Mesh(conjGeo.brim, topHatMat);
+    const crown = new THREE.Mesh(conjGeo.crown, topHatMat);
+    crown.position.y = 0.13;
+    const ribbon = new THREE.Mesh(conjGeo.ribbon, ribbonMat);
+    ribbon.position.y = 0.04;
+    hat.add(brim, crown, ribbon);
+    hat.position.set(-0.05, 0.16, 0);
+    turret.add(hat);
+    const wand = new THREE.Group();
+    const stick = new THREE.Mesh(conjGeo.wand, topHatMat);
+    const tip = new THREE.Mesh(conjGeo.tip, wandTipMat);
+    const starMat = new THREE.MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb000, emissiveIntensity: 0.3, roughness: 0.35, metalness: 0.3 });
+    const star = new THREE.Mesh(conjGeo.star, starMat);
+    star.position.x = 0.4;
+    star.rotation.y = Math.PI / 2;
+    wand.add(stick, tip, star);
+    wand.userData.star = star;
+    wand.userData.mat = starMat;
+    wand.position.set(0, 0.12, -0.24);
+    wand.rotation.y = 0.5;
+    wand.rotation.z = 0.5;
+    turret.add(wand);
+    view.hat = hat;
+    view.wand = wand;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
   if (info.kind === 'mechanic') {
@@ -2130,6 +2182,7 @@ export class Renderer {
     this.repairs.clear();
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); if (t.lantern) this.scene.remove(t.lantern.beam); }
     this.tanks.clear();
+    this.decoyViews.clear();
     for (const b of this.bullets.values()) this.scene.remove(b);
     this.bullets.clear();
     for (const m of this.mines.values()) { this.scene.remove(m); if (m.userData.ring) this.scene.remove(m.userData.ring); }
@@ -3735,6 +3788,32 @@ export class Renderer {
 
   // ---------------------------------------------------------------- per-frame state
 
+  /** « L’Illusionniste » (iteration 58): the mirages on screen, by id (their views also sit in `tanks`, so a shot recoils them). */
+  private decoyViews = new Set<number>();
+  /** Build a view for each new mirage (a copy of its Illusionniste), take away those the snapshots no longer have. */
+  private syncDecoys(list: RTank[]) {
+    const seen = new Set<number>();
+    for (const t of list) {
+      if (!t.decoy) continue;
+      seen.add(t.id);
+      if (this.tanks.has(t.id)) continue;
+      const owner = this.tanks.get(t.decoy);
+      if (!owner) continue;
+      const v = buildTank({ ...owner.info, id: t.id });
+      v.decoy = true;
+      this.tanks.set(t.id, v);
+      this.scene.add(v.root);
+      this.decoyViews.add(t.id);
+    }
+    for (const id of this.decoyViews) {
+      if (seen.has(id)) continue;
+      const v = this.tanks.get(id);
+      if (v) { this.scene.remove(v.root); for (const m of v.materials) m.dispose(); }
+      this.tanks.delete(id);
+      this.decoyViews.delete(id);
+    }
+  }
+
   syncTanks(list: RTank[], myId: number, dt: number) {
     this.fogSeers.length = 0;
     if (this.fogSeed !== undefined || this.blizzOn) {
@@ -3752,6 +3831,7 @@ export class Renderer {
     }
     if (this.snowmen.size) this.animateSnowmen(list, dt);
     if (this.mirrors.size) this.animateMirrors(dt);
+    if (this.decoyViews.size || list.some((t) => t.decoy)) this.syncDecoys(list);
     for (const t of list) {
       const v = this.tanks.get(t.id);
       if (!v) continue;
@@ -3774,6 +3854,7 @@ export class Renderer {
       if (!v.patch && (t.fx ?? 0) & FLAG_PATCHED) this.addPatch(v);
       if (v.spanner) this.tankMechanic(v, t, dt, visible);
       if (v.sheet) this.tankSpectre(v, t, dt, visible);
+      if (v.wand) this.tankConjurer(v, t, dt, visible);
       v.root.position.set(t.x, 0, t.y);
       v.hull.rotation.y = -t.body;
       v.turret.rotation.y = -t.turret;
@@ -4039,6 +4120,46 @@ export class Renderer {
     if (Math.random() < 0.45) {
       const a = Math.random() * Math.PI * 2;
       this.glow.emit({ x: rep.x + Math.cos(a) * 0.25, y: 0.35, z: rep.y + Math.sin(a) * 0.25, vx: Math.cos(a) * 1.8, vy: 1.2 + Math.random() * 1.5, vz: Math.sin(a) * 1.8, life: 0.3 + Math.random() * 0.2, s0: 0.05, s1: 0.01, c0: 0xfff6c0, c1: 0xffa030, drag: 1, grav: 7 });
+    }
+  }
+
+  /**
+   * « L’Illusionniste » (iteration 58): its wand sways as it drives; wand raised (FLAG_CHARGING), it waves it in
+   * circles, the star glows and sparkles, the hat lifts off the turret. Its mirages do exactly the same.
+   */
+  private tankConjurer(v: TankView, t: RTank, dt: number, visible: boolean) {
+    const charging = !!((t.fx ?? 0) & FLAG_CHARGING);
+    const w = v.wand!, hat = v.hat!;
+    const ph = (v.decoy ? 0 : t.id) * 0.9; // (a mirage sways in step with... nobody in particular)
+    const k = (w.userData.k = (w.userData.k ?? 0) + ((charging ? 1 : 0) - (w.userData.k ?? 0)) * Math.min(1, dt * 8)) as number;
+    w.rotation.z = 0.5 + k * (0.7 + Math.sin(this.time * 16) * 0.35) + Math.sin(this.time * 3 + ph) * 0.06;
+    w.rotation.y = 0.5 + k * Math.cos(this.time * 16) * 0.4;
+    const star = w.userData.star as THREE.Mesh;
+    star.rotation.x += dt * (1.5 + k * 12);
+    (w.userData.mat as THREE.MeshStandardMaterial).emissiveIntensity = 0.3 + k * 1.6 + this.night * 0.6;
+    hat.position.y = 0.16 + k * (0.12 + Math.abs(Math.sin(this.time * 9)) * 0.06);
+    hat.rotation.x = k * Math.sin(this.time * 7) * 0.2;
+    if (visible && charging && Math.random() < dt * 30) {
+      const a = t.turret - Math.PI / 2;
+      this.glow.emit({ x: t.x + Math.cos(a) * 0.3 + Math.cos(t.turret) * 0.3, y: 0.95, z: t.y + Math.sin(a) * 0.3 + Math.sin(t.turret) * 0.3, vx: (Math.random() - 0.5) * 1.6, vy: 0.6 + Math.random(), vz: (Math.random() - 0.5) * 1.6, life: 0.5, s0: 0.07, s1: 0.01, c0: 0xffffff, c1: Math.random() < 0.5 ? 0xffd34d : 0xc9a7f2, drag: 1.5 });
+    }
+  }
+
+  /** « L’Illusionniste » (iteration 58): the puff of the trick, where it stood, and a burst of stars on each of the three spots. */
+  conjure(x: number, y: number, spots: number[]) {
+    this.starPuff(x, y, 1.3);
+    for (let i = 0; i + 1 < spots.length; i += 2) this.starPuff(spots[i], spots[i + 1], 1);
+  }
+
+  /** A mirage dispelled (big) or a shell of stars bursting (small): lilac smoke and a shower of little stars. */
+  starPuff(x: number, y: number, k: number) {
+    for (let i = 0; i < 14 * k; i++) {
+      const a = Math.random() * Math.PI * 2, sp = (0.5 + Math.random() * 1.6) * k;
+      this.smoke.emit({ x: x + Math.cos(a) * 0.15, y: 0.35 + Math.random() * 0.3, z: y + Math.sin(a) * 0.15, vx: Math.cos(a) * sp, vy: 0.3 + Math.random() * 0.6, vz: Math.sin(a) * sp, life: 0.55 + Math.random() * 0.35, s0: 0.12 * k, s1: 0.4 * k, c0: 0xe9dcff, c1: 0xfaf6ff, drag: 3 });
+    }
+    for (let i = 0; i < 18 * k; i++) {
+      const a = Math.random() * Math.PI * 2, sp = (1 + Math.random() * 2.4) * k;
+      this.glow.emit({ x, y: 0.5, z: y, vx: Math.cos(a) * sp, vy: 1 + Math.random() * 2, vz: Math.sin(a) * sp, life: 0.4 + Math.random() * 0.35, s0: 0.08, s1: 0.01, c0: 0xffffff, c1: Math.random() < 0.5 ? 0xffd34d : 0xc9a7f2, drag: 2, grav: 4 });
     }
   }
 

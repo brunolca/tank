@@ -70,6 +70,9 @@ export type GameEvent =
   | ['detonate', number, number, number] // x y ownerId: a remote mine is set off by its owner (iteration 52)
   | ['glint', number, number, number, number] // x y cx cy: « Les miroirs » (iteration 57), a shell was turned by the mirror of that cell (older tabs ignore it)
   | ['mirror', number, number, number] // cx cy tile: on a flip of the switches, that mirror turned a quarter turn (older tabs are told to reload)
+  | ['abra', number, number, number] // x y tankId: « L’Illusionniste » (iteration 58) raises its wand (older tabs ignore all three)
+  | ['conjure', number, number, number, ...number[]] // x y tankId, then x y of each spot it reappears on (itself on one, a mirage on the others)
+  | ['poof', number, number, number] | ['poof', number, number, number, number] // x y what [mirageId]: 0 a mirage is dispelled, 1 a shell of stars bursts
   | ['ghost', number, number, number] // x y phase (« Passe-muraille », iteration 52): 0 into a wall, 1 out the other side, 2 faded inside
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number] // cx cy: a cork block, or a snowman (iteration 53), is gone
@@ -205,7 +208,8 @@ export type ServerMsg =
       tally?: Tally; // « Le bilan » (iteration 45), end of a coop-like mission: the count and the three stars (older tabs ignore it)
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
-  | { t: 'snap'; k: number; a: number; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string; C?: number[]; O?: number[] } // O: « Le ballon » (iteration 55), the ball [x, y, vx, vy]; C: « La couronne » (iteration 50), [x, y, holder, state (0 cushion, 1 worn, 2 dropped), tenths before it flies home, then pairs (tankId, tenths of reign)]; N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
+  // D: « L’Illusionniste » (iteration 58), its mirages, flat [id, ownerTankId, x, y, body, turret…] (older tabs ignore it)
+  | { t: 'snap'; k: number; a: number; D?: number[]; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string; C?: number[]; O?: number[] } // O: « Le ballon » (iteration 55), the ball [x, y, vx, vy]; C: « La couronne » (iteration 50), [x, y, holder, state (0 cushion, 1 worn, 2 dropped), tenths before it flies home, then pairs (tankId, tenths of reign)]; N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

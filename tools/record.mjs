@@ -7,11 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 47, arms: ['canon', 'ricochet'], hud: true, seconds: 20, mirrorShots: [3.5, 9, 14.5], caption: 'Itération 57 : les miroirs', sub: 'Un obus sur la vitre repart à angle droit, sans perdre de ricochet' },
-  { mission: 62, arms: ['fusee', 'canon'], hud: true, seconds: 17, switchShots: [3, 10], mirrorShots: [6, 13], caption: 'Les miroirs tournants, de nuit', sub: 'Un obus sur l’interrupteur… « Clac ! » et tous les miroirs pivotent' },
-  { mission: 47, arms: ['canon', 'sapeur'], hud: true, seconds: 14, mirrorShots: [2.5, 5.5], replays: [8.5], caption: 'Par le miroir !', sub: 'Le ralenti raconte le reflet qui a fait mouche' },
-  { versus: [20], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 12, switchShots: [4], caption: 'Deux nouvelles arènes de versus', sub: 'Tirer derrière les coins, à quatre' },
-  { manual: [7, ['terrain']], seconds: 7, caption: 'Une nouvelle case au manuel', sub: 'Et deux pinceaux « miroir » dans l’atelier' },
+  { mission: 73, arms: ['canon', 'ricochet'], hud: true, seconds: 22, conjures: [2.5, 12.5], decoyShots: [5, 7, 15.5], newcomers: [[9, ['conjurer']]], caption: 'Itération 58 : l’Illusionniste', sub: '« Abracadabra ! » Il devient trois… mais un seul est le vrai' },
+  { mission: 76, arms: ['fusee', 'canon'], hud: true, seconds: 20, conjures: [2, 11], decoyShots: [4.5, 6.5, 13.5], mirrorShots: [9], caption: 'La galerie des glaces', sub: 'Deux Illusionnistes, quatre mirages, des miroirs partout' },
+  { mission: 73, arms: ['canon', 'sapeur'], hud: true, seconds: 13, conjures: [2], decoyShots: [4, 5.5], caption: 'Pouf !', sub: 'Un obus dissipe un mirage, et leurs obus ne font que des étoiles' },
+  { manual: [8, ['bestiaire'], 'conjurer'], seconds: 8, caption: 'Nouveau au bestiaire', sub: 'Et un pinceau « Illusionniste » dans l’atelier' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -111,6 +110,8 @@ try {
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
       for (const s of shot.mirrorShots ?? []) setTimeout(() => d.mirrorShot?.(), s * 1000); // « Les miroirs » (iteration 57): a shell turned by a mirror onto an enemy
+      for (const s of shot.conjures ?? []) setTimeout(() => d.conjure?.(), s * 1000); // « L’Illusionniste » (iteration 58): every Illusionniste does its trick
+      for (const s of shot.decoyShots ?? []) setTimeout(() => d.decoyShot?.(), s * 1000); // and a hero shoots a mirage (« Pouf ! »)
       for (const s of shot.spooks ?? []) setTimeout(() => d.spook?.(), s * 1000); // « Le Spectre » (iteration 56): every Spectre fires through a wall at a hero
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
       for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way

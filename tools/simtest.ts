@@ -3859,3 +3859,141 @@ console.log('total', Date.now() - t0, 'ms');
   if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).tiles.includes(Tile.MirrorA)).some(Boolean)) fail('aucune arène de versus à miroirs');
   if (process.exitCode !== 1) console.log(`miroirs OK (${cleared} partie(s) gagnée(s) par l’IA, ${glints} reflet(s), ${turns} quart(s) de tour, ${per.toFixed(3)} ms/tick)`);
 }
+
+// « L’Illusionniste » (iteration 58): with a foe in sight it raises its wand, then reappears as three tanks (itself on
+// one spot, a mirage on each of the others); mirages fire when it fires, shells of stars that hurt nobody and set off
+// nothing; a shell dispels a mirage and is spent; all vanish with it; mines ignore them; missions 73 and 76 have it,
+// the generated ones from the 78th, never the daily challenge nor the mole; the workshop knows it; the AI clears its missions
+{
+  const fail = (m: string) => { console.error('ILLUSIONNISTE:', m); process.exitCode = 1; };
+  const open = () => new Array(W * H).fill(Tile.Empty);
+  const cast = (g: Game, c: ReturnType<Game['addTank']>) => {
+    c.conj!.t = 0;
+    let abra = false, conj: unknown[] | undefined;
+    for (let i = 0; i < 40 && !conj; i++) {
+      g.step(new Map());
+      for (const e of g.events) { if (e[0] === 'abra') abra = true; if (e[0] === 'conjure') conj = e; }
+      g.events = [];
+    }
+    return { abra, conj };
+  };
+  {
+    const g = new Game(open());
+    const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+    p.buffs.shield = true; p.buffs.invuln = 99; // just watching
+    const c = g.addTank('conjurer', 99, 14.5, 8.5, 0);
+    g.frozen = false;
+    const x0 = c.x, y0 = c.y;
+    const { abra, conj } = cast(g, c);
+    if (!abra) fail('pas de coup de baguette avant le tour');
+    if (!conj) fail('l’Illusionniste ne fait jamais son tour');
+    else {
+      if (conj.length !== 4 + 6) fail(`le tour ne donne pas trois places (${conj.length})`);
+      if (g.decoys.length !== 2) fail(`${g.decoys.length} mirage(s) au lieu de 2`);
+      const spots: [number, number][] = [];
+      for (let i = 4; i < conj.length; i += 2) spots.push([conj[i] as number, conj[i + 1] as number]);
+      if (!spots.some(([x, y]) => Math.hypot(x - c.x, y - c.y) < 0.05)) fail('l’Illusionniste n’est sur aucune des trois places');
+      if (Math.hypot(spots[0][0] - x0, spots[0][1] - y0) > 0.05) fail('la première place n’est pas celle d’où il est parti');
+      for (const d of g.decoys) if (!spots.some(([x, y]) => Math.hypot(x - d.x, y - d.y) < 0.05)) fail('un mirage hors des trois places');
+      const snap = g.netDecoys();
+      if (!snap || snap.length !== 12 || snap[1] !== c.id) fail('les mirages ne partent pas dans les instantanés');
+    }
+    // the mirages fire when it fires, shells of stars that hurt nobody (no shield used up either)
+    p.buffs.invuln = 0;
+    c.ai = undefined;
+    c.fireCd = 0;
+    c.turret = Math.atan2(p.y - c.y, p.x - c.x);
+    for (const d of g.decoys) d.turret = Math.atan2(p.y - d.y, p.x - d.x);
+    g.events = [];
+    if (!g.tryFire(c)) fail('l’Illusionniste ne tire pas');
+    const shots = g.events.filter((e) => e[0] === 'shot').length;
+    const mir = g.bullets.filter((b) => b.mirage).length;
+    if (shots !== 3) fail(`${shots} tir(s) annoncé(s) au lieu de 3`);
+    if (mir !== 2) fail(`${mir} obus d’étoiles au lieu de 2`);
+    if (g.ownBullets(c) !== 1) fail('les obus d’étoiles comptent dans ses munitions');
+    // keep only the stars: they all burst on the player, who keeps his shield
+    g.bullets = g.bullets.filter((b) => b.mirage);
+    let poofs = 0;
+    for (let i = 0; i < 120 && g.bullets.length; i++) { g.step(new Map()); poofs += g.events.filter((e) => e[0] === 'poof' && e[3] === 1).length; g.events = []; }
+    if (!p.alive || !p.buffs.shield) fail('un obus d’étoiles a fait du mal');
+    if (poofs < 1) fail('aucun obus d’étoiles n’a éclaté');
+  }
+  {
+    // a shell from the other side dispels a mirage and is spent; its own shells go through its mirages
+    const g = new Game(open());
+    const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const c = g.addTank('conjurer', 99, 16.5, 3.5, 0);
+    c.ai = undefined; c.conj!.t = 99;
+    g.frozen = false;
+    g.decoys.push({ id: 900, owner: c.id, team: 99, x: 9.5, y: 8.5, body: 0, turret: 0, life: 9, m: 0 });
+    g.decoys.push({ id: 901, owner: c.id, team: 99, x: 9.5, y: 13.5, body: 0, turret: 0, life: 9, m: 1 });
+    p.turret = 0; p.fireCd = 0;
+    g.tryFire(p);
+    let poof = false;
+    for (let i = 0; i < 40; i++) { g.step(new Map()); if (g.events.some((e) => e[0] === 'poof' && e[3] === 0 && e[4] === 900)) poof = true; g.events = []; }
+    if (!poof || g.decoys.some((d) => d.id === 900)) fail('un obus ne dissipe pas le mirage');
+    if (g.bullets.length) fail('l’obus a continué après le mirage');
+    if (g.decoys.length !== 1) fail('le mauvais mirage a disparu');
+    // mines ignore mirages, but a blast dispels them
+    g.mines.push({ id: 950, owner: p.id, team: 0, x: 9.5, y: 13.5, t: 0, fuse: -1, dead: false });
+    for (let i = 0; i < 30; i++) { g.step(new Map()); g.events = []; }
+    if (g.mines[0]?.fuse !== -1) fail('un mirage a déclenché une mine');
+    g.explodeMine(g.mines[0]);
+    g.step(new Map());
+    if (g.decoys.length) fail('le souffle de la mine n’a pas dissipé le mirage');
+    // a mirage vanishes with its Illusionniste
+    g.decoys.push({ id: 902, owner: c.id, team: 99, x: 9.5, y: 4.5, body: 0, turret: 0, life: 9, m: 0 });
+    g.killTank(c, p);
+    g.step(new Map());
+    if (g.decoys.length) fail('les mirages survivent à l’Illusionniste');
+    // mirages drive as mirror images
+    const g2 = new Game(open());
+    const c2 = g2.addTank('conjurer', 99, 10.5, 8.5, 0);
+    c2.ai = undefined; c2.conj!.t = 99;
+    g2.frozen = false;
+    g2.decoys.push({ id: 903, owner: c2.id, team: 99, x: 6.5, y: 8.5, body: 0, turret: 0, life: 9, m: 0 });
+    g2.step(new Map());
+    c2.x += 0.1; c2.y += 0.05;
+    g2.step(new Map());
+    const d = g2.decoys[0];
+    if (!d || Math.abs(d.x - 6.4) > 0.01 || Math.abs(d.y - 8.55) > 0.01) fail(`le mirage ne suit pas en miroir (${d?.x}, ${d?.y})`);
+    if (killXp('conjurer') !== 2) fail('galons de l’Illusionniste');
+  }
+  // where it shows up
+  for (let mission = 1; mission <= 72; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'conjurer')) fail(`Illusionniste avant la 73ᵉ mission (${mission})`);
+  if (getMission(73).enemies.filter((e) => e.kind === 'conjurer').length !== 1) fail('la mission 73 n’a pas son Illusionniste');
+  if (getMission(76).enemies.filter((e) => e.kind === 'conjurer').length !== 2) fail('la mission 76 n’a pas ses deux Illusionnistes');
+  if (!getMission(76).tiles.includes(Tile.MirrorA) || !getMission(76).tiles.includes(Tile.MirrorB)) fail('la galerie des glaces n’a pas de miroirs');
+  let gen = 0;
+  for (let mission = 78; mission <= 220; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'conjurer')) gen++;
+  if (gen < 5) fail(`trop peu d’Illusionnistes dans les missions générées (${gen})`);
+  for (let day = EIGHT_TWISTS_FROM - 10; day < EIGHT_TWISTS_FROM + 30; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'conjurer')) fail(`Illusionniste dans le défi du jour ${day}`);
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'conjurer')) fail('Illusionniste dans la taupe');
+  const am = { name: 'Magie', map: blankMap() };
+  am.map[8] = am.map[8].slice(0, 15) + 'I' + am.map[8].slice(16);
+  const back = decodeAtelier(encodeAtelier(am));
+  if (!back || back.map[8][15] !== 'I') fail('l’Illusionniste se perd dans le code de partage de l’atelier');
+  { const why = checkAtelier(am.map); if (why) fail(`l’atelier refuse l’Illusionniste (${why})`); }
+  // its missions: AI duos clear them, tricks happen, the tick stays cheap
+  let cleared = 0, spent = 0, steps = 0, tricks = 0, poofs = 0;
+  for (let run2 = 0; run2 < 8 && cleared < 2; run2++) {
+    const l = getMission(run2 % 2 ? 76 : 73);
+    const s2 = new Game(l.tiles, l.belts);
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      for (const e of s2.events) { if (e[0] === 'conjure') tricks++; if (e[0] === 'poof') poofs++; }
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions de l’Illusionniste');
+  if (!tricks) fail('aucun tour pendant les parties');
+  if (process.exitCode !== 1) console.log(`Illusionniste OK (${gen} missions générées, ${cleared} partie(s) gagnée(s) par l’IA, ${tricks} tour(s), ${poofs} « pouf », ${per.toFixed(3)} ms/tick)`);
+}

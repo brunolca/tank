@@ -86,6 +86,8 @@ export const BRUSHES: Brush[] = [
   // iteration 57: « Les miroirs » (share-code letters x, y)
   { ch: '/', label: 'Miroir ╱', group: 'sol' },
   { ch: '\\', label: 'Miroir ╲', group: 'sol' },
+  // iteration 58: « L’Illusionniste » (share-code letter z, the last one: the next brush needs a longer code)
+  { ch: 'I', label: 'Illusionniste', group: 'tank' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {

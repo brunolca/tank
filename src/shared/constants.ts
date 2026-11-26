@@ -82,6 +82,7 @@ export type TankKind =
   | 'watcher'
   | 'mechanic'
   | 'spectre'
+  | 'conjurer'
   | 'train'
   | 'wagon';
 
@@ -148,6 +149,10 @@ export const SPECS: Record<TankKind, TankSpec> = {
   // first wall it meets, as with the « Passe-muraille » crate), so no wall keeps you safe from it. Slow to reload, and
   // its shells moan « wouuh » as they slip into the wall: listen, then dodge (see ghostGun in sim.ts).
   spectre: { speed: 1.6, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.4, turretSpeed: 1.8, mines: 0, skill: 2, reaction: 0.75, aimError: 0.05, label: 'Spectre' },
+  // iteration 58: « L’Illusionniste », a toy conjurer in a top hat: when a foe comes into sight it taps its wand,
+  // vanishes in a puff of stars and reappears as three identical tanks (see mirage.ts). Two are mirages: they drive as
+  // its mirror images and fire shells that burst into stars on whatever they hit. One shot dispels a mirage.
+  conjurer: { speed: 1.7, maxBullets: 2, bounces: 1, rocket: false, fireCd: 1.6, turretSpeed: 2.4, mines: 0, skill: 2, reaction: 0.5, aimError: 0.06, label: 'Illusionniste' },
   // iteration 49: the sixth boss, « le Tortillard », a toy locomotive that runs round its rails pulling gun wagons
   // (see TRAIN_*): it runs over whatever stands on the track, and its cowcatcher sends head-on shells back. The rails
   // drive it, never the AI (speed 0 here: nothing pushes it about either).
@@ -195,6 +200,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   watcher: 0x3b3577,
   mechanic: 0xb8683a,
   spectre: 0x7fd1ae,
+  conjurer: 0xc9a7f2,
   train: 0x2f7a4d,
   wagon: 0xd9a63a,
 };
