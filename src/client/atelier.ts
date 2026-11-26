@@ -7,7 +7,7 @@ import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const GROUND = '.#Ho_=*+><^V~,%[]&'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
+const GROUND = '.#Ho_=*+><^V~,%[]&/\\'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
 
 /** Draw a map onto a 2D canvas (the editor, the lobby preview). `hot`: a cell to highlight (the brush under the cursor). */
 export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number; y: number; ch: string }) {
@@ -78,6 +78,18 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
     g.strokeStyle = '#e2453c'; g.lineWidth = Math.max(1.5, s * 0.08); g.beginPath(); g.arc(px + s * 0.5, py + s * 0.42, s * 0.2, 0, 7); g.stroke(); g.lineWidth = 1;
     g.fillStyle = '#23242c'; g.beginPath(); g.arc(px + s * 0.5, py + s * 0.4, s * 0.15, 0, 7); g.fill();
     g.fillStyle = '#ff8a2a'; g.beginPath(); g.moveTo(px + s * 0.6, py + s * 0.36); g.lineTo(px + s * 0.9, py + s * 0.42); g.lineTo(px + s * 0.6, py + s * 0.47); g.fill();
+  } else if (c === '/' || c === '\\') {
+    // a mirror (iteration 57): its round wooden plinth, the glass across the diagonal, a glint on it
+    const a = c === '/';
+    g.fillStyle = '#b98a55'; g.beginPath(); g.arc(px + s / 2, py + s / 2, s * 0.2, 0, 7); g.fill();
+    g.lineCap = 'round';
+    g.strokeStyle = '#7a4f26'; g.lineWidth = Math.max(3, s * 0.2);
+    g.beginPath(); g.moveTo(px + s * 0.12, py + s * (a ? 0.88 : 0.12)); g.lineTo(px + s * 0.88, py + s * (a ? 0.12 : 0.88)); g.stroke();
+    g.strokeStyle = '#d8ecf7'; g.lineWidth = Math.max(1.5, s * 0.11);
+    g.beginPath(); g.moveTo(px + s * 0.16, py + s * (a ? 0.84 : 0.16)); g.lineTo(px + s * 0.84, py + s * (a ? 0.16 : 0.84)); g.stroke();
+    g.strokeStyle = '#ffffff'; g.lineWidth = Math.max(1, s * 0.05);
+    g.beginPath(); g.moveTo(px + s * 0.3, py + s * (a ? 0.7 : 0.3)); g.lineTo(px + s * 0.42, py + s * (a ? 0.58 : 0.42)); g.stroke();
+    g.lineCap = 'butt'; g.lineWidth = 1;
   } else if (c === '%') {
     // a switch (iteration 40): a wooden block with a big red button
     g.fillStyle = '#c8955a'; g.fillRect(px, py, s, s);
@@ -402,7 +414,7 @@ export class Workshop {
     if (this.mirror && ground) {
       const mx = W - 1 - c.x;
       const there = this.map[c.y][mx];
-      const flip = ch === '>' ? '<' : ch === '<' ? '>' : ch; // a mirrored belt runs the other way
+      const flip = ch === '>' ? '<' : ch === '<' ? '>' : ch === '/' ? '\\' : ch === '\\' ? '/' : ch; // a mirrored belt runs the other way, a mirror leans the other way (iteration 57)
       if (GROUND.includes(there) || ch === '.') this.setCell(mx, c.y, flip);
     }
     this.hooks.place(ch);

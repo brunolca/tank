@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
-import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isSnowman, reverseBelts } from '../shared/constants';
+import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isMirror, isSnowman, mirrorOf, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { BLIZZARD_HIDE, BLIZZARD_SIGHT, whiteoutAt } from '../shared/blizzard';
@@ -548,6 +548,19 @@ const hopperMat = new THREE.MeshStandardMaterial({ color: 0xb77a3e, roughness: 0
 const grainMat = new THREE.MeshStandardMaterial({ color: 0xe8b04a, roughness: 0.5, emissive: 0x5a3200, emissiveIntensity: 0.3 });
 const leafMat = new THREE.MeshStandardMaterial({ color: 0x5fc24a, roughness: 0.5 });
 const seedMat = new THREE.MeshStandardMaterial({ color: 0xc98a3a, roughness: 0.55, metalness: 0.05, emissive: 0xff5a10, emissiveIntensity: 0 });
+// « Les miroirs » (iteration 57): a wooden plinth and frame, a pale glass that lights up when a shell turns on it
+const mirrorGeo = {
+  plinth: new THREE.CylinderGeometry(0.2, 0.25, 0.1, 18),
+  pivot: new THREE.CylinderGeometry(0.045, 0.045, 0.2, 8),
+  frame: new THREE.BoxGeometry(1.3, 0.62, 0.08),
+  glass: new THREE.BoxGeometry(1.2, 0.5, 0.1),
+  shine: new THREE.BoxGeometry(0.08, 0.42, 0.104),
+  knob: new THREE.SphereGeometry(0.06, 10, 8),
+};
+const mirrorWoodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a2e, roughness: 0.75 });
+const mirrorPlinthMat = new THREE.MeshStandardMaterial({ color: 0xc49360, roughness: 0.85 });
+const mirrorShineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 });
+const mirrorBrassMat = new THREE.MeshStandardMaterial({ color: 0xe0b44a, roughness: 0.35, metalness: 0.6 });
 const seamMat = new THREE.MeshStandardMaterial({ color: 0x7a4a1c, roughness: 0.7 });
 
 const rampartGeo = {
@@ -1666,6 +1679,8 @@ export class Renderer {
   private falling: { obj: THREE.Object3D; vy: number; spin: THREE.Vector3; t: number; vx?: number; vz?: number; life?: number }[] = [];
   /** « Les bonshommes de neige » (iteration 53): the snowmen of the table, by cell; the head (with its hat) looks at the nearest tank. */
   private snowmen = new Map<number, { root: THREE.Group; head?: THREE.Group; x: number; y: number; look: number; wobble: number }>();
+  /** « Les miroirs » (iteration 57): the mirrors of the table, by cell; each turns toward its angle and flashes on a glint. */
+  private mirrors = new Map<number, { root: THREE.Group; pane: THREE.Group; glass: THREE.MeshStandardMaterial; angle: number; flash: number }>();
   private plankGeo = new RoundedBoxGeometry(0.9, 0.05, 0.155, 2, 0.015);
   private railGeo = new THREE.BoxGeometry(0.06, 0.05, 1);
   private postGeo = new THREE.CylinderGeometry(0.035, 0.04, 0.26, 8);
@@ -2109,6 +2124,8 @@ export class Renderer {
     this.falling = [];
     for (const sm of this.snowmen.values()) this.levelGroup.remove(sm.root);
     this.snowmen.clear();
+    for (const mr of this.mirrors.values()) { this.levelGroup.remove(mr.root); mr.glass.dispose(); }
+    this.mirrors.clear();
     for (const r of this.repairs.values()) this.scene.remove(r.ring);
     this.repairs.clear();
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); if (t.lantern) this.scene.remove(t.lantern.beam); }
@@ -2162,6 +2179,7 @@ export class Renderer {
         else if (isDrawbridge(t)) this.addDrawbridge(tiles, x, y, t);
         else if (t === Tile.Switch) this.addSwitch(x, y);
         else if (isSnowman(t)) this.addSnowman(x, y, t === Tile.Snowman);
+        else if (isMirror(t)) this.addMirror(x, y, t);
       }
     }
     // the switches show which gates stand (red at the start); a late arrival reads it off the map
@@ -3501,6 +3519,82 @@ export class Renderer {
     }
   }
 
+  // ---------------------------------------------------------------- « Les miroirs » (iteration 57)
+
+  /** The angle (about the vertical) of a mirror's pane: '/' runs from the bottom left to the top right of its cell. */
+  private static mirrorAngle(tile: number) {
+    return mirrorOf(tile) > 0 ? Math.PI / 4 : -Math.PI / 4;
+  }
+
+  private addMirror(x: number, y: number, tile: number) {
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    const part = (g: THREE.BufferGeometry, m: THREE.Material, py: number, parent: THREE.Object3D, px = 0) => {
+      const o = new THREE.Mesh(g, m);
+      o.position.set(px, py, 0);
+      o.castShadow = true;
+      o.receiveShadow = true;
+      parent.add(o);
+      return o;
+    };
+    part(mirrorGeo.plinth, mirrorPlinthMat, 0.05, root);
+    part(mirrorGeo.pivot, mirrorBrassMat, 0.15, root);
+    const pane = new THREE.Group();
+    pane.rotation.y = Renderer.mirrorAngle(tile);
+    root.add(pane);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xd9eef8, roughness: 0.12, metalness: 0.35, emissive: 0x9fd8f0, emissiveIntensity: 0.18 });
+    part(mirrorGeo.frame, mirrorWoodMat, 0.48, pane);
+    part(mirrorGeo.glass, glass, 0.48, pane).castShadow = false;
+    for (const sx of [-0.32, -0.18]) {
+      const sh = part(mirrorGeo.shine, mirrorShineMat, 0.48, pane, sx);
+      sh.rotation.z = 0.5;
+      sh.castShadow = false;
+    }
+    for (const sx of [-0.67, 0.67]) part(mirrorGeo.knob, mirrorBrassMat, 0.79, pane, sx);
+    this.levelGroup.add(root);
+    this.mirrors.set(y * W + x, { root, pane, glass, angle: pane.rotation.y, flash: 0 });
+  }
+
+  /** A flip of the switches: that mirror turns a quarter turn on its pivot (always the same way round). */
+  turnMirror(cx: number, cy: number, tile: number) {
+    const mr = this.mirrors.get(cy * W + cx);
+    if (!mr) return;
+    const want = Renderer.mirrorAngle(tile);
+    let d = want - mr.angle;
+    d = ((d % Math.PI) + Math.PI) % Math.PI; // the pane looks the same both ways round: a quarter turn forward
+    mr.angle += d || Math.PI / 2;
+    mr.flash = Math.max(mr.flash, 0.5);
+    this.snowPuffLike(cx + 0.5, cy + 0.5);
+  }
+
+  /** A shell turned on the glass at (x, y): a burst of light, and the pane flashes. */
+  glint(x: number, y: number, cx: number, cy: number) {
+    const mr = this.mirrors.get(cy * W + cx);
+    if (mr) mr.flash = 1;
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, v = 1.2 + Math.random() * 2.4;
+      this.glow.emit({ x, y: 0.45 + (Math.random() - 0.5) * 0.2, z: y, vx: Math.cos(a) * v, vy: Math.random() * 1.6, vz: Math.sin(a) * v, life: 0.25 + Math.random() * 0.2, s0: 0.08, s1: 0.01, c0: 0xffffff, c1: 0x8fd8ff, grav: 2 });
+    }
+    this.glow.emit({ x, y: 0.45, z: y, life: 0.22, s0: 0.5, s1: 0.05, c0: 0xffffff, c1: 0xbfeaff });
+  }
+
+  /** A little puff of sawdust at the foot of a mirror that turns. */
+  private snowPuffLike(x: number, z: number) {
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.debris.emit({ x: x + Math.cos(a) * 0.2, y: 0.1, z: z + Math.sin(a) * 0.2, vx: Math.cos(a) * 1.2, vy: 1 + Math.random(), vz: Math.sin(a) * 1.2, life: 0.5, s0: 0.04, s1: 0.015, c0: 0xd9b77e, c1: 0xa07040, grav: 6, drag: 0.6 });
+    }
+  }
+
+  private animateMirrors(dt: number) {
+    for (const mr of this.mirrors.values()) {
+      const cur = mr.pane.rotation.y;
+      if (Math.abs(mr.angle - cur) > 1e-3) mr.pane.rotation.y = cur + (mr.angle - cur) * Math.min(1, dt * 9);
+      if (mr.flash > 0) mr.flash = Math.max(0, mr.flash - dt * 2.5);
+      mr.glass.emissiveIntensity = 0.18 + mr.flash * 1.6;
+    }
+  }
+
   // ---------------------------------------------------------------- « Les bonshommes de neige » (iteration 53)
 
   private addSnowman(x: number, y: number, whole: boolean) {
@@ -3657,6 +3751,7 @@ export class Renderer {
       }
     }
     if (this.snowmen.size) this.animateSnowmen(list, dt);
+    if (this.mirrors.size) this.animateMirrors(dt);
     for (const t of list) {
       const v = this.tanks.get(t.id);
       if (!v) continue;

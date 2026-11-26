@@ -83,6 +83,9 @@ export const BRUSHES: Brush[] = [
   { ch: '8', label: 'Bonhomme de neige', group: 'sol' },
   // iteration 56: « Le Spectre » (share-code letter w)
   { ch: 'P', label: 'Spectre', group: 'tank' },
+  // iteration 57: « Les miroirs » (share-code letters x, y)
+  { ch: '/', label: 'Miroir ╱', group: 'sol' },
+  { ch: '\\', label: 'Miroir ╲', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -154,7 +157,7 @@ export function checkAtelier(map: unknown): string | undefined {
   // the players must be able to drive somewhere: at least one open cell next to the first spot
   const [sx, sy] = lvl.spawns[0];
   const cx = Math.floor(sx), cy = Math.floor(sy);
-  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%{8'.includes(map[y][x]);
+  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%{8/\\'.includes(map[y][x]); // mirrors (iteration 57) stop tanks too
   if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => open(cx + dx, cy + dy))) return 'Le départ 1 est emmuré : laisse-lui de la place.';
   return undefined;
 }

@@ -48,6 +48,11 @@ export const enum Tile {
   // lightning, the Foreur or a heavy shell bring it down at once
   Snowman = 18,
   SnowLow = 19,
+  // iteration 57, « Les miroirs »: a mirror on a pivot, standing on a diagonal of its cell ('/' MirrorA, backslash MirrorB). It
+  // stops tanks; a shell crossing its diagonal is turned a quarter turn, without using up a bounce. Every flip of the
+  // switches turns every mirror a quarter turn (MirrorA <-> MirrorB)
+  MirrorA = 20,
+  MirrorB = 21,
 }
 
 export type TankKind =
@@ -462,6 +467,13 @@ export function isSolidBullet(t: number) {
 export function isSnowman(t: number) {
   return t === Tile.Snowman || t === Tile.SnowLow;
 }
+/** « Les miroirs » (iteration 57): the diagonal a mirror stands on, 1 for '/' (MirrorA), -1 for a backslash (MirrorB), 0 for no mirror. */
+export function mirrorOf(t: number): number {
+  return t === Tile.MirrorA ? 1 : t === Tile.MirrorB ? -1 : 0;
+}
+export function isMirror(t: number) {
+  return t === Tile.MirrorA || t === Tile.MirrorB;
+}
 /** What a blast (mine, lightning, cannonball, the Foreur) blows away: cork, and snowmen (iteration 53). */
 export function isFragile(t: number) {
   return t === Tile.Cork || t === Tile.Snowman || t === Tile.SnowLow;
@@ -617,6 +629,7 @@ export const KO_SAND = 6; // « Les dunes » (iteration 36): a mine buried in th
 export const KO_SNOW = 7; // « La neige » (iteration 42): a mine buried in the snow
 export const KO_TRAIN = 8; // « Le Tortillard » (iteration 49): run over by the train
 export const KO_GHOST = 9; // « Passe-muraille » (iteration 52): a shell that went through a wall (older tabs read a plain shell)
+export const KO_MIRROR = 10; // « Les miroirs » (iteration 57): a shell turned by a mirror (older tabs read a plain shell)
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */
@@ -625,6 +638,13 @@ export const BRIDGE_CHAR = ':';
 // ------------------------------------------------------------------ « Les bonshommes de neige » (iteration 53)
 /** Map character of a snowman (two balls of snow, one on top of the other). */
 export const SNOWMAN_CHAR = '8';
+
+// ------------------------------------------------------------------ « Les miroirs » (iteration 57)
+/** Map characters of the mirrors: a slash and a backslash (written twice in the source strings). */
+export const MIRROR_A_CHAR = '/';
+export const MIRROR_B_CHAR = '\\';
+/** A shell turned by this many mirrors fades out (two facing mirrors would otherwise keep it flying round forever). */
+export const MIRROR_MAX = 12;
 
 // ------------------------------------------------------------------ « Les interrupteurs » (iteration 40)
 /** Map characters: the switch block, a red gate (raised at the start) and a blue gate (lowered at the start). */

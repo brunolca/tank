@@ -1,4 +1,4 @@
-import { type TankKind, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, isSnowman, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, isMirror, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, isSnowman, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -494,6 +494,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (levelWind !== undefined) setTimeout(() => toast(`Vent : il souffle ${windWords(levelWind!)} et courbe les obus en vol. Vise en amont… ou tire pendant les accalmies, quand la manche à air retombe !`, 4600), 2200);
   else if (msg.storm) setTimeout(() => toast(msg.night ? 'Orage de nuit : quand l’éclair tombe, tout le monde est visible !' : 'Orage : quand le sol crépite, la foudre va tomber. Écarte-toi !', 4000), 2200);
   else if (msg.night) setTimeout(() => toast(coopLike(msg.mode) ? 'Nuit : les ennemis ne te voient que de près… ou quand tu tires !' : 'Nuit : chaque tir trahit ta position.', 4000), 2200);
+  else if (tiles.some(isMirror)) setTimeout(() => toast(tiles.includes(Tile.Switch) ? 'Miroirs : un obus qui touche une vitre repart à angle droit, sans perdre de ricochet. Et à chaque « Clac ! » de l’interrupteur, tous les miroirs pivotent d’un quart de tour !' : 'Miroirs : un obus qui touche une vitre repart à angle droit, sans perdre de ricochet. Tire derrière les coins… mais les ennemis le savent aussi !', 5200), 2200);
   else if (tiles.some(isSnowman)) setTimeout(() => toast('Bonshommes de neige : ils avalent les obus sans ricochet. Un obus leur fait perdre la tête, un deuxième les renverse… Abrite-toi derrière les tiens, et ouvre une brèche dans ceux d’en face !', 5600), 2200);
   else if (enemies.some((e) => e.kind === 'mechanic')) setTimeout(() => toast('Le Mécano répare les épaves de ses amis : quelques secondes de clé à molette et le tank repart ! Vise-le en premier… ou pendant qu’il travaille, quand il ne bouge plus.', 5200), 2200);
   else if (enemies.some((e) => e.kind === 'hopper')) setTimeout(() => toast('La Sauterelle se tasse sur ses ressorts… puis bondit par-dessus les murs pour te prendre à revers. Un anneau vert montre où elle va retomber : vise-le ! En l’air, rien ne la touche.', 5200), 2200);
@@ -716,6 +717,7 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
     else if (e[0] === 'build') tiles[e[2] * W + e[1]] = Tile.Cork; // the Maçon's new block stops my tank right away
     else if (e[0] === 'bridge') tiles[e[2] * W + e[1]] = Tile.Hole; // a bridge gave way (iteration 33): no driving over it any more
     else if (e[0] === 'gate') tiles[e[2] * W + e[1]] = e[3]; // « Les interrupteurs » (iteration 40): a gate rose or sank
+    else if (e[0] === 'mirror') tiles[e[2] * W + e[1]] = e[3]; // « Les miroirs » (iteration 57): a mirror turned (the reticle's ray follows it)
     else if (e[0] === 'flip' && belts.length) reverseBelts(belts); // « Les ponts-levis » (iteration 48): the belts turn round, as on the server
   }
   // reconcile own tank
@@ -1192,6 +1194,14 @@ function handleEvent(e: GameEvent, audible: boolean) {
       floater(e[1] + 0.5, e[2] + 0.5, 'Clac !', GATE_COLORS[e[3] ? 1 : 0]);
       if (audible) sfx.flip(e[3]);
       break;
+    case 'glint': // « Les miroirs » (iteration 57): a shell turned on the glass
+      renderer.glint(e[1], e[2], e[3], e[4]);
+      if (audible) sfx.glint();
+      break;
+    case 'mirror': // every mirror turns a quarter turn on its pivot (one sound for the whole table)
+      renderer.turnMirror(e[1], e[2], e[3]);
+      if (audible && performance.now() - lastMirrorSound > 150) { lastMirrorSound = performance.now(); sfx.mirrorTurn(); }
+      break;
     case 'gate':
       renderer.setGate(e[1], e[2], e[3]);
       // a whole row moves at once: one sound is enough
@@ -1490,6 +1500,7 @@ let bossFight = false;
 let bossKey = '';
 let lastLobSound = 0;
 let lastGateSound = 0; // « Les interrupteurs » (iteration 40)
+let lastMirrorSound = 0; // « Les miroirs » (iteration 57)
 const charging = new Set<number>();
 const alerted = new Set<number>();
 let lastAlert = 0;
@@ -3429,6 +3440,7 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.'],
   ['{}', 'Ponts-levis', 'Au-dessus d’un trou. Les rouges sont levés au départ, les bleus baissés, et l’interrupteur les fait basculer. Levé, il laisse passer les obus mais pas les tanks. Et à chaque « Clac ! », les tapis roulants changent de sens.'],
   ['8', 'Bonhomme de neige', 'Il arrête les tanks et avale les obus, sans ricochet. Le premier obus lui fait perdre la tête, le deuxième le renverse dans la neige. Une mine le fait tomber d’un coup. Et il te suit des yeux…'],
+  ['/', 'Miroir', 'Il arrête les tanks, mais un obus qui touche sa vitre repart à angle droit, sans perdre de ricochet : de quoi tirer derrière les coins. À chaque « Clac ! » d’un interrupteur, tous les miroirs pivotent d’un quart de tour.', true],
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
 const WEATHER: [string, string, string, boolean?][] = [
@@ -3436,7 +3448,7 @@ const WEATHER: [string, string, string, boolean?][] = [
   ['bolt', 'Orage', 'Quand le sol crépite, la foudre va tomber : écarte-toi ! Chaque éclair montre tout le monde.'],
   ['wind', 'Vent', 'Il courbe les obus en vol : vise en amont, ou tire quand la manche à air retombe.'],
   ['fog', 'Brouillard', 'Des bancs de brume dérivent sur la table : on n’y voit que ses voisins proches.'],
-  ['snowflake', 'Blizzard', 'Neige et vent : toutes les quinze secondes, une bourrasque blanchit la table. Plus personne ne voit à plus de trois cases, le vent redouble et les pistes se comblent vite.', true],
+  ['snowflake', 'Blizzard', 'Neige et vent : toutes les quinze secondes, une bourrasque blanchit la table. Plus personne ne voit à plus de trois cases, le vent redouble et les pistes se comblent vite.'],
 ];
 function manualPage(tab: ManualTab) {
   if (tab === 'commandes') return `<div class="keys">${KEYS.map(([h, rows]) => `<section><h3>${escapeHtml(h)}</h3><ul>${rows.map(([k, v]) => `<li><span>${k}</span><b>${escapeHtml(v)}</b></li>`).join('')}</ul></section>`).join('')}</div>
@@ -4762,6 +4774,28 @@ if (params.has('demo')) {
         if (fired) { reelWanted = best.foe; return best.n; }
       }
       return 0;
+    },
+    /** « Les miroirs » (iteration 57): a hero fires a shell that a mirror turns onto an enemy (and the slow motion shows it). */
+    mirrorShot() {
+      const g = attract;
+      if (!g) return false;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player') continue;
+        const tip = h.r + 0.22;
+        for (let i = 0; i < 1440; i++) {
+          const ang = (i / 1440) * Math.PI * 2;
+          const hit = g.traceShot(h, ang, 0).hit;
+          if (!hit || hit.team === h.team) continue;
+          if (castRicochet(g.tiles, h.x + Math.cos(ang) * tip, h.y + Math.sin(ang) * tip, ang, 0).length < 2) continue; // straight at it: no mirror on the way
+          const keep = h.turret;
+          h.turret = ang;
+          h.fireCd = 0;
+          const fired = g.tryFire(h);
+          h.turret = keep;
+          if (fired) { reelWanted = hit.id; return true; }
+        }
+      }
+      return false;
     },
     caption(text: string, sub = '') {
       const c = $('#demo-caption');

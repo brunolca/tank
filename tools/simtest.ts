@@ -6,7 +6,7 @@ import { applyTwist, DAILY_STAGES, DAILY_TWISTS, EIGHT_TWISTS_FROM, SEVEN_TWISTS
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
 import { floorSpeed } from '../src/shared/physics';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
-import { KO_GHOST, SHELL_GHOST, REMOTE_LIFE, FLAG_REPAIR, FLAG_PATCHED, MECA_FIX, MECA_COOL, KO_TRAIN, TRAIN_SPEED, FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
+import { KO_MIRROR, KO_GHOST, SHELL_GHOST, REMOTE_LIFE, FLAG_REPAIR, FLAG_PATCHED, MECA_FIX, MECA_COOL, KO_TRAIN, TRAIN_SPEED, FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
 import { WIND_ACC, gustAt, windAt } from '../src/shared/wind';
 import { FOG_SIGHT, fogBanks, fogDensity, fogHides } from '../src/shared/fog';
@@ -3757,4 +3757,105 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions du Spectre');
   if (process.exitCode !== 1) console.log(`Spectre OK (${gen} missions générées hantées, ${cleared} partie(s) gagnée(s) par l’IA, ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Les miroirs » (iteration 57): a shell crossing the glass is turned a quarter turn and keeps its bounces, the AI's rays
+// (straight or in the wind) follow it, mirrors stop tanks and sight lines, a flip of the switches turns them all, two
+// facing mirrors cannot keep a shell forever, the workshop knows them, missions 47 and 62 have them and the AI clears them
+{
+  const fail = (m: string) => { console.error('MIROIRS:', m); process.exitCode = 1; };
+  const shoot = (tile: Tile, foeY: number) => {
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    tiles[8 * W + 10] = tile;
+    const g = new Game(tiles);
+    g.frozen = false;
+    const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+    const e = g.addTank('brown', 99, 10.5, foeY, 0xffffff);
+    e.fireCd = 99; e.ai = undefined;
+    p.turret = 0; p.fireCd = 0;
+    g.tryFire(p);
+    const b = g.bullets[0];
+    const bounces = b.bounces;
+    let ko: unknown[] | undefined, glint = false;
+    for (let i = 0; i < 90 && e.alive; i++) {
+      g.step(new Map());
+      glint ||= g.events.some((ev) => ev[0] === 'glint' && ev[3] === 10 && ev[4] === 8);
+      ko ??= g.events.find((ev) => ev[0] === 'ko');
+      g.events = [];
+    }
+    if (e.alive) fail(`l’obus n’est pas renvoyé à angle droit par le miroir ${tile === Tile.MirrorA ? '/' : '\\'}`);
+    if (!glint) fail('pas d’événement « glint »');
+    if (b.bounces !== bounces) fail('le miroir ne doit pas user de ricochet');
+    if (ko && ko[3] !== KO_MIRROR) fail('le ralenti ne dit pas « Par le miroir ! »');
+  };
+  shoot(Tile.MirrorB, 13.5); // '\': from the left, the shell goes down
+  shoot(Tile.MirrorA, 3.5); // '/': up
+  const tiles = new Array(W * H).fill(Tile.Empty);
+  tiles[8 * W + 10] = Tile.MirrorB;
+  const segs = castRicochet(tiles, 4.5, 8.5, 0, 0);
+  if (segs.length < 2 || Math.abs(segs[0].x1 - 10.5) > 0.02 || !(segs[1].y1 > segs[1].y0 + 2) || Math.abs(segs[1].x1 - 10.5) > 0.02) fail('le rayon de l’IA ne suit pas le miroir');
+  const wsegs = castWindy(tiles, 4.5, 8.5, 0, BULLET_SPEED, 0, 0, 0);
+  if (!wsegs.some((s) => s.y1 > 11 && Math.abs(s.x1 - 10.5) < 0.2)) fail('le rayon dans le vent ne suit pas le miroir');
+  if (!isSolidTank(Tile.MirrorA) || !isSolidTank(Tile.MirrorB)) fail('les miroirs doivent arrêter les tanks');
+  {
+    const g = new Game(tiles);
+    if (g.lineClear(4.5, 8.5, 16.5, 8.5)) fail('un miroir ne laisse pas voir tout droit à travers lui');
+    // two mirrors facing each other along a closed loop: the shell fades out after MIRROR_MAX glints
+    const loop = new Array(W * H).fill(Tile.Empty);
+    loop[4 * W + 4] = Tile.MirrorA; loop[4 * W + 14] = Tile.MirrorB; loop[12 * W + 14] = Tile.MirrorA; loop[12 * W + 4] = Tile.MirrorB;
+    const g2 = new Game(loop);
+    g2.frozen = false;
+    g2.bullets.push({ id: 1, owner: 0, x: 8.5, y: 4.5, vx: BULLET_SPEED, vy: 0, bounces: 1, rocket: false, dead: false });
+    let n = 0;
+    for (let i = 0; i < 30 * 60 && g2.bullets.length; i++) { g2.step(new Map()); n += g2.events.filter((ev) => ev[0] === 'glint').length; g2.events = []; }
+    if (g2.bullets.length) fail('un obus tourne sans fin entre les miroirs');
+    if (n < 8) fail(`l’obus n’a fait que ${n} reflets dans la boucle`);
+  }
+  {
+    // a shell on a switch turns every mirror a quarter turn
+    const t3 = new Array(W * H).fill(Tile.Empty);
+    t3[8 * W + 10] = Tile.Switch; t3[3 * W + 3] = Tile.MirrorA; t3[13 * W + 18] = Tile.MirrorB;
+    const g = new Game(t3);
+    g.flipGates(10, 8);
+    if (g.tiles[3 * W + 3] !== Tile.MirrorB || g.tiles[13 * W + 18] !== Tile.MirrorA) fail('l’interrupteur ne fait pas pivoter les miroirs');
+    if (g.events.filter((ev) => ev[0] === 'mirror').length !== 2) fail('pas d’événement « mirror »');
+  }
+  // the workshop: both brushes, a share code that round-trips
+  const am = { name: 'Glaces', map: blankMap() };
+  am.map[8] = am.map[8].slice(0, 10) + '/\\' + am.map[8].slice(12);
+  am.map[4] = am.map[4].slice(0, 15) + 'a' + am.map[4].slice(16);
+  if (checkAtelier(am.map)) fail(`l’atelier refuse les miroirs : ${checkAtelier(am.map)}`);
+  const back = decodeAtelier(encodeAtelier(am));
+  if (!back || back.map[8].slice(10, 12) !== '/\\') fail('les miroirs se perdent dans le code de partage de l’atelier');
+  const al = atelierLevel(am);
+  if (al.tiles[8 * W + 10] !== Tile.MirrorA || al.tiles[8 * W + 11] !== Tile.MirrorB) fail('l’atelier ne pose pas les miroirs');
+  // the missions: mirrors, AI duos clear them, the tick stays cheap
+  for (const m of [47, 62]) {
+    const n = getMission(m).tiles.filter((t) => t === Tile.MirrorA || t === Tile.MirrorB).length;
+    if (n < 8) fail(`la mission ${m} n’a que ${n} miroir(s)`);
+  }
+  if (!getMission(62).tiles.includes(Tile.Switch)) fail('la mission 62 n’a pas d’interrupteur');
+  let cleared = 0, glints = 0, turns = 0, spent = 0, steps = 0;
+  for (let run2 = 0; run2 < 8 && cleared < 2; run2++) {
+    const l = getMission(run2 % 2 ? 62 : 47);
+    const s2 = new Game(l.tiles, l.belts);
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      glints += s2.events.filter((ev) => ev[0] === 'glint').length;
+      turns += s2.events.filter((ev) => ev[0] === 'mirror').length;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions des miroirs');
+  if (!glints) fail('aucun obus n’a touché de miroir pendant les parties');
+  if (!Array.from({ length: VERSUS_ARENAS }, (_, r) => versusArena(r).tiles.includes(Tile.MirrorA)).some(Boolean)) fail('aucune arène de versus à miroirs');
+  if (process.exitCode !== 1) console.log(`miroirs OK (${cleared} partie(s) gagnée(s) par l’IA, ${glints} reflet(s), ${turns} quart(s) de tour, ${per.toFixed(3)} ms/tick)`);
 }

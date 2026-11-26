@@ -68,6 +68,8 @@ export type GameEvent =
   | ['mineSet', number, number]
   | ['mineSet', number, number, number] // « Détonateur » (iteration 52): 4th field 1, a remote mine (its own click)
   | ['detonate', number, number, number] // x y ownerId: a remote mine is set off by its owner (iteration 52)
+  | ['glint', number, number, number, number] // x y cx cy: « Les miroirs » (iteration 57), a shell was turned by the mirror of that cell (older tabs ignore it)
+  | ['mirror', number, number, number] // cx cy tile: on a flip of the switches, that mirror turned a quarter turn (older tabs are told to reload)
   | ['ghost', number, number, number] // x y phase (« Passe-muraille », iteration 52): 0 into a wall, 1 out the other side, 2 faded inside
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)
   | ['block', number, number] // cx cy: a cork block, or a snowman (iteration 53), is gone

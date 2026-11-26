@@ -172,6 +172,23 @@ export const sfx = {
     tone(t + 0.07, 0.12, a, a, 0.14, 'triangle');
     tone(t + 0.18, 0.18, b, b, 0.14, 'triangle');
   },
+  /** « Les miroirs » (iteration 57): a shell turned on the glass, a bright little « ting » with a shimmer. */
+  glint() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const f = 2350 + Math.random() * 300;
+    tone(t, 0.22, f, f, 0.07, 'sine');
+    tone(t, 0.16, f * 1.5, f * 1.5, 0.035, 'sine');
+    tone(t + 0.04, 0.3, f * 2.01, f * 2.01, 0.025, 'sine');
+    noise(t, 0.04, 7000, 2, 0.06, 'highpass');
+  },
+  /** The mirrors turn on their pivots: a wooden creak and a glassy shimmer. */
+  mirrorTurn() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.25, 180, 320, 0.08, 'sawtooth');
+    for (let i = 0; i < 4; i++) tone(t + 0.12 + i * 0.05, 0.18, 1800 + i * 260, 1800 + i * 260, 0.03, 'sine');
+  },
   /** The gates slide: a low wooden rumble (rising) or a soft thud (sinking). */
   gate(up: boolean) {
     if (!ctx) return;

@@ -7,11 +7,11 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 71, arms: ['canon', 'ricochet'], hud: true, seconds: 18, newcomers: [[1.2, ['spectre']]], spooks: [4.5, 10.5], caption: 'Itération 56 : le Spectre', sub: 'Un tank sous un drap : ses obus traversent les murs' },
-  { mission: 72, arms: ['fusee', 'canon'], hud: true, seconds: 15, spooks: [3.5, 9], caption: 'Le grenier hanté, de nuit', sub: 'Aucun abri ne tient : écoute le « wouuh »… et bouge !' },
-  { mission: 71, arms: ['canon', 'sapeur'], hud: true, seconds: 14, buffs: ['ghost'], ghostShots: [3, 7.5], caption: 'À fantôme, fantôme et demi', sub: 'Ramasse un Passe-muraille et rends-lui la pareille' },
-  { daily: [1, 'spectres'], arms: ['canon', 'ricochet'], seconds: 11, spooks: [5], caption: 'Nouveau défi du jour : la Nuit des spectres', sub: 'Cinq étapes de nuit, un ennemi sur trois sous un drap' },
-  { manual: [7, ['bestiaire']], seconds: 7, caption: 'Une nouvelle fiche au bestiaire', sub: 'Il recharge lentement : fonce-lui dessus !' },
+  { mission: 47, arms: ['canon', 'ricochet'], hud: true, seconds: 20, mirrorShots: [3.5, 9, 14.5], caption: 'Itération 57 : les miroirs', sub: 'Un obus sur la vitre repart à angle droit, sans perdre de ricochet' },
+  { mission: 62, arms: ['fusee', 'canon'], hud: true, seconds: 17, switchShots: [3, 10], mirrorShots: [6, 13], caption: 'Les miroirs tournants, de nuit', sub: 'Un obus sur l’interrupteur… « Clac ! » et tous les miroirs pivotent' },
+  { mission: 47, arms: ['canon', 'sapeur'], hud: true, seconds: 14, mirrorShots: [2.5, 5.5], replays: [8.5], caption: 'Par le miroir !', sub: 'Le ralenti raconte le reflet qui a fait mouche' },
+  { versus: [20], arms: ['canon', 'ricochet', 'fusee', 'canon'], seconds: 12, switchShots: [4], caption: 'Deux nouvelles arènes de versus', sub: 'Tirer derrière les coins, à quatre' },
+  { manual: [7, ['terrain']], seconds: 7, caption: 'Une nouvelle case au manuel', sub: 'Et deux pinceaux « miroir » dans l’atelier' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -110,6 +110,7 @@ try {
       for (const s of shot.emotes ?? []) setTimeout(() => d.emote?.(), s * 1000); // « Les bulles » (iteration 30): each tank says a line
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
+      for (const s of shot.mirrorShots ?? []) setTimeout(() => d.mirrorShot?.(), s * 1000); // « Les miroirs » (iteration 57): a shell turned by a mirror onto an enemy
       for (const s of shot.spooks ?? []) setTimeout(() => d.spook?.(), s * 1000); // « Le Spectre » (iteration 56): every Spectre fires through a wall at a hero
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
       for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way

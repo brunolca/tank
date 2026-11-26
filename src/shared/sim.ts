@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, isFragile, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -10,7 +10,7 @@ import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, ty
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
 import { BALL_BLAST, BALL_BOUNCE, BALL_CAMBER, BALL_SLOPE, BALL_DRAG, BALL_ICE_DRAG, BALL_IDLE, BALL_KICK, BALL_MAX, BALL_PUSH, BALL_R, BALL_RESPAWN, GOAL_BOTTOM, GOAL_TOP, KICKOFF, goalAt, goalOf, ownGoal, type BallState } from './ballon';
-import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, mirrorHit, mirrorTurn, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
@@ -211,6 +211,7 @@ export interface Bullet {
   volley?: number; // shells fired together (fan shot) never collide with one another
   cork?: boolean; // « Brise-liège » (iteration 19): the shell blows up the cork it hits instead of bouncing off it
   heavy?: boolean; // « Gros calibre » (iteration 29): it goes through cork (blowing it up) and smashes the lighter shells it meets
+  glints?: number; // « Les miroirs » (iteration 57): mirrors it was turned by (the replay tells « Par le miroir ! »)
   hits?: number; // « Le ralenti » (iteration 32): walls it bounced off so far (the replay tells « Ricochet ×2 ! »)
   ghost?: number; // « Passe-muraille » (iteration 52): 1 the next wall it meets lets it through, 2 inside that wall right now
   depth?: number; // how far it has flown inside the wall
@@ -442,6 +443,8 @@ export class Game {
   gates = false;
   /** « Les bonshommes de neige » (iteration 53): the table had snowmen at the start (shells are checked against them). */
   snowmen = false;
+  /** « Les miroirs » (iteration 57): the table has mirrors (shells crossing their glass are turned a quarter turn). */
+  mirrors = false;
   /** How many times the switches were flipped (even: the red gates stand, as at the start). */
   flips = 0;
   /** Seconds before a switch takes another shell. */
@@ -464,6 +467,7 @@ export class Game {
     this.snowy = this.belts.includes(SNOW);
     this.gates = this.tiles.includes(Tile.Switch);
     this.snowmen = this.tiles.some(isSnowman);
+    this.mirrors = this.tiles.some(isMirror);
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -645,6 +649,12 @@ export class Game {
     if (this.belts.length) reverseBelts(this.belts);
     for (let i = 0; i < W * H; i++) {
       const t = this.tiles[i];
+      if (isMirror(t)) {
+        // « Les miroirs » (iteration 57): every mirror turns a quarter turn on its pivot
+        this.tiles[i] = t === Tile.MirrorA ? Tile.MirrorB : Tile.MirrorA;
+        this.events.push(['mirror', i % W, (i / W) | 0, this.tiles[i]]);
+        continue;
+      }
       if (!isSwitchable(t)) continue;
       if (gateUp(t)) {
         this.tiles[i] = gateFlipped(t);
@@ -2547,6 +2557,7 @@ export class Game {
         if (b.bounces < 0) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
         this.events.push(['bounce', r2(b.x), r2(b.y)]);
       }
+      if (this.mirrors) { this.mirrorStep(b, ox, oy); if (b.dead) continue; }
       const w = warpTarget(this.tiles, ox, oy, b.x, b.y);
       if (w) {
         this.events.push(['warp', r2(b.x), r2(b.y), w[0], w[1], 0]);
@@ -2564,7 +2575,7 @@ export class Game {
           if ((t.kind === 'rampart' || t.kind === 'train') && this.deflect(t, b)) break; // the Rempart's shield sends it back (iteration 22), and the Tortillard's cowcatcher (iteration 49)
           if (t.mag?.on && b.owner !== t.id) { this.catchShell(t, b); break; } // the Aimant catches it (iteration 27)
           b.dead = true;
-          this.killTank(t, this.tankById(b.owner), b.through ? KO_GHOST : KO_SHELL, b.hits ?? 0);
+          this.killTank(t, this.tankById(b.owner), b.through ? KO_GHOST : b.glints ? KO_MIRROR : KO_SHELL, b.hits ?? 0);
           break;
         }
       }
@@ -2600,6 +2611,22 @@ export class Game {
       }
     }
     this.bullets = this.bullets.filter((b) => !b.dead);
+  }
+
+  /**
+   * « Les miroirs » (iteration 57): the shell moved from (ox, oy) to where it is; if its centre crossed the glass of a
+   * mirror, it is turned a quarter turn there (the rest of its move too), without using up a bounce.
+   */
+  mirrorStep(b: Bullet, ox: number, oy: number) {
+    const h = mirrorHit(this.tiles, ox, oy, b.x, b.y);
+    if (!h) return;
+    const px = ox + (b.x - ox) * h.s, py = oy + (b.y - oy) * h.s;
+    const [rx, ry] = mirrorTurn(h.m, b.x - px, b.y - py);
+    b.x = px + rx; b.y = py + ry;
+    [b.vx, b.vy] = mirrorTurn(h.m, b.vx, b.vy);
+    b.glints = (b.glints ?? 0) + 1;
+    this.events.push(['glint', r2(px), r2(py), h.cx, h.cy]);
+    if (b.glints > MIRROR_MAX) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); }
   }
 
   /** The Aimant's field is on: the shell sticks to its magnet (it will throw it back), the tank is unharmed. */

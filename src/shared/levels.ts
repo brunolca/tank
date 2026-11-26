@@ -1,4 +1,4 @@
-import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
+import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, MIRROR_A_CHAR, MIRROR_B_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -12,6 +12,8 @@ import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR
 //           start) and a blue gate (lowered at the start); a raised gate stops tanks and shells, a lowered one is floor
 //         { } « Les ponts-levis » (iteration 48): a red drawbridge (raised at the start: a pit) and a blue one (lowered: a
 //           bridge) over a pit, flipped by the same switches; on a flip of the switches, the conveyor belts turn round too
+//         / \\ « Les miroirs » (iteration 57): a mirror on the diagonal of its cell (a backslash is written twice in the
+//           strings); it stops tanks, turns shells a quarter turn (no bounce used up), and turns round on a flip of the switches
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)  P spectre (the Spectre)
 export const ENEMY_CHARS: Record<string, TankKind> = {
@@ -460,6 +462,53 @@ export const LEVELS: LevelDef[] = [
  * missions around them where they are, and the boss missions stay boss missions.
  */
 export const EXTRA_LEVELS: Record<number, LevelDef> = {
+  // « Les miroirs » (iteration 57): mirrors on pivots turn the shells a quarter turn, without using up a bounce
+  47: {
+    name: 'Le palais des glaces',
+    map: [
+      '......................',
+      './........##........\\.',
+      '......................',
+      '...##....\\../....##...',
+      '...#..............#.g.',
+      '..1....../..\\......a..',
+      '...#..............#...',
+      '...##.....##.....##...',
+      '..........##........p.',
+      '...##.....##.....##...',
+      '...#..............#...',
+      '..2....../..\\......c..',
+      '...#..............#.g.',
+      '...##..../..\\....##...',
+      '......................',
+      '.\\........##......../.',
+      '......................',
+    ],
+  },
+  // and on this one, at night, every shell on a switch turns all the mirrors a quarter turn
+  62: {
+    name: 'Les miroirs tournants',
+    night: true,
+    map: [
+      '......................',
+      '....\\.....##.....\\..t.',
+      '......................',
+      '..##....\\....\\....##..',
+      '..#................#..',
+      '..1..\\...........\\.v..',
+      '..........##..........',
+      '........\\.%%./........',
+      '..........##.......r..',
+      '......../.%%.\\........',
+      '..........##..........',
+      '..2../.........../.c..',
+      '..#................#..',
+      '..##..../..../....##..',
+      '......................',
+      '..../.....##...../..s.',
+      '......................',
+    ],
+  },
   // iteration 12: the Maçon's first building site, open ground for it to wall up
   21: {
     name: 'Le chantier',
@@ -1585,6 +1634,8 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '=') tiles[i] = Tile.Tunnel;
       else if (c === BRIDGE_CHAR) tiles[i] = Tile.Bridge;
       else if (c === SNOWMAN_CHAR) tiles[i] = Tile.Snowman;
+      else if (c === MIRROR_A_CHAR) tiles[i] = Tile.MirrorA;
+      else if (c === MIRROR_B_CHAR) tiles[i] = Tile.MirrorB;
       else if (c === SWITCH_CHAR) tiles[i] = Tile.Switch;
       else if (c === RED_GATE_CHAR) tiles[i] = Tile.RedUp;
       else if (c === BLUE_GATE_CHAR) tiles[i] = Tile.BlueDown;
@@ -2229,10 +2280,10 @@ export function getMission(mission: number): ParsedLevel {
 
 /** Arenas for versus mode: handmade maps with enemies stripped, spawns in opposite corners. */
 /** How many arenas the versus pool holds (a game starts on a random one of them, iteration 40). */
-export const VERSUS_ARENAS = 19;
+export const VERSUS_ARENAS = 21;
 export function versusArena(round: number): ParsedLevel {
   // handmade missions, plus the tunnels of mission 22 (iteration 13), the belts of mission 25 (iteration 16), the rink of mission 27 (iteration 21), the ravine of mission 32 (iteration 33) and the dunes of mission 46 (iteration 36)
-  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[45], EXTRA_LEVELS[46], EXTRA_LEVELS[51], EXTRA_LEVELS[57], EXTRA_LEVELS[66]); // the snowmen of mission 66 (iteration 53), the snow of mission 57 (iteration 42), and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
+  const pool: LevelDef[] = [1, 2, 3, 5, 6, 7, 10, 12, 14, 15].map((i) => LEVELS[i]).concat(EXTRA_LEVELS[22], EXTRA_LEVELS[25], EXTRA_LEVELS[27], EXTRA_LEVELS[32], EXTRA_LEVELS[45], EXTRA_LEVELS[46], EXTRA_LEVELS[51], EXTRA_LEVELS[57], EXTRA_LEVELS[66], EXTRA_LEVELS[47], EXTRA_LEVELS[62]); // the mirrors of missions 47 and 62 (iteration 57: with 21 arenas, none is always fought at night any more), // the snowmen of mission 66 (iteration 53), the snow of mission 57 (iteration 42), and the dunes of mission 46 (iteration 36), the switches of missions 45 and 51 (iteration 40)
   const base = parseLevel(pool[round % pool.length]);
   base.enemies = [];
   const corners: [number, number][] = [[1, 1], [W - 2, H - 2], [W - 2, 1], [1, H - 2]];

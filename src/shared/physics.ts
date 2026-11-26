@@ -1,4 +1,4 @@
-import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isSnowman, isTunnel, isPit, Tile } from './constants';
+import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isSnowman, isTunnel, isPit, mirrorOf, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -104,6 +104,13 @@ export function castRicochet(tiles: ArrayLike<number>, x: number, y: number, ang
       continue;
     }
     segs.push({ x0: x, y0: y, x1: hit.x, y1: hit.y });
+    if (hit.mirror) {
+      // « Les miroirs » (iteration 57): a quarter turn, and no bounce used up
+      [dx, dy] = mirrorTurn(hit.mirror, dx, dy);
+      x = hit.x + dx * 1e-4;
+      y = hit.y + dy * 1e-4;
+      continue;
+    }
     if (!hit.hit) break;
     if (ghost) {
       // « Passe-muraille » (iteration 52): the first wall inside the table lets the shell through (see Game.ghostStep)
@@ -158,8 +165,16 @@ export function castWindy(tiles: ArrayLike<number>, x: number, y: number, ang: n
     if (bulletBlocked(tiles, nx, y, R)) { if (snowmanNear(tiles, nx, y, R)) break; vx = -vx; bounced = true; } else x = nx;
     const ny = y + vy * dt;
     if (bulletBlocked(tiles, x, ny, R)) { if (snowmanNear(tiles, x, ny, R)) break; vy = -vy; bounced = true; } else y = ny;
+    const mh = mirrorHit(tiles, ox, oy, x, y);
+    if (mh) {
+      // « Les miroirs » (iteration 57): turned at the glass, as in the simulation
+      const px = ox + (x - ox) * mh.s, py = oy + (y - oy) * mh.s;
+      const [rx, ry] = mirrorTurn(mh.m, x - px, y - py);
+      x = px + rx; y = py + ry;
+      [vx, vy] = mirrorTurn(mh.m, vx, vy);
+    }
     const w = warpTarget(tiles, ox, oy, x, y);
-    if (bounced || w || ++steps >= 2) {
+    if (bounced || w || mh || ++steps >= 2) {
       segs.push({ x0, y0, x1: x, y1: y });
       steps = 0;
       if (bounced && --bounces < 0) return segs;
@@ -194,19 +209,72 @@ function dda(tiles: ArrayLike<number>, x: number, y: number, dx: number, dy: num
   let tMaxY = dy !== 0 ? ((dy > 0 ? cy + 1 - R : cy + R) - y) / dy : Infinity;
   if (tMaxX < 0) tMaxX = 0;
   if (tMaxY < 0) tMaxY = 0;
+  // « Les miroirs » (iteration 57): the ray may cross the glass of the cell it is in (a shell fired from right against a mirror)
+  const glass = (gx: number, gy: number, m: number) => {
+    const s = mirrorRay(gx, gy, m, x, y, dx, dy);
+    return s >= 0 && s <= maxT ? { hit: false, t: s, x: x + dx * s, y: y + dy * s, axis: 0, warp: -1, cx: gx, cy: gy, mirror: m } : undefined;
+  };
+  const m0 = mirrorOf(tileAt(tiles, cx, cy));
+  if (m0) { const g = glass(cx, cy, m0); if (g) return g; }
   for (let i = 0; i < 200; i++) {
     let t: number, axis: number;
     if (tMaxX < tMaxY) { t = tMaxX; axis = 0; cx += stepX; tMaxX += tDeltaX; }
     else { t = tMaxY; axis = 1; cy += stepY; tMaxY += tDeltaY; }
-    if (t > maxT) return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis, warp: -1, cx, cy };
+    if (t > maxT) return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis, warp: -1, cx, cy, mirror: 0 };
     const tile = tileAt(tiles, cx, cy);
-    if (isSolidBullet(tile)) return { hit: true, t, x: x + dx * t, y: y + dy * t, axis, warp: -1, cx, cy };
+    const m = mirrorOf(tile);
+    if (m) { const g = glass(cx, cy, m); if (g) return g; continue; }
+    if (isSolidBullet(tile)) return { hit: true, t, x: x + dx * t, y: y + dy * t, axis, warp: -1, cx, cy, mirror: 0 };
     if (isPortal(tile)) {
       const twin = portalTwin(tiles, cy * W + cx);
-      if (twin >= 0) return { hit: false, t, x: x + dx * t, y: y + dy * t, axis, warp: twin, cx, cy };
+      if (twin >= 0) return { hit: false, t, x: x + dx * t, y: y + dy * t, axis, warp: twin, cx, cy, mirror: 0 };
     }
   }
-  return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis: 0, warp: -1, cx, cy };
+  return { hit: false, t: maxT, x: x + dx * maxT, y: y + dy * maxT, axis: 0, warp: -1, cx, cy, mirror: 0 };
+}
+
+// ---------------------------------------------------------------- « Les miroirs » (iteration 57)
+
+/** A direction turned by a mirror: '/' (m = 1) sends right to up, '\\' (m = -1) sends right to down (y grows down the map). */
+export function mirrorTurn(m: number, vx: number, vy: number): [number, number] {
+  return m > 0 ? [-vy, -vx] : [vy, vx];
+}
+
+/** Side of the mirror line of cell (cx, cy) the point (x, y) is on (signed; 0 on the glass). */
+function mirrorSide(cx: number, cy: number, m: number, x: number, y: number) {
+  return m > 0 ? x - cx + (y - cy) - 1 : x - cx - (y - cy);
+}
+
+/** Distance along the ray (x, y) + s (dx, dy) to the glass of the mirror m of cell (cx, cy), inside that cell; -1 if it misses. */
+function mirrorRay(cx: number, cy: number, m: number, x: number, y: number, dx: number, dy: number): number {
+  const den = m > 0 ? dx + dy : dx - dy;
+  if (Math.abs(den) < 1e-9) return -1;
+  const s = -mirrorSide(cx, cy, m, x, y) / den;
+  if (s < 1e-6) return -1;
+  const px = x + dx * s, py = y + dy * s;
+  return px >= cx - 1e-6 && px <= cx + 1 + 1e-6 && py >= cy - 1e-6 && py <= cy + 1 + 1e-6 ? s : -1;
+}
+
+/**
+ * A shell moved from (x0, y0) to (x1, y1): did its centre cross the glass of a mirror on the way? Returns where (s, from 0
+ * to 1 along the move), which mirror (m) and its cell; the earliest one when two cells are touched. Undefined otherwise.
+ */
+export function mirrorHit(tiles: ArrayLike<number>, x0: number, y0: number, x1: number, y1: number): { s: number; m: number; cx: number; cy: number } | undefined {
+  let best: { s: number; m: number; cx: number; cy: number } | undefined;
+  const ax = Math.floor(Math.min(x0, x1)), bx = Math.floor(Math.max(x0, x1)), ay = Math.floor(Math.min(y0, y1)), by = Math.floor(Math.max(y0, y1));
+  for (let cy = ay; cy <= by; cy++) {
+    for (let cx = ax; cx <= bx; cx++) {
+      const m = mirrorOf(tileAt(tiles, cx, cy));
+      if (!m) continue;
+      const a = mirrorSide(cx, cy, m, x0, y0), b = mirrorSide(cx, cy, m, x1, y1);
+      if (a === 0 || a * b > 0) continue; // starting on the glass: it was just turned there
+      const s = a / (a - b);
+      const px = x0 + (x1 - x0) * s, py = y0 + (y1 - y0) * s;
+      if (px < cx - 1e-6 || px > cx + 1 + 1e-6 || py < cy - 1e-6 || py > cy + 1 + 1e-6) continue;
+      if (!best || s < best.s) best = { s, m, cx, cy };
+    }
+  }
+  return best;
 }
 
 /** Distance parameter along segment where it first touches circle, or -1. */
