@@ -197,6 +197,15 @@ export const sfx = {
     tone(t, 0.3, 1900, 620, 0.06, 'triangle');
     [784, 988, 1175].forEach((f, i) => { tone(t + 0.12 + i * 0.06, 0.4, f, f, 0.05, 'sine'); tone(t + 0.12 + i * 0.06, 0.3, f * 2, f * 2, 0.02, 'sine'); });
   },
+  /** « Le Grand Illusionniste » (iteration 60) falls: the doves fly off to a « ta-daa ! » of brass and a flutter of wings. */
+  tada() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    tone(t, 0.12, 523, 523, 0.09, 'square');
+    tone(t + 0.13, 0.55, 784, 784, 0.09, 'square');
+    tone(t + 0.13, 0.55, 1046, 1046, 0.05, 'triangle');
+    for (let i = 0; i < 7; i++) noise(t + 0.2 + i * 0.07 + Math.random() * 0.03, 0.05, 2400, 1.4, 0.07, 'bandpass', 1500);
+  },
   /** « Pouf ! » A mirage dispelled (a puff and a little falling chime), or a shell of stars bursting (just a fizz). */
   poof(decoy: boolean) {
     if (!ctx) return;

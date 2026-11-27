@@ -73,6 +73,7 @@ export type GameEvent =
   | ['mirror', number, number, number] // cx cy tile: on a flip of the switches, that mirror turned a quarter turn (older tabs are told to reload)
   | ['abra', number, number, number] // x y tankId: « L’Illusionniste » (iteration 58) raises its wand (older tabs ignore all three)
   | ['conjure', number, number, number, ...number[]] // x y tankId, then x y of each spot it reappears on (itself on one, a mirage on the others)
+  | ['swap', number, number, number, number, number] // x0 y0 x1 y1 tankId: « Le Grand Illusionniste » (iteration 60), hit, swaps places with a mirage (older tabs ignore it)
   | ['poof', number, number, number] | ['poof', number, number, number, number] // x y what [mirageId]: 0 a mirage is dispelled, 1 a shell of stars bursts
   | ['ghost', number, number, number] // x y phase (« Passe-muraille », iteration 52): 0 into a wall, 1 out the other side, 2 faded inside
   | ['mboom', number, number] | ['mboom', number, number, number, number] // x y [radius ownerTankId]: a seed of the Semeur bursts (iteration 25)

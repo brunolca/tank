@@ -2324,15 +2324,62 @@ export const TRAIN_START: [number, number] = [17.5, 9];
 /** Wagons behind the locomotive. */
 export const TRAIN_WAGONS = 3;
 
-export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower' | 'bombard' | 'train';
 /**
- * Which boss holds a boss mission, in turn: the Colosse (10, 110, 210…), the Foreur (20, 70, 120…), the Grondeur
+ * « Le Grand Illusionniste » (iteration 60): its stages. By day, « le théâtre » (stage wings of high walls, a pillar
+ * in the middle, two mirrors to shoot round the corners); at night, « le cabaret », its mirrors in every corner.
+ */
+const MAGUS_ARENAS: string[][] = [
+  [
+    '......................',
+    '.1....................',
+    '...........o..........',
+    '....HH..........HHH...',
+    '....H.............H...',
+    '........\\.............',
+    '..o...........o.......',
+    '..o.......HH..........',
+    '..........HH..........',
+    '..o.......HH..........',
+    '..o...........o.......',
+    '......../.............',
+    '....H.............H...',
+    '....HH..........HHH...',
+    '...........o..........',
+    '.2....................',
+    '......................',
+  ],
+  [
+    '......................',
+    '.1.........\\..........',
+    '......................',
+    '.....##........##.....',
+    '.....#..........#.....',
+    '..........oo..........',
+    '../..................\\',
+    '......................',
+    '.......H......H.......',
+    '......................',
+    '..\\..................\\',
+    '..........oo..........',
+    '.....#..........#.....',
+    '.....##........##.....',
+    '......................',
+    '.2.........\\..........',
+    '......................',
+  ],
+];
+
+export type BossKind = 'boss' | 'drill' | 'thunder' | 'sower' | 'bombard' | 'train' | 'magus';
+/**
+ * Which boss holds a boss mission, in turn: the Colosse (10, 110, 210…), the Foreur (20, 120, 220…), the Grondeur
  * (30, 80, 130…), the Semeur (40, 90, 140…), since iteration 35 the Bombardier (50, 100, 150…) and, since
- * iteration 49, the Tortillard, which took over every other Colosse (60, 160, 260…).
+ * iteration 49, the Tortillard, which took over every other Colosse (60, 160, 260…), and since iteration 60 the
+ * Grand Illusionniste, which took over every other Foreur (70, 170, 270…).
  */
 export function bossOf(mission: number): BossKind {
   const k = Math.round(mission / 10) % 5;
   if (k === 1 && Math.floor(mission / 50) % 2 === 1) return 'train';
+  if (k === 2 && Math.floor(mission / 50) % 2 === 1) return 'magus';
   return k === 2 ? 'drill' : k === 3 ? 'thunder' : k === 4 ? 'sower' : k === 0 ? 'bombard' : 'boss';
 }
 
@@ -2355,6 +2402,16 @@ export function bossLevel(mission: number, who: BossKind = bossOf(mission)): Par
     // the second station is the night one (160, 360…): only the locomotive's lamp and the wagons' lanterns show the way
     const lvl = trainLevel(mission, cycle % 4 === 3 ? 1 : 0);
     if (cycle % 4 === 3) { lvl.night = true; lvl.name = `Le Tortillard de nuit · ${mission}`; }
+    return lvl;
+  }
+  if (who === 'magus') {
+    // the theatre by day (70, 270…), the cabaret at night (170, 370…): only the stars of its wand light the way
+    const night = cycle % 4 === 3;
+    const lvl = parseLevel({ name: `${night ? 'Le Grand Illusionniste au cabaret' : 'Le Grand Illusionniste'} · ${mission}`, map: MAGUS_ARENAS[night ? 1 : 0] });
+    lvl.night = night;
+    lvl.enemies.push({ kind: 'magus', x: 16.5, y: 8.5 });
+    const esc = BOSS_ESCORTS[Math.min(BOSS_ESCORTS.length - 1, Math.floor(mission / 10) - 2)];
+    lvl.enemies.push({ kind: esc[0], x: 19.5, y: 2.5 }, { kind: esc[1], x: 19.5, y: 14.5 });
     return lvl;
   }
   if (who === 'bombard') {

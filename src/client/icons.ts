@@ -42,6 +42,7 @@ const P: Record<string, string> = {
   // the bosses
   pick: '<path d="M4 9c5-6 11-6 16 0M12 5v16"/>',
   sprout: '<path d="M12 21v-9M12 12c0-4-3-6-7-6 0 4 3 6 7 6zM12 15c0-3 2.5-5 6-5 0 3-2.5 5-6 5z"/>',
+  wand: '<path d="M4 20L15 9"/><path d="M17.5 2.5l1 2.4 2.5.3-1.9 1.7.5 2.5-2.1-1.3-2.2 1.3.5-2.5-1.8-1.7 2.5-.3z"/>', // « Le Grand Illusionniste » (iteration 60)
   // the quick-chat lines (in the order of EMOTES)
   bravo: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
   merci: '<path d="M12 20s-8-4.8-8-10.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.2 12 20 12 20z"/>',

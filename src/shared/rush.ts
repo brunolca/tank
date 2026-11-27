@@ -16,7 +16,7 @@ export const RUSH_DUOS: [BossKind, BossKind][] = [
   ['boss', 'sower'], ['drill', 'thunder'], ['boss', 'thunder'], ['drill', 'sower'], ['boss', 'drill'], ['thunder', 'sower'],
 ];
 
-export const BOSS_NAMES: Record<BossKind, string> = { boss: 'le Colosse', drill: 'le Foreur', thunder: 'le Grondeur', sower: 'le Semeur', bombard: 'le Bombardier', train: 'le Tortillard' };
+export const BOSS_NAMES: Record<BossKind, string> = { boss: 'le Colosse', drill: 'le Foreur', thunder: 'le Grondeur', sower: 'le Semeur', bombard: 'le Bombardier', train: 'le Tortillard', magus: 'le Grand Illusionniste' };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Weeks since 1970, starting on Mondays (UTC): day 4 (1970-01-05) was a Monday. */

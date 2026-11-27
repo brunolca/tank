@@ -658,10 +658,10 @@ console.log('total', Date.now() - t0, 'ms');
 // the Foreur (iteration 11): the boss of even tens; it digs, burrows toward a foe, shakes the ground, then bursts out
 {
   const fail = (m: string) => { console.error('FOREUR:', m); process.exitCode = 1; };
-  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'bombard'], [60, 'train'], [70, 'drill'], [80, 'thunder'], [90, 'sower'], [100, 'bombard'], [110, 'boss'], [160, 'train'], [210, 'boss']] as const) {
+  for (const [mission, kind] of [[10, 'boss'], [20, 'drill'], [30, 'thunder'], [40, 'sower'], [50, 'bombard'], [60, 'train'], [70, 'magus'], [80, 'thunder'], [90, 'sower'], [100, 'bombard'], [110, 'boss'], [120, 'drill'], [160, 'train'], [170, 'magus'], [210, 'boss'], [220, 'drill']] as const) {
     if (!getMission(mission).enemies.some((e) => e.kind === kind)) fail(`la mission ${mission} devrait opposer ${kind}`);
   }
-  if (getMission(20).night || getMission(70).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
+  if (getMission(20).night || getMission(120).night || getMission(20).storm) fail('le Foreur se bat de jour, sans orage');
   if (!getMission(110).night || getMission(210).night || getMission(10).night || !getMission(310).night) fail('un Colosse sur deux se bat de nuit, à partir du 110ᵉ');
   // the daily « Le Colosse attend » keeps its Colosse
   for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 14; day++) {
@@ -4136,4 +4136,111 @@ console.log('total', Date.now() - t0, 'ms');
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions des sables mouvants');
   if (process.exitCode !== 1) console.log(`sables mouvants OK (${gen} missions générées, ${cleared} partie(s) gagnée(s) par l’IA, ${swallowed} englouti(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Le Grand Illusionniste » (iteration 60): the seventh boss (missions 70, 170, 270…, every other Foreur): its trick makes
+// it four (three mirages, one of them mirroring both ways); each hit it takes, it swaps places with a mirage; no volleys;
+// its mirages are as big as it is; never in the boss round, the daily challenge nor the mole; the AI beats it
+{
+  const fail = (m: string) => { console.error('GRAND ILLUSIONNISTE :', m); process.exitCode = 1; };
+  const open = () => new Array(W * H).fill(Tile.Empty);
+  if (!isBossKind('magus') || killXp('magus') !== 8 || SPECS.magus.hp !== 8) fail('le Grand Illusionniste devrait être un boss à 8 PV');
+  if (RUSH_BOSSES.includes('magus' as never) || RUSH_DUOS.some((d) => d.includes('magus' as never))) fail('la ronde des boss a changé en cours de semaine');
+  for (const m of [70, 170, 270, 370]) {
+    const l = getMission(m);
+    if (l.enemies.filter((e) => e.kind === 'magus').length !== 1 || l.enemies.length !== 3) fail(`la mission ${m} devrait opposer le Grand Illusionniste et deux escortes`);
+    for (const e of l.enemies) if (l.tiles[Math.floor(e.y) * W + Math.floor(e.x)] !== Tile.Empty) fail(`mission ${m} : un tank dans un mur`);
+  }
+  if (getMission(70).night || !getMission(170).night || getMission(270).night) fail('le cabaret de nuit, c’est un passage sur deux, à partir du 170ᵉ');
+  for (let m = 10; m <= 60; m += 10) if (getMission(m).enemies.some((e) => e.kind === 'magus')) fail(`Grand Illusionniste trop tôt (${m})`);
+  for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 40; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).enemies.some((e) => e.kind === 'magus')) fail('Grand Illusionniste dans le défi du jour');
+  for (let seed = 1; seed < 10; seed++) for (let st = 1; st <= TAUPE_STAGES; st++) if (taupeLevel(seed * 31, st).enemies.some((e) => e.kind === 'magus')) fail('Grand Illusionniste dans la taupe');
+  {
+    const g = new Game(open());
+    const p = g.addTank('player', 0, 3.5, 8.5, 0x3d7bff, 'p1', 'P');
+    p.buffs.invuln = 99; p.buffs.shield = true;
+    const m = g.addTank('magus', 99, 14.5, 8.5, 0);
+    m.conj!.t = 0;
+    g.frozen = false;
+    let conj: unknown[] | undefined, volleys = 0;
+    for (let i = 0; i < 60 && !conj; i++) { g.step(new Map()); for (const e of g.events) { if (e[0] === 'conjure') conj = e; if (e[0] === 'volley') volleys++; } g.events = []; }
+    if (!conj) fail('il ne fait jamais son tour');
+    else if (conj.length !== 4 + 8) fail(`le tour ne donne pas quatre places (${conj.length})`);
+    if (g.decoys.length !== 3) fail(`${g.decoys.length} mirage(s) au lieu de 3`);
+    if (new Set(g.decoys.map((d) => d.m)).size !== 3) fail('les trois mirages ne jouent pas trois miroirs différents');
+    for (const d of g.decoys) if (Math.hypot(d.x - m.x, d.y - m.y) < 2.1) fail('mirages trop serrés');
+    // a mirage that mirrors both ways
+    const d2 = g.decoys.find((d) => d.m === 2)!;
+    if (d2) {
+      m.ai = undefined;
+      const [x0, y0] = [d2.x, d2.y];
+      g.step(new Map()); g.events = [];
+      m.x += 0.1; m.y += 0.05;
+      g.step(new Map()); g.events = [];
+      if (Math.abs(d2.x - (x0 - 0.1)) > 0.02 || Math.abs(d2.y - (y0 - 0.05)) > 0.02) fail(`le troisième mirage ne suit pas en double miroir (${d2.x - x0}, ${d2.y - y0})`);
+    }
+    // hit: it swaps places with a mirage, the hit counts
+    const before = { x: m.x, y: m.y }, spots = g.decoys.map((d) => [d.x, d.y]);
+    m.buffs.invuln = 0;
+    g.events = [];
+    g.killTank(m, p);
+    const sw = g.events.find((e) => e[0] === 'swap');
+    if (!sw) fail('touché, il ne s’escamote pas');
+    if (m.hp !== 7) fail(`le coup ne compte pas (${m.hp} PV)`);
+    if (!spots.some(([x, y]) => Math.hypot(x - m.x, y - m.y) < 0.01)) fail('il n’est pas allé à la place d’un mirage');
+    if (!g.decoys.some((d) => Math.hypot(d.x - before.x, d.y - before.y) < 0.01)) fail('aucun mirage n’a pris sa place');
+    // a mirage the size of the boss: a shell grazing its edge dispels it
+    const d = g.decoys[0];
+    g.bullets.push({ id: 990, owner: p.id, x: d.x + 0.5, y: d.y, vx: 0, vy: 0, bounces: 0, rocket: false, dead: false });
+    g.shootDecoys();
+    if (g.decoys.includes(d)) fail('un obus au bord d’un grand mirage ne le dissipe pas');
+    if (volleys) fail('le Grand Illusionniste ne fait pas de salves');
+    // no mirage out: it just takes the hit
+    for (const dd of g.decoys) g.poofDecoy(dd);
+    g.decoys = [];
+    m.buffs.invuln = 0;
+    g.events = [];
+    const px = m.x;
+    g.killTank(m, p);
+    if (g.events.some((e) => e[0] === 'swap') || m.x !== px || m.hp !== 6) fail('sans mirage, il devrait juste encaisser');
+    // enraged at half: tricks come sooner
+    m.hp = 5; m.buffs.invuln = 0;
+    g.killTank(m, p);
+    if (!m.boss!.rage) fail('pas de colère à mi-vie');
+    // killed: all its mirages vanish
+    m.conj!.t = 0; m.conj!.warn = 0;
+    for (let i = 0; i < 60 && !g.decoys.length; i++) { g.step(new Map()); g.events = []; }
+    if (!g.decoys.length) fail('en colère, il ne fait plus son tour');
+    m.hp = 1; m.buffs.invuln = 0;
+    g.killTank(m, p);
+    g.step(new Map());
+    if (m.alive || g.decoys.length) fail('ses mirages lui survivent');
+  }
+  // its stages: AI duos beat it, tricks and swaps happen, the tick stays cheap
+  let cleared = 0, spent = 0, steps = 0, tricks = 0, swaps = 0;
+  for (let run2 = 0; run2 < 12 && cleared < 1; run2++) {
+    const l = getMission(run2 % 2 ? 170 : 70);
+    l.enemies = l.enemies.filter((e) => e.kind === 'magus'); // the boss alone (its escorts at the 70th are the white and the black)
+    const s2 = new Game(l.tiles, l.belts);
+    s2.night = !!l.night;
+    for (const [sx, sy] of l.spawns.slice(0, 2)) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) {
+      const t = s2.addTank(en.kind, 99, en.x, en.y, 0);
+      if (t.kind === 'magus') s2.setHp(t, 11);
+    }
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 180 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      for (const e of s2.events) { if (e[0] === 'conjure') tricks++; if (e[0] === 'swap') swaps++; }
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout du Grand Illusionniste');
+  if (!tricks || !swaps) fail(`pas de tour (${tricks}) ou pas d’escamotage (${swaps}) pendant les parties`);
+  if (process.exitCode !== 1) console.log(`Grand Illusionniste OK (${cleared} partie(s) gagnée(s) par l’IA, ${tricks} tour(s), ${swaps} escamotage(s), ${per.toFixed(3)} ms/tick)`);
 }

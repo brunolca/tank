@@ -11,6 +11,8 @@ export const THUNDER_R = 0.58;
 export const SOWER_R = 0.6;
 export const BOMBARD_R = 0.64;
 export const TRAIN_R = 0.6;
+/** « Le Grand Illusionniste » (iteration 60): the seventh boss. */
+export const MAGUS_R = 0.6;
 export const WAGON_R = 0.46;
 export const BULLET_R = 0.09;
 export const MINE_R = 0.22;
@@ -83,6 +85,7 @@ export type TankKind =
   | 'mechanic'
   | 'spectre'
   | 'conjurer'
+  | 'magus'
   | 'train'
   | 'wagon';
 
@@ -156,6 +159,9 @@ export const SPECS: Record<TankKind, TankSpec> = {
   // iteration 49: the sixth boss, « le Tortillard », a toy locomotive that runs round its rails pulling gun wagons
   // (see TRAIN_*): it runs over whatever stands on the track, and its cowcatcher sends head-on shells back. The rails
   // drive it, never the AI (speed 0 here: nothing pushes it about either).
+  // iteration 60: « Le Grand Illusionniste », the seventh boss: the Illusionniste's master, in a tall hat and a starry cape.
+  // Its trick makes it four (three mirages), and each hit it takes swaps it with one of them (see mirage.ts)
+  magus: { speed: 1.5, maxBullets: 3, bounces: 1, rocket: false, fireCd: 1.15, turretSpeed: 2.6, mines: 0, skill: 1, reaction: 0.45, aimError: 0.06, hp: 8, size: MAGUS_R, label: 'Grand Illusionniste' },
   train: { speed: 0, maxBullets: 0, bounces: 0, rocket: false, fireCd: 9, turretSpeed: 0, mines: 0, skill: 0, reaction: 0.5, aimError: 0.1, hp: 8, size: TRAIN_R, label: 'Tortillard' },
   // its wagons: a little cannon on a flat car, hooked behind the locomotive (one hit each)
   wagon: { speed: 0, maxBullets: 1, bounces: 1, rocket: false, fireCd: 2.7, turretSpeed: 1.7, mines: 0, skill: 1, reaction: 0.6, aimError: 0.09, size: WAGON_R, label: 'Wagon' },
@@ -201,6 +207,7 @@ export const ENEMY_COLORS: Record<TankKind, number> = {
   mechanic: 0xb8683a,
   spectre: 0x7fd1ae,
   conjurer: 0xc9a7f2,
+  magus: 0x6b46c1,
   train: 0x2f7a4d,
   wagon: 0xd9a63a,
 };
@@ -238,7 +245,7 @@ export const DRILL_RING_SHOTS = 8;
 /** Flags bit: the Foreur is under the table (nothing can touch it, it touches nothing). */
 export const FLAG_BURROW = 512;
 /** The five bosses that take turns every ten missions (the Bombardier since iteration 35). */
-export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower' || k === 'bombard' || k === 'train';
+export const isBossKind = (k: string) => k === 'boss' || k === 'drill' || k === 'thunder' || k === 'sower' || k === 'bombard' || k === 'train' || k === 'magus';
 
 // ------------------------------------------------------------------ « Le Tortillard » (iteration 49): the boss on rails
 /** Cruising speed along the rails, tiles per second (calm, then enraged), and how fast it speeds up or brakes. */

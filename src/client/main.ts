@@ -450,6 +450,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   const sowerFight = enemies.some((e) => e.kind === 'sower');
   const bombardFight = enemies.some((e) => e.kind === 'bombard');
   const trainFight = enemies.some((e) => e.kind === 'train');
+  const magusFight = enemies.some((e) => e.kind === 'magus');
   if (online && coopLike(msg.mode)) meetEnemies(enemies.map((e) => e.kind));
   if (coopLike(msg.mode)) {
     // « Le bilan » (iteration 45): a full-screen briefing, as in the original, instead of the banner
@@ -458,10 +459,10 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
       ? { kicker: 'Défi du jour · étape', big: `${msg.daily.stage}/${msg.daily.stages}`, sub: TWIST_INFO[msg.daily.twist]?.label ?? '', cls: 'daily' }
       : msg.mode === 'rush'
       ? (rushSt >= RUSH_STAGES ? { kicker: 'Ronde des boss · le bouquet final', big: `${rushSt}/${RUSH_STAGES}`, sub: 'Deux boss à la fois : sépare-les, et garde un œil sur chacun !', cls: 'boss rush' }
-        : { kicker: 'Ronde des boss · boss', big: `${rushSt}/${RUSH_STAGES}`, sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight, trainFight), cls: 'boss rush' })
+        : { kicker: 'Ronde des boss · boss', big: `${rushSt}/${RUSH_STAGES}`, sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight, trainFight, magusFight), cls: 'boss rush' })
       : msg.mode === 'taupe' ? { kicker: 'La taupe · étape', big: `${msg.mission}/${TAUPE_STAGES}`, sub: '', cls: 'mole' }
       : msg.mode === 'atelier' ? { kicker: 'Atelier · mission maison', big: '', sub: `${ATELIER_LIVES} vies pour en venir à bout`, cls: 'atelier' }
-      : bossFight ? { kicker: 'Mission · Boss', big: String(msg.mission), sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight, trainFight), cls: 'boss' }
+      : bossFight ? { kicker: 'Mission · Boss', big: String(msg.mission), sub: bossTip(thunderFight, sowerFight, drillFight, bombardFight, trainFight, magusFight), cls: 'boss' }
       : { kicker: 'Mission', big: String(msg.mission), sub: '', cls: '' };
     hideBanner();
     hideSheet();
@@ -483,6 +484,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
   if (myTankId < 0) toast('Partie en cours : tu rejoindras à la prochaine manche.', 4000);
+  else if (magusFight) setTimeout(() => toast('Le Grand Illusionniste : d’un coup de baguette, il devient quatre. Un seul est vrai ! Chaque fois que tu le touches, il échange sa place avec un mirage : regarde bien où il réapparaît. Ton tank traverse les mirages…', 6000), 2200);
   else if (sowerFight) setTimeout(() => toast('Le Semeur : ses graines mûres l’épargnent, mais une graine touchée par ton obus explose aussitôt… et le blesse s’il est à côté !', 4600), 2200);
   else if (trainFight) setTimeout(() => toast('Le Tortillard : « Tchou-tchou ! » Ne reste jamais sur les rails devant lui. Son chasse-pierres renvoie les obus de face : vise ses flancs, son dos… ou pose une mine sur la voie ! Quand il siffle à l’arrêt, il repart en marche arrière.', 6000), 2200);
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
@@ -575,8 +577,9 @@ function openSheet(v: SheetView, mission?: number) {
 }
 
 /** One line on how to beat the boss of the table (the intro banner of a boss fight). */
-function bossTip(thunder: boolean, sower: boolean, drill: boolean, bombard = false, train = false) {
-  return train ? 'Il fait le tour de la table sur ses rails et écrase tout ce qui traîne sur la voie. Vise-le de côté ou par-derrière !'
+function bossTip(thunder: boolean, sower: boolean, drill: boolean, bombard = false, train = false, magus = false) {
+  return magus ? 'Il devient quatre d’un coup de baguette, et chaque coup reçu l’échange avec un mirage. Garde l’œil sur le vrai !'
+    : train ? 'Il fait le tour de la table sur ses rails et écrase tout ce qui traîne sur la voie. Vise-le de côté ou par-derrière !'
     : bombard ? 'Il pilonne des rangées entières de boulets. Ne longe pas la rangée : avance vers lui ou recule !'
     : thunder ? 'Il appelle la foudre sur toi. Quand son nuage gronde, bouge… ou file sous un tunnel !'
     : sower ? 'Il sème des graines géantes qui explosent. Tire sur celles qui poussent à ses pieds !'
@@ -1107,6 +1110,11 @@ function handleEvent(e: GameEvent, audible: boolean) {
       renderer.conjure(e[1], e[2], (e as number[]).slice(4));
       if (audible) sfx.conjure();
       break;
+    case 'swap': // « Le Grand Illusionniste » (iteration 60): hit, it swaps places with one of its mirages
+      renderer.swapPuff(e[1], e[2], e[3], e[4]);
+      floater(e[3], e[4], 'Escamoté !', enemyColor('magus'));
+      if (audible) sfx.conjure();
+      break;
     case 'poof':
       renderer.starPuff(e[1], e[2], e[3] === 0 ? 1 : 0.45);
       if (e[3] === 0) floater(e[1], e[2], 'Pouf !', enemyColor('conjurer'));
@@ -1129,7 +1137,8 @@ function handleEvent(e: GameEvent, audible: boolean) {
         // the boss goes down in a chain of blasts
         const kind = renderer.tankKind(e[3])!;
         renderer.explosion(e[1], e[2], true, renderer.tankColor(e[3]));
-        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : kind === 'bombard' ? 0xc9a66b : kind === 'train' ? 0x8a8a8a : 0xf2c14e), i * 180);
+        for (let i = 1; i <= 3; i++) setTimeout(() => renderer.explosion(e[1] + (Math.random() - 0.5) * 1.4, e[2] + (Math.random() - 0.5) * 1.4, false, kind === 'drill' ? 0x8a5a33 : kind === 'thunder' ? 0x8fc0ff : kind === 'sower' ? 0x7fd05a : kind === 'bombard' ? 0xc9a66b : kind === 'train' ? 0x8a8a8a : kind === 'magus' ? 0xc9a7f2 : 0xf2c14e), i * 180);
+        if (kind === 'magus') { renderer.doves(e[1], e[2]); renderer.starPuff(e[1], e[2], 1.6); if (audible) setTimeout(() => sfx.tada(), 420); } // « Le Grand Illusionniste » (iteration 60): doves fly out of its hat
         floater(e[1], e[2], `${specOf(kind).label} vaincu !`, 0xf2c14e);
         if (audible) { sfx.boom(true); setTimeout(() => sfx.boom(false), 250); }
         if (online && bossFight) setMusicIntensity(1);
@@ -1581,6 +1590,7 @@ function updateBoss(tanks: RTank[], hpOf: (id: number) => number, maxOf: (id: nu
   bar.classList.toggle('sower', bossKind === 'sower');
   bar.classList.toggle('bombard', bossKind === 'bombard');
   bar.classList.toggle('train', bossKind === 'train');
+  bar.classList.toggle('magus', bossKind === 'magus');
   $('#boss-hp').textContent = `${hp} / ${max}`;
   $('#boss-fill').style.width = `${(100 * hp) / max}%`;
 }
@@ -2447,7 +2457,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
     g.frozen = true;
     attractBriefUntil = performance.now() + 3000;
     const boss = foes.some((t) => !!t.boss);
-    showBrief({ kicker: boss ? 'Mission · Boss' : 'Mission', big: String(opts.mission ?? 1), name: lvl.name, sub: boss ? bossTip(foes.some((t) => t.kind === 'thunder'), foes.some((t) => t.kind === 'sower'), foes.some((t) => t.kind === 'drill'), foes.some((t) => t.kind === 'bombard'), foes.some((t) => t.kind === 'train')) : '',
+    showBrief({ kicker: boss ? 'Mission · Boss' : 'Mission', big: String(opts.mission ?? 1), name: lvl.name, sub: boss ? bossTip(foes.some((t) => t.kind === 'thunder'), foes.some((t) => t.kind === 'sower'), foes.some((t) => t.kind === 'drill'), foes.some((t) => t.kind === 'bombard'), foes.some((t) => t.kind === 'train'), foes.some((t) => t.kind === 'magus')) : '',
       wx: weatherWords(g.night, g.storm, g.belts, g.wind, g.fog), kinds: kindCounts(foes.map((t) => t.kind)), total: foes.length, cls: `${boss ? 'boss' : ''}${g.night ? ' night' : ''}${g.storm ? ' storm' : ''}` }, briefArt, kindLabel);
   }
   attractEnd = 0;
@@ -3339,6 +3349,7 @@ const BESTIARY: [TankKind, string][] = [
   ['bombard', 'boss : pilonne des rangées entières de boulets, d’un bout à l’autre'],
   ['wagon', 'accroché derrière le Tortillard, son petit canon tire sur les côtés de la voie'],
   ['train', 'boss : fait le tour de la table sur ses rails et écrase tout ce qui est sur la voie ; de face, son chasse-pierres renvoie les obus'],
+  ['magus', 'boss : devient quatre d’un coup de baguette, et chaque coup reçu l’échange avec un de ses mirages'],
 ];
 // the crates (iteration 29): what each bonus does, in its colour
 const CRATES: [BonusKind, string][] = [
@@ -3407,6 +3418,7 @@ function tankSvg(kind: string, known: boolean) {
     : kind === 'wagon' ? '<rect x="7" y="22" width="4" height="4" fill="#2a1d12"/><rect x="37" y="22" width="4" height="4" fill="#2a1d12"/>'
     : kind === 'mechanic' ? '<path d="M14 24 H34" stroke="#dfe5ea" stroke-width="4" stroke-linecap="round"/><path d="M36 19.5 a5 5 0 1 0 0 9" fill="none" stroke="#dfe5ea" stroke-width="3.4"/><rect x="5" y="19" width="7" height="10" rx="1.5" fill="#d8392f" stroke="#2a1d12" stroke-width="1"/>'
     : kind === 'spectre' ? '<path d="M15 31 V20 a9 9 0 0 1 18 0 V31 l-3 -2.5 l-3 2.5 l-3 -2.5 l-3 2.5 l-3 -2.5 Z" fill="#f4fffb" stroke="#2a1d12" stroke-width="1.1" opacity=".92"/><ellipse cx="21" cy="21" rx="1.6" ry="2.4" fill="#1d2b28"/><ellipse cx="27" cy="21" rx="1.6" ry="2.4" fill="#1d2b28"/><circle cx="24" cy="26.5" r="1.4" fill="#1d2b28"/>'
+    : kind === 'magus' ? '<path d="M5 14 Q2 24 5 34 L13 30 V18 Z" fill="#2c1d4a" opacity=".85"/><rect x="17" y="12" width="14" height="14" rx="1.5" fill="#1e1a26"/><rect x="14" y="25" width="20" height="3" rx="1.5" fill="#1e1a26"/><rect x="17" y="21.5" width="14" height="2.6" fill="#f2c14e"/><path d="M34 11 L43 4" stroke="#1e1a26" stroke-width="2.2" stroke-linecap="round"/><path d="M43 1.5 l1.2 2.6 l2.8 .3 l-2.1 1.9 l.6 2.8 l-2.5 -1.4 l-2.5 1.4 l.6 -2.8 l-2.1 -1.9 l2.8 -.3 Z" fill="#ffd34d"/>'
     : kind === 'conjurer' ? '<rect x="18" y="15" width="12" height="11" rx="1.5" fill="#1e1a26"/><rect x="15" y="25" width="18" height="3" rx="1.5" fill="#1e1a26"/><rect x="18" y="22" width="12" height="2.4" fill="#c9a7f2"/><path d="M33 12 L41 6" stroke="#1e1a26" stroke-width="2"/><path d="M42 2.5 l1.2 2.6 l2.8 .3 l-2.1 1.9 l.6 2.8 l-2.5 -1.4 l-2.5 1.4 l.6 -2.8 l-2.1 -1.9 l2.8 -.3 Z" fill="#ffd34d"/>'
     : kind === 'watcher' ? '<path d="M24 24 L46 15 L46 33 Z" fill="#ffd648" opacity=".55"/><circle cx="24" cy="24" r="4" fill="#ffe680" stroke="#2a1d12" stroke-width="1.2"/>'
     : kind === 'steel' ? '<rect x="12" y="13" width="24" height="22" rx="4" fill="none" stroke="#dfe6ee" stroke-width="1.6" stroke-dasharray="3 2"/>'
@@ -3435,6 +3447,7 @@ function enemySheet(kind: string) {
   if (kind === 'mechanic') tags.push('Répare les épaves', 'Une fois par tank');
   if (kind === 'spectre') tags.push('Obus fantômes', 'Traverse les murs');
   if (kind === 'conjurer') tags.push('Deux mirages', 'Obus d’étoiles');
+  if (kind === 'magus') tags.push('Trois mirages', 'Escamotage');
   if (kind === 'train') tags.push('Roule sur des rails', 'Chasse-pierres');
   if (kind === 'wagon') tags.push('Suit la locomotive');
   return `<dl><dt>Vitesse</dt><dd>${speed ? pips(speed) : '<em>immobile</em>'}</dd><dt>Cadence</dt><dd>${pips(rate)}</dd></dl><p class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>`;
@@ -4761,6 +4774,32 @@ if (params.has('demo')) {
         n++;
       }
       return n;
+    },
+    /**
+     * « Le Grand Illusionniste » (iteration 60): the hero with the best clear line to the real one fires at it (it swaps
+     * places with a mirage, « Escamoté ! »); with no clear line, it just takes the hit (to show the swap on camera).
+     */
+    magusShot() {
+      const g = attract;
+      if (!g) return 0;
+      const m = g.tanks.find((t) => t.alive && t.kind === 'magus');
+      if (!m) return 0;
+      let best: { h: Tank; ang: number; d: number } | undefined;
+      for (const h of g.tanks) {
+        if (!h.alive || h.kind !== 'player' || h.fireCd > 0.3) continue;
+        const dist = Math.hypot(m.x - h.x, m.y - h.y);
+        if (dist > 13 || !g.lineClear(h.x, h.y, m.x, m.y)) continue;
+        if (!best || dist < best.d) best = { h, ang: Math.atan2(m.y - h.y, m.x - h.x), d: dist };
+      }
+      if (best) {
+        best.h.turret = best.ang;
+        if (best.h.ai) best.h.ai.aim = best.ang;
+        best.h.fireCd = 0;
+        if (g.tryFire(best.h)) return 1;
+      }
+      m.buffs.invuln = 0;
+      g.killTank(m, undefined);
+      return 2;
     },
     /** « L’Illusionniste » (iteration 58): the hero with the best clear line to a mirage fires at it (« Pouf ! »). */
     decoyShot() {

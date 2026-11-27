@@ -765,6 +765,23 @@ function starGeo(R: number, r: number): THREE.BufferGeometry {
   }
   return new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: false }).translate(0, 0, -0.01);
 }
+// « Le Grand Illusionniste » (iteration 60): a starry indigo cape over its back deck, and the doves of its last trick
+const magusGeo = {
+  cape: new THREE.CylinderGeometry(0.4, 0.5, 0.34, 18, 1, true, Math.PI * 1.08, Math.PI * 0.84),
+  collar: new THREE.TorusGeometry(0.15, 0.02, 6, 18, Math.PI),
+  star: starGeo(0.045, 0.02),
+  tall: new THREE.CylinderGeometry(0.13, 0.145, 0.34, 18),
+};
+const capeMat = new THREE.MeshStandardMaterial({ color: 0x2c1d4a, roughness: 0.7, side: THREE.DoubleSide });
+const doveGeo = {
+  body: new THREE.SphereGeometry(0.07, 10, 8).scale(1.6, 0.85, 0.85),
+  head: new THREE.SphereGeometry(0.042, 8, 6),
+  beak: new THREE.ConeGeometry(0.014, 0.04, 6).rotateZ(-Math.PI / 2),
+  wing: new THREE.BoxGeometry(0.1, 0.008, 0.16).translate(0, 0, 0.08),
+  tail: new THREE.BoxGeometry(0.08, 0.008, 0.07).translate(-0.04, 0, 0),
+};
+const doveMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0xeeeeff, emissiveIntensity: 0.15 });
+const beakMat = new THREE.MeshStandardMaterial({ color: 0xf0a040, roughness: 0.5 });
 const topHatMat = new THREE.MeshStandardMaterial({ color: 0x1e1a26, roughness: 0.55, metalness: 0.05 });
 const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xc9a7f2, roughness: 0.4, emissive: 0x7a4fd0, emissiveIntensity: 0.15 });
 const wandTipMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
@@ -1371,15 +1388,37 @@ function buildTank(info: TankInfo): TankView {
     view.sheet = g;
     root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true; });
   }
-  if (info.kind === 'conjurer') {
+  if (info.kind === 'conjurer' || info.kind === 'magus') {
     // a top hat on the turret, and a wand held up on its left, a golden star at its tip
+    const magus = info.kind === 'magus'; // « Le Grand Illusionniste » (iteration 60): a taller hat with a golden band, and a cape
     const hat = new THREE.Group();
     const brim = new THREE.Mesh(conjGeo.brim, topHatMat);
-    const crown = new THREE.Mesh(conjGeo.crown, topHatMat);
-    crown.position.y = 0.13;
-    const ribbon = new THREE.Mesh(conjGeo.ribbon, ribbonMat);
+    const crown = new THREE.Mesh(magus ? magusGeo.tall : conjGeo.crown, topHatMat);
+    crown.position.y = magus ? 0.18 : 0.13;
+    const ribbon = new THREE.Mesh(conjGeo.ribbon, magus ? goldMat : ribbonMat);
     ribbon.position.y = 0.04;
     hat.add(brim, crown, ribbon);
+    if (magus) {
+      const badge = new THREE.Mesh(magusGeo.star, goldMat);
+      badge.position.set(0.145, 0.05, 0);
+      badge.rotation.y = Math.PI / 2;
+      hat.add(badge);
+      const cape = new THREE.Group();
+      cape.add(new THREE.Mesh(magusGeo.cape, capeMat));
+      for (const [a, y] of [[1.25, 0.06], [1.5, -0.08], [1.75, 0.04], [1.38, -0.02], [1.62, 0.1]]) {
+        const st = new THREE.Mesh(magusGeo.star, goldMat);
+        const th = a * Math.PI;
+        st.position.set(Math.sin(th) * 0.47, y, Math.cos(th) * 0.47);
+        st.rotation.y = th;
+        cape.add(st);
+      }
+      const collar = new THREE.Mesh(magusGeo.collar, goldMat);
+      collar.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+      collar.position.set(-0.02, 0.17, 0);
+      cape.add(collar);
+      cape.position.set(-0.04, 0.33, 0);
+      hull.add(cape);
+    }
     hat.position.set(-0.05, 0.16, 0);
     turret.add(hat);
     const wand = new THREE.Group();
@@ -3927,6 +3966,7 @@ export class Renderer {
       if (!owner) continue;
       const v = buildTank({ ...owner.info, id: t.id });
       v.decoy = true;
+      if (v.hat) v.hat.rotation.z = 0.22; // a tell for the sharp-eyed (iteration 60): a mirage wears its hat askew
       this.tanks.set(t.id, v);
       this.scene.add(v.root);
       this.decoyViews.add(t.id);
@@ -4276,6 +4316,66 @@ export class Renderer {
   conjure(x: number, y: number, spots: number[]) {
     this.starPuff(x, y, 1.3);
     for (let i = 0; i + 1 < spots.length; i += 2) this.starPuff(spots[i], spots[i + 1], 1);
+  }
+
+  /** « Le Grand Illusionniste » (iteration 60): hit, it swaps places with a mirage, a trail of stars from one spot to the other. */
+  swapPuff(x0: number, y0: number, x1: number, y1: number) {
+    this.starPuff(x0, y0, 0.9);
+    this.starPuff(x1, y1, 0.9);
+    const n = Math.max(6, Math.round(Math.hypot(x1 - x0, y1 - y0) * 6));
+    for (let i = 0; i <= n; i++) {
+      const k = i / n, x = x0 + (x1 - x0) * k, y = y0 + (y1 - y0) * k;
+      const h = 0.6 + Math.sin(k * Math.PI) * 1.2;
+      this.glow.emit({ x, y: h, z: y, vx: (Math.random() - 0.5) * 0.6, vy: 0.2 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 0.6, life: 0.5 + k * 0.35, s0: 0.1, s1: 0.01, c0: 0xffffff, c1: i % 2 ? 0xffd34d : 0xc9a7f2, drag: 1.5 });
+    }
+  }
+
+  /** And when it falls, doves fly out of its hat, flapping off in every direction. */
+  private doveList: { g: THREE.Group; wl: THREE.Object3D; wr: THREE.Object3D; vx: number; vy: number; vz: number; age: number; ph: number }[] = [];
+  doves(x: number, y: number) {
+    for (let i = 0; i < 8; i++) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(doveGeo.body, doveMat);
+      const head = new THREE.Mesh(doveGeo.head, doveMat);
+      head.position.set(0.1, 0.045, 0);
+      const beak = new THREE.Mesh(doveGeo.beak, beakMat);
+      beak.position.set(0.15, 0.04, 0);
+      const tail = new THREE.Mesh(doveGeo.tail, doveMat);
+      tail.position.set(-0.09, 0.01, 0);
+      const wl = new THREE.Group(), wr = new THREE.Group();
+      wl.add(new THREE.Mesh(doveGeo.wing, doveMat));
+      const m = new THREE.Mesh(doveGeo.wing, doveMat);
+      m.rotation.y = Math.PI;
+      wr.add(m);
+      wl.position.set(0, 0.03, 0.03);
+      wr.position.set(0, 0.03, -0.03);
+      g.add(body, head, beak, tail, wl, wr);
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5, sp = 1.4 + Math.random() * 1.2;
+      g.position.set(x, 1.4, y);
+      g.rotation.y = -a;
+      g.scale.setScalar(2.6);
+      this.scene.add(g);
+      this.doveList.push({ g, wl, wr, vx: Math.cos(a) * sp, vy: 1.6 + Math.random() * 1, vz: Math.sin(a) * sp, age: 0, ph: Math.random() * 6 });
+    }
+  }
+
+  private animateDoves(dt: number) {
+    for (const d of this.doveList) {
+      d.age += dt;
+      d.g.position.x += d.vx * dt;
+      d.g.position.y += d.vy * dt;
+      d.g.position.z += d.vz * dt;
+      d.vy = Math.max(0.3, d.vy - dt * 0.4);
+      const f = Math.sin(d.age * 24 + d.ph) * 0.9;
+      d.wl.rotation.x = -f;
+      d.wr.rotation.x = f;
+      d.g.position.y += Math.sin(d.age * 24 + d.ph) * dt * 0.4;
+      if (d.age > 2.4) d.g.scale.setScalar(Math.max(0.01, 2.6 * (3 - d.age) / 0.6));
+    }
+    if (this.doveList.some((d) => d.age >= 3)) {
+      for (const d of this.doveList) if (d.age >= 3) this.scene.remove(d.g);
+      this.doveList = this.doveList.filter((d) => d.age < 3);
+    }
   }
 
   /** A mirage dispelled (big) or a shell of stars bursting (small): lilac smoke and a shower of little stars. */
@@ -5352,6 +5452,7 @@ export class Renderer {
     this.glow.update(dt);
     this.smoke.update(dt);
     this.debris.update(dt);
+    if (this.doveList.length) this.animateDoves(dt);
     this.animatePortals(dt);
     if (this.quickSwirls.length) this.animateQuick(dt);
     this.animateTunnels(dt);

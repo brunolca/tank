@@ -46,3 +46,25 @@ export const CONJ_DECOYS = 2;
 /** 'poof' event: what vanished. */
 export const POOF_DECOY = 0;
 export const POOF_SHELL = 1;
+
+// « Le Grand Illusionniste » (iteration 60): the seventh boss, the Illusionniste's master. Its trick makes it four: three
+// mirages (one mirrors its moves left-right, one up-down, one both at once), further apart than its pupil's. And each hit
+// it takes, if a mirage is still out, it swaps places with one of them (« Escamoté ! »): the hit counts, but it is
+// somewhere else now. Enraged (half its hit points), it starts its tricks sooner. When it goes down, doves fly out of its hat.
+
+/** Mirages on the table at once for the Grand Illusionniste. */
+export const MAGUS_DECOYS = 3;
+/** Seconds between two tricks (min, max), counted from the moment its mirages are gone: calm, then enraged. */
+export const MAGUS_EVERY: [[number, number], [number, number]] = [[3.4, 4.6], [2, 2.8]];
+/** Seconds before its first trick. */
+export const MAGUS_FIRST = 2.6;
+/** Seconds it holds still, wand raised. */
+export const MAGUS_WARN = 0.85;
+/** How far from where it stood the four tanks reappear (tiles), and how far apart they keep. */
+export const MAGUS_MIN = 2.6;
+export const MAGUS_MAX = 5;
+export const MAGUS_GAP = 2.2;
+/** A foe must be in sight and this close for it to start a trick. */
+export const MAGUS_RANGE = 15;
+/** Seconds its mirages last. */
+export const MAGUS_LIFE = 10;

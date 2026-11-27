@@ -578,6 +578,8 @@ export class Room extends DurableObject<Env> {
     if (!att?.v || att.v < 56) tanks = tanks.map((t) => (t.kind === 'spectre' ? { ...t, kind: 'ash' } : t));
     // tabs older than iteration 58 draw the Illusionniste as a pink tank (its mirages do not show, their shells look real)
     if (!att?.v || att.v < 58) tanks = tanks.map((t) => (t.kind === 'conjurer' ? { ...t, kind: 'pink' } : t));
+    // tabs older than iteration 60 draw the Grand Illusionniste as a Colosse (its mirages, copies of it, too)
+    if (!att?.v || att.v < 60) tanks = tanks.map((t) => (t.kind === 'magus' ? { ...t, kind: 'boss' } : t));
     // tabs older than iteration 49 draw the Tortillard as a Colosse and its wagons as grey tanks (gliding round the table)
     if (!att?.v || att.v < 49) tanks = tanks.map((t) => (t.kind === 'train' ? { ...t, kind: 'boss' } : t.kind === 'wagon' ? { ...t, kind: 'ash' } : t));
     this.send(ws, {

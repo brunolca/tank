@@ -353,6 +353,8 @@ body.demo #boss-bar { top: 18px; }
 #boss-bar.sower .boss-top b { color: #a6e07a; }
 #boss-bar.sower .boss-top b::before { content: '🌱 '; }
 #boss-bar.sower #boss-fill { background: linear-gradient(180deg, #b8ec8a, #4f8f2a); box-shadow: 0 0 12px rgba(140, 220, 90, 0.55); }
+#boss-bar.magus .boss-top b { color: #e6d4ff; } /* « Le Grand Illusionniste » (iteration 60) */
+#boss-bar.magus #boss-fill { background: linear-gradient(90deg, #c9a7f2, #ffd34d 50%, #6b46c1); box-shadow: 0 0 12px rgba(201, 167, 242, 0.6); }
 #boss-bar.bombard .boss-top b { color: #d2b0ff; }
 #boss-bar.bombard .boss-top b::before { content: '💣 '; }
 #boss-bar.bombard #boss-fill { background: linear-gradient(180deg, #d9bcff, #6b3fa0); box-shadow: 0 0 12px rgba(180, 130, 255, 0.55); }
@@ -1695,7 +1697,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #hud-role svg.ico { vertical-align: -0.16em; margin-right: 2px; }
 /* the icons of the stylesheet's ::before (boss bars, banners): a mask painted in the colour of the text */
 .boss-top b::before, #boss-bar.drill .boss-top b::before, #boss-bar.thunder .boss-top b::before, #boss-bar.sower .boss-top b::before,
-#boss-bar.bombard .boss-top b::before, #boss-bar.duo .boss-top b::before,
+#boss-bar.bombard .boss-top b::before, #boss-bar.magus .boss-top b::before, #boss-bar.duo .boss-top b::before,
 #banner.night .b-kicker::before, #banner.storm .b-kicker::before, #banner.storm.night .b-kicker::before,
 #banner.wind:not(.storm):not(.night) .b-kicker::before, #banner.fog:not(.storm):not(.wind) .b-kicker::before,
 #banner.ctf .b-kicker::before, #banner.hunt .b-kicker::before, #banner.crown .b-kicker::before {
@@ -1707,6 +1709,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #boss-bar.thunder .boss-top b::before, #banner.storm .b-kicker::before, #banner.storm.night .b-kicker::before { --pi: var(--ico-bolt); }
 #boss-bar.sower .boss-top b::before { --pi: var(--ico-sprout); }
 #boss-bar.bombard .boss-top b::before { --pi: var(--ico-bomb); }
+#boss-bar.magus .boss-top b::before { --pi: var(--ico-wand); }
 #banner.night .b-kicker::before { --pi: var(--ico-moon); }
 #banner.wind:not(.storm):not(.night) .b-kicker::before { --pi: var(--ico-leaf); }
 #banner.fog:not(.storm):not(.wind) .b-kicker::before { --pi: var(--ico-fog); }

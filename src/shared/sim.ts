@@ -8,7 +8,7 @@ import { fogBanks, fogHides, type FogBank } from './fog';
 import { BLIZZARD_PUSH, BLIZZARD_REFILL, blizzardHides, whiteoutAt } from './blizzard';
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
-import { CONJ_DECOYS, CONJ_EVERY, CONJ_FIRST, CONJ_LIFE, CONJ_MAX, CONJ_MIN, CONJ_RANGE, CONJ_WARN, POOF_DECOY, POOF_SHELL, type ConjureState, type Decoy } from './mirage';
+import { CONJ_DECOYS, CONJ_EVERY, CONJ_FIRST, CONJ_LIFE, CONJ_MAX, CONJ_MIN, CONJ_RANGE, CONJ_WARN, POOF_DECOY, POOF_SHELL, MAGUS_DECOYS, MAGUS_EVERY, MAGUS_FIRST, MAGUS_GAP, MAGUS_LIFE, MAGUS_MAX, MAGUS_MIN, MAGUS_RANGE, MAGUS_WARN, type ConjureState, type Decoy } from './mirage';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
 import { BALL_BLAST, BALL_BOUNCE, BALL_CAMBER, BALL_SLOPE, BALL_DRAG, BALL_ICE_DRAG, BALL_IDLE, BALL_KICK, BALL_MAX, BALL_PUSH, BALL_R, BALL_RESPAWN, GOAL_BOTTOM, GOAL_TOP, KICKOFF, goalAt, goalOf, ownGoal, type BallState } from './ballon';
 import { angDiff, beltStep, floorSpeed, glideStep, onIce, onQuick, onSand, onSnow, bulletBlocked, castRicochet, castWindy, mirrorHit, mirrorTurn, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -498,6 +498,7 @@ export class Game {
     if (kind === 'watcher') t.watch = { dir: Math.random() < 0.5 ? 1 : -1, flipT: WATCH_FLIP[0] + Math.random() * (WATCH_FLIP[1] - WATCH_FLIP[0]), foe: 0, lock: 0, lost: 0 };
     if (kind === 'mechanic') t.fix = { wreck: 0, t: 0, look: 0.5 };
     if (kind === 'conjurer') t.conj = { t: CONJ_FIRST + Math.random(), warn: 0, lx: x, ly: y };
+    if (kind === 'magus') t.conj = { t: MAGUS_FIRST + Math.random(), warn: 0, lx: x, ly: y }; // « Le Grand Illusionniste » (iteration 60)
     if (kind === 'train') this.putOnRail(t);
     if (kind === 'wagon') this.hookWagon(t);
     if (kind === 'frost') {
@@ -1395,6 +1396,7 @@ export class Game {
   // -------------------------------------------------------------- boss
 
   updateBoss(t: Tank) {
+    if (t.kind === 'magus') return; // « Le Grand Illusionniste » (iteration 60): no volleys, its tricks are its weapon (updateConjurer)
     if (t.kind === 'train') return; // the Tortillard off its rails (no rails on this table): no volleys, just a tough target
     const bs = t.boss!;
     const thunder = t.kind === 'thunder', sower = t.kind === 'sower', bombard = t.kind === 'bombard';
@@ -1809,9 +1811,11 @@ export class Game {
     if (this.decoys.some((d) => d.owner === t.id)) return false;
     c.t -= DT;
     if (c.t > 0) return false;
-    const foe = this.tanks.some((o) => o.alive && o.team !== t.team && !under(o) && Math.hypot(o.x - t.x, o.y - t.y) < CONJ_RANGE && this.canSee(t, o));
+    const magus = t.kind === 'magus';
+    const range = magus ? MAGUS_RANGE : CONJ_RANGE;
+    const foe = this.tanks.some((o) => o.alive && o.team !== t.team && !under(o) && Math.hypot(o.x - t.x, o.y - t.y) < range && this.canSee(t, o));
     if (!foe) { c.t = 0.4; return false; }
-    c.warn = CONJ_WARN;
+    c.warn = magus ? MAGUS_WARN : CONJ_WARN;
     this.events.push(['abra', r2(t.x), r2(t.y), t.id]);
     return true;
   }
@@ -1822,11 +1826,13 @@ export class Game {
    */
   conjure(t: Tank) {
     const c = t.conj!;
+    const magus = t.kind === 'magus'; // « Le Grand Illusionniste » (iteration 60): four tanks, further apart
+    const [lo, hi, gap, n] = magus ? [MAGUS_MIN, MAGUS_MAX, MAGUS_GAP, MAGUS_DECOYS] : [CONJ_MIN, CONJ_MAX, 1.5, CONJ_DECOYS];
     const spots: Pt[] = [{ x: t.x, y: t.y }];
-    for (let k = 0; k < 40 && spots.length < CONJ_DECOYS + 1; k++) {
-      const a = Math.random() * Math.PI * 2, d = CONJ_MIN + Math.random() * (CONJ_MAX - CONJ_MIN);
+    for (let k = 0; k < 60 && spots.length < n + 1; k++) {
+      const a = Math.random() * Math.PI * 2, d = lo + Math.random() * (hi - lo);
       const x = t.x + Math.cos(a) * d, y = t.y + Math.sin(a) * d;
-      if (spots.some((s) => Math.hypot(s.x - x, s.y - y) < 1.5)) continue;
+      if (spots.some((s) => Math.hypot(s.x - x, s.y - y) < gap)) continue;
       if (!this.hopOk(t, x, y) || !this.lineClear(t.x, t.y, x, y)) continue;
       spots.push({ x, y });
     }
@@ -1839,13 +1845,14 @@ export class Game {
       if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; t.ai.goal = undefined; t.ai.lastX = t.x; t.ai.lastY = t.y; }
     }
     c.lx = t.x; c.ly = t.y;
-    c.t = CONJ_EVERY[0] + Math.random() * (CONJ_EVERY[1] - CONJ_EVERY[0]);
+    const every = magus ? MAGUS_EVERY[t.boss?.rage ? 1 : 0] : CONJ_EVERY;
+    c.t = every[0] + Math.random() * (every[1] - every[0]);
     const ev: GameEvent = ['conjure', r2(ox), r2(oy), t.id];
-    let m = Math.floor(Math.random() * 2);
+    let m = Math.floor(Math.random() * (magus ? 3 : 2));
     for (let i = 0; i < spots.length; i++) {
       ev.push(r2(spots[i].x), r2(spots[i].y));
       if (i === real) continue;
-      this.decoys.push({ id: this.nextId++, owner: t.id, team: t.team, x: spots[i].x, y: spots[i].y, body: t.body, turret: t.turret, life: CONJ_LIFE, m: m++ & 1 });
+      this.decoys.push({ id: this.nextId++, owner: t.id, team: t.team, x: spots[i].x, y: spots[i].y, body: t.body, turret: t.turret, life: magus ? MAGUS_LIFE : CONJ_LIFE, m: magus ? m++ % 3 : m++ & 1 });
     }
     this.events.push(ev);
   }
@@ -1860,10 +1867,11 @@ export class Game {
       if (d.life <= 0) { this.poofDecoy(d); continue; }
       let mx = t.x - t.conj.lx, my = t.y - t.conj.ly;
       if (mx * mx + my * my > 0.25) mx = my = 0; // a portal jump: the mirage stays put
-      if (d.m === 0) mx = -mx; else my = -my;
+      if (d.m !== 1) mx = -mx;
+      if (d.m !== 0) my = -my; // m 2 (the Grand Illusionniste's third mirage, iteration 60): both at once
       if (mx * mx + my * my > 1e-6) {
         [d.x, d.y] = moveCircle(this.tiles, d.x, d.y, mx, my, t.r);
-        d.body = d.m === 0 ? Math.PI - t.body : -t.body;
+        d.body = d.m === 0 ? Math.PI - t.body : d.m === 1 ? -t.body : t.body + Math.PI;
       }
       let best = Infinity, aim = d.turret;
       for (const o of this.tanks) {
@@ -1900,7 +1908,7 @@ export class Game {
       const team = this.tankById(b.owner)?.team;
       for (const d of this.decoys) {
         if (d.life <= 0 || d.team === team) continue;
-        const rr = TANK_R + BULLET_R;
+        const rr = (this.tankById(d.owner)?.r ?? TANK_R) + BULLET_R; // the Grand Illusionniste's mirages are as big as it is
         if ((d.x - b.x) ** 2 + (d.y - b.y) ** 2 < rr * rr) {
           b.dead = true;
           this.poofDecoy(d);
@@ -1918,6 +1926,23 @@ export class Game {
       if (tl === Tile.Switch || isSnowman(tl)) return true;
     }
     return false;
+  }
+
+  /**
+   * « Le Grand Illusionniste » (iteration 60): hit, it swaps places with one of its mirages at random (« Escamoté ! »).
+   * The hit counts; the mirage takes its spot, so the shooter is left facing a fake. No mirage out: it just takes the hit.
+   */
+  vanish(t: Tank): boolean {
+    const mine = this.decoys.filter((d) => d.owner === t.id && d.life > 0);
+    if (!mine.length) return false;
+    const d = mine[Math.floor(Math.random() * mine.length)];
+    const ox = t.x, oy = t.y, ob = t.body;
+    t.x = d.x; t.y = d.y; t.body = d.body; t.vx = t.vy = 0;
+    d.x = ox; d.y = oy; d.body = ob;
+    if (t.conj) { t.conj.lx = t.x; t.conj.ly = t.y; }
+    if (t.ai) { t.ai.path = []; t.ai.dodgeT = 0; t.ai.goal = undefined; t.ai.lastX = t.x; t.ai.lastY = t.y; }
+    this.events.push(['swap', r2(ox), r2(oy), r2(t.x), r2(t.y), t.id]);
+    return true;
   }
 
   poofShell(b: Bullet) {
@@ -3028,6 +3053,7 @@ export class Game {
       this.events.push(['hurt', r2(t.x), r2(t.y), t.id, t.hp, t.maxHp]);
       if (t.boss && t.hp <= t.maxHp / 2) this.enrage(t);
       if (t.kind === 'steel') this.strip(t);
+      if (t.kind === 'magus') this.vanish(t);
       return;
     }
     if (t.buffs.shield) {

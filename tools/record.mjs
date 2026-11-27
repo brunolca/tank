@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 55, arms: ['canon', 'ricochet'], hud: true, seconds: 22, quickLures: [3, 13], quickMines: [8.5], caption: 'Itération 59 : les sables mouvants', sub: 'Un tourbillon au cœur des dunes : qui s’y attarde est englouti' },
-  { mission: 63, arms: ['fusee', 'canon'], hud: true, seconds: 20, quickLures: [2.5, 11], caption: 'Le sablier', sub: 'Glub ! Les ennemis les contournent… quand ils y pensent' },
-  { mission: 55, arms: ['canon', 'sapeur'], hud: true, seconds: 12, quickMines: [2, 6], quickLures: [4], caption: 'Avalée !', sub: 'Une mine posée dans les sables mouvants disparaît sans exploser' },
-  { manual: [8, ['terrain']], seconds: 8, caption: 'Nouveau sur la table', sub: 'Au manuel, et en pinceau dans l’atelier' },
+  { mission: 70, arms: ['canon', 'ricochet'], hud: true, seconds: 26, conjures: [3.2, 14], magusShots: [6.5, 9.5, 17, 20.5], caption: 'Itération 60 : le Grand Illusionniste', sub: 'Le septième boss : d’un coup de baguette, il devient quatre' },
+  { mission: 70, arms: ['fusee', 'canon'], hud: true, seconds: 17, bossHp: 3, conjures: [2.8], magusShots: [5.5, 8.5, 11.5], caption: 'Escamoté !', sub: 'Chaque coup reçu l’échange avec un mirage… et à la fin, les colombes' },
+  { mission: 73, arms: ['canon', 'ricochet'], hud: true, seconds: 11, conjures: [2.5], decoyShots: [6, 8], caption: 'Le chapeau de travers', sub: 'Un indice pour les yeux perçants : les mirages portent leur chapeau de biais' },
+  { manual: [8, ['bestiaire'], 'magus'], seconds: 8, caption: 'Au bestiaire', sub: 'Le Grand Illusionniste rejoint les boss' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -113,6 +113,7 @@ try {
       for (const s of shot.quickLures ?? []) setTimeout(() => d.quickLure?.(), s * 1000); // « Les sables mouvants » (iteration 59): an enemy into a whirl, until it is swallowed
       for (const s of shot.quickMines ?? []) setTimeout(() => d.quickMine?.(), s * 1000); // and a hero's mine swallowed by one
       for (const s of shot.conjures ?? []) setTimeout(() => d.conjure?.(), s * 1000); // « L’Illusionniste » (iteration 58): every Illusionniste does its trick
+      for (const s of shot.magusShots ?? []) setTimeout(() => d.magusShot?.(), s * 1000); // « Le Grand Illusionniste » (iteration 60): a hero shoots the real one, it swaps with a mirage
       for (const s of shot.decoyShots ?? []) setTimeout(() => d.decoyShot?.(), s * 1000); // and a hero shoots a mirage (« Pouf ! »)
       for (const s of shot.spooks ?? []) setTimeout(() => d.spook?.(), s * 1000); // « Le Spectre » (iteration 56): every Spectre fires through a wall at a hero
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
