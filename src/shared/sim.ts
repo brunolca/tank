@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, KO_QUICK, QUICK, QUICK_MINE, QUICK_RISE, QUICK_SINK, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -11,7 +11,7 @@ import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } fro
 import { CONJ_DECOYS, CONJ_EVERY, CONJ_FIRST, CONJ_LIFE, CONJ_MAX, CONJ_MIN, CONJ_RANGE, CONJ_WARN, POOF_DECOY, POOF_SHELL, type ConjureState, type Decoy } from './mirage';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
 import { BALL_BLAST, BALL_BOUNCE, BALL_CAMBER, BALL_SLOPE, BALL_DRAG, BALL_ICE_DRAG, BALL_IDLE, BALL_KICK, BALL_MAX, BALL_PUSH, BALL_R, BALL_RESPAWN, GOAL_BOTTOM, GOAL_TOP, KICKOFF, goalAt, goalOf, ownGoal, type BallState } from './ballon';
-import { angDiff, beltStep, floorSpeed, glideStep, onIce, onSand, onSnow, bulletBlocked, castRicochet, castWindy, mirrorHit, mirrorTurn, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
+import { angDiff, beltStep, floorSpeed, glideStep, onIce, onQuick, onSand, onSnow, bulletBlocked, castRicochet, castWindy, mirrorHit, mirrorTurn, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
 import type { GameEvent, Input, NetBonus, NetBullet, NetMine, NetTank, TankInfo } from './protocol';
 import { BIG_BLAST, LONG_BUFFS, RESHIELD_SECONDS, totalRanks, trainSpec, type Ranks } from './skills';
 
@@ -51,6 +51,8 @@ export interface Tank {
   vx: number; // speed the tank carries (tiles/s), only used on tables with ice (iteration 21)
   vy: number;
   slid?: boolean; // drove this tick (tables with ice): if not, it still slides on
+  sink?: number; // « Les sables mouvants » (iteration 59): seconds sunk into the quicksand (QUICK_SINK: swallowed)
+  sinkWarned?: boolean; // the « glub » of a tank half sunk went out
   mag?: MagnetState; // the Aimant (iteration 27)
   chill?: number; // « Gel » (iteration 29): seconds left frozen in an ice cube
   mortar?: MortarState; // the Mortier (iteration 34)
@@ -241,6 +243,7 @@ export interface Mine {
   seed?: number; // a seed of the Semeur (iteration 25): seconds until it bursts on its own (no tank sets it off)
   by?: number; // tank whose shell set it off (directly or through a chain of blasts): the blast is theirs
   remote?: boolean; // « Détonateur » (iteration 52): no tank sets it off by rolling over it, its owner does (mine key)
+  gulp?: number; // « Les sables mouvants » (iteration 59): seconds spent in quicksand (QUICK_MINE: swallowed, harmlessly)
 }
 
 interface AIState {
@@ -398,6 +401,8 @@ export class Game {
   }
   /** Some floor cells are snow (iteration 42): deep snow slows the tanks down, their tracks pack it into trails at full speed. */
   snowy = false;
+  /** « Les sables mouvants » (iteration 59): some floor cells are quicksand (slow, drawing in, swallowing tanks that linger and mines). */
+  quick = false;
   /** « La neige » (iteration 42): packed snow cells (cell index → seconds before the snowfall covers them again). */
   packed = new Map<number, number>();
   /** The cell each tank's centre was in (iteration 42): when it moves on, the cell it left is packed. */
@@ -470,6 +475,7 @@ export class Game {
     this.ice = this.belts.includes(ICE);
     this.sand = this.belts.includes(SAND);
     this.snowy = this.belts.includes(SNOW);
+    this.quick = this.belts.includes(QUICK);
     this.gates = this.tiles.includes(Tile.Switch);
     this.snowmen = this.tiles.some(isSnowman);
     this.mirrors = this.tiles.some(isMirror);
@@ -623,6 +629,7 @@ export class Game {
       }
     }
     this.separateTanks();
+    if (this.quick) this.stepQuick(DT);
     if (this.decoys.length) this.stepDecoys(DT);
     if (this.frost.size || this.tanks.some((t) => t.kind === 'frost')) this.stepFrost(DT);
     if (this.snowy) this.stepSnow(DT);
@@ -2398,7 +2405,7 @@ export class Game {
 
   driveTank(t: Tank, mx: number, my: number, dt: number) {
     const px = t.x, py = t.y;
-    const speed = this.speedOf(t) * (this.sand || this.snowy ? floorSpeed(this.belts, t.x, t.y) : 1); // sand slows everyone down (iteration 36), deep snow too (iteration 42)
+    const speed = this.speedOf(t) * (this.sand || this.snowy || this.quick ? floorSpeed(this.belts, t.x, t.y) : 1); // sand slows everyone down (iteration 36), deep snow too (iteration 42)
     if (this.ice && t.kind !== 'frost') { // the Givré skates on its own frost without sliding (iteration 31)
       if (t.slid) return; // one step per tick on the ice: momentum is integrated once
       t.slid = true;
@@ -2824,11 +2831,46 @@ export class Game {
     return true;
   }
 
+  // -------------------------------------------------------------- « Les sables mouvants » (iteration 59)
+
+  /** Can the quicksand swallow this tank? Not the big ones (bosses, the train), nor one under the table or in the air. */
+  sinks(t: Tank): boolean {
+    return t.r <= PORTAL_MAX_R && !t.boss && !t.rail && !t.car && t.kind !== 'wagon' && !under(t);
+  }
+
+  /**
+   * A tank whose centre sits on quicksand sinks in (the whirl draws it toward the middle, see beltStep); off it, it
+   * climbs back out QUICK_RISE times faster. Sunk QUICK_SINK seconds: swallowed (a shield or a second plate of armour
+   * only buys it a fresh start). Half sunk, a « glub » warns everyone.
+   */
+  stepQuick(dt: number) {
+    for (const t of this.tanks) {
+      if (!t.alive) { t.sink = undefined; continue; }
+      if (this.sinks(t) && onQuick(this.belts, t.x, t.y)) {
+        t.sink = (t.sink ?? 0) + dt;
+        if (!t.sinkWarned && t.sink >= QUICK_SINK / 2) { t.sinkWarned = true; this.events.push(['gulp', r2(t.x), r2(t.y), 1, t.id]); }
+        if (t.sink >= QUICK_SINK) {
+          this.killTank(t, undefined, KO_QUICK);
+          t.sink = undefined; t.sinkWarned = false; // swallowed, or saved by its shield: either way it starts afresh
+        }
+      } else if (t.sink) {
+        t.sink = Math.max(0, t.sink - dt * QUICK_RISE);
+        if (t.sink < QUICK_SINK / 4) t.sinkWarned = false;
+        if (!t.sink) t.sink = undefined;
+      }
+    }
+  }
+
   stepMines(dt: number) {
     for (const m of this.mines) {
       if (m.dead) continue;
       m.t += dt;
       if (this.belts.length) [m.x, m.y] = beltStep(this.tiles, this.belts, m.x, m.y, MINE_R, dt); // mines ride the belts too
+      if (this.quick && m.seed === undefined && onQuick(this.belts, m.x, m.y)) {
+        // « Les sables mouvants » (iteration 59): the whirl swallows a mine, lit or not, before it can go off
+        m.gulp = (m.gulp ?? 0) + dt;
+        if (m.gulp >= QUICK_MINE) { m.dead = true; this.events.push(['gulp', r2(m.x), r2(m.y), 0, m.owner]); continue; }
+      }
       if (m.fuse < 0 && m.t > 0.4 && m.seed === undefined && !m.remote) {
         for (const t of this.tanks) {
           if (!t.alive || t.team === m.team || t.id === m.owner || under(t)) continue;
@@ -3002,7 +3044,7 @@ export class Game {
     if (t.kind !== 'player') {
       // « Le Mécano » (iteration 51): an enemy's wreck it can put back together, unless it fell into a pit or was patched already
       t.diedAt = this.tick;
-      t.fixable = cause !== KO_FALL && !t.patched && !t.boss && !t.rail && !t.car && t.kind !== 'wagon';
+      t.fixable = cause !== KO_FALL && cause !== KO_QUICK && !t.patched && !t.boss && !t.rail && !t.car && t.kind !== 'wagon';
     }
     this.events.push(['boom', r2(t.x), r2(t.y), t.id]);
     this.events.push(['ko', t.id, killer?.id ?? 0, cause, n]);
@@ -3580,6 +3622,7 @@ export class Game {
     // the Foreur drills straight through cork
     const drills = t.kind === 'drill';
     for (let i = 0; i < W * H; i++) if ((isSolidTank(this.tiles[i]) && !(drills && isFragile(this.tiles[i]))) || (isPortal(this.tiles[i]) && i !== start && i !== ai.goal)) blocked[i] = 1;
+    const shun = this.quick && this.sinks(t); // « Les sables mouvants » (iteration 59): around, never into (but out of it, when caught)
     if (t.r > 0.45) {
       // big tanks only fit through cells whose neighbours are all free
       const solid = blocked.slice();
@@ -3634,7 +3677,7 @@ export class Game {
     for (let qi = 0; qi < q.length; qi++) {
       const c = q[qi];
       if (dist[c] > (ai.goal !== undefined || thief ? THIEF_REACH : 9)) continue;
-      if (dist[c] <= 9) reach.push(c);
+      if (dist[c] <= 9 && !(shun && this.belts[c] === QUICK)) reach.push(c);
       const x = c % W, y = (c / W) | 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const nx = x + dx, ny = y + dy;
@@ -3642,6 +3685,7 @@ export class Game {
         const n = ny * W + nx;
         if (prev[n] !== -2 || blocked[n]) continue;
         if (dx && dy && (blocked[y * W + nx] || blocked[ny * W + x])) continue;
+        if (shun && this.belts[n] === QUICK && this.belts[c] !== QUICK) continue;
         if (slowOnBelts && this.belts[n] && this.belts[n] <= 4) {
           // a tank slower than the belts cannot drive up one: it plans around (or rides it) instead (iteration 16)
           const [bx, by] = BELT_DIRS[this.belts[n]];

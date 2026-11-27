@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
+import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, QUICK, QUICK_SINK, QUICK_RISE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isMirror, isSnowman, mirrorOf, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
@@ -178,6 +178,8 @@ interface FlagView {
 
 interface TankView {
   info: TankInfo;
+  /** « Les sables mouvants » (iteration 59): seconds sunk into the quicksand, as the server counts them. */
+  sink?: number;
   root: THREE.Group;
   hull: THREE.Group;
   turret: THREE.Group;
@@ -466,6 +468,34 @@ function swirlTexture() {
       else g.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r);
     }
     g.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+/** « Les sables mouvants » (iteration 59): a whirl of wet sand, darker toward its heart, three arms of grains turning in. */
+function quickTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(55,28,8,0.95)');
+  grad.addColorStop(0.45, 'rgba(110,64,24,0.7)');
+  grad.addColorStop(0.85, 'rgba(150,95,40,0.35)');
+  grad.addColorStop(1, 'rgba(150,95,40,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  g.lineCap = 'round';
+  for (let arm = 0; arm < 3; arm++) {
+    for (const [col, lw, off] of [['rgba(70,36,10,0.95)', 8, 0], ['rgba(255,226,160,0.8)', 3, 0.14]] as const) {
+      g.strokeStyle = col; g.lineWidth = lw;
+      g.beginPath();
+      for (let k = 0; k <= 40; k++) {
+        const u = k / 40, a = arm * ((Math.PI * 2) / 3) + u * Math.PI * 2.4 + off, r = 5 + u * 55;
+        if (k === 0) g.moveTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r);
+        else g.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r);
+      }
+      g.stroke();
+    }
   }
   return new THREE.CanvasTexture(c);
 }
@@ -1622,6 +1652,11 @@ export class Renderer {
   private snowPacked = new Set<number>();
   /** « Les dunes » (iteration 36): the sand cells of the table, painted into the floor texture. */
   private sandCells = new Set<number>();
+  /** « Les sables mouvants » (iteration 59): the quicksand cells, and the whirls turning on them. */
+  private quickCells = new Set<number>();
+  private quickSwirls: THREE.Mesh[] = [];
+  private quickTex?: THREE.CanvasTexture;
+  private quickGeo = new THREE.CircleGeometry(0.6, 32);
   /** « Le Givré » (iteration 31): its frost, slabs of ice laid and melted as the snapshots say. */
   private frostMat = new THREE.MeshStandardMaterial({ map: iceTexture(), color: 0xe6f6ff, roughness: 0.18, metalness: 0.15, emissive: 0x5fa8d8, emissiveIntensity: 0.18, transparent: true, opacity: 0.88 });
   private frostMesh?: THREE.InstancedMesh;
@@ -2209,6 +2244,7 @@ export class Renderer {
     this.setBall(false);
 
     this.sandCells = new Set(belts.flatMap((b, i) => (b === SAND && tiles[i] === Tile.Empty ? [i] : [])));
+    this.setQuick(tiles, belts);
     this.paintFloor(tiles);
     this.addBelts(belts);
     this.addIce(tiles, belts);
@@ -2670,8 +2706,8 @@ export class Renderer {
    * Rounded patches that run into each other, grains, and wind ripples across them.
    */
   private paintSand(g: CanvasRenderingContext2D) {
-    if (!this.sandCells.size) return;
-    const cells = [...this.sandCells];
+    if (!this.sandCells.size && !this.quickCells.size) return;
+    const cells = [...this.sandCells, ...this.quickCells]; // the quicksand sits in the dunes (iteration 59)
     let seed = 11;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     // cell by cell, with simple shapes only (one big clipped or blurred path brings accelerated canvases to their knees)
@@ -2715,6 +2751,96 @@ export class Renderer {
       }
       g.restore();
     }
+    // « Les sables mouvants » (iteration 59): a darker, wet heart under each whirl
+    for (const i of this.quickCells) {
+      const cx = (i % W) * PX + PX / 2, cy = Math.floor(i / W) * PX + PX / 2;
+      const hg = g.createRadialGradient(cx, cy, 2, cx, cy, PX * 0.56);
+      hg.addColorStop(0, 'rgba(80,44,14,0.85)');
+      hg.addColorStop(0.6, 'rgba(140,88,34,0.6)');
+      hg.addColorStop(1, 'rgba(170,110,40,0)');
+      g.fillStyle = hg;
+      g.fillRect(cx - PX, cy - PX, PX * 2, PX * 2);
+    }
+  }
+
+  /**
+   * « Les sables mouvants » (iteration 59): a tank on quicksand sinks in as the server counts it (QUICK_SINK seconds to
+   * be swallowed, climbing out QUICK_RISE times faster), wobbling, throwing up sand; the floor hides what is under it.
+   */
+  private tankSink(v: TankView, t: RTank, dt: number, visible: boolean) {
+    const big = tankRadius(v.info.kind) > 0.45 || v.info.kind === 'wagon' || v.info.kind === 'train';
+    if (!big && this.onQuick(t.x, t.y)) v.sink = (v.sink ?? 0) + dt >= QUICK_SINK + 0.25 ? 0.01 : (v.sink ?? 0) + dt; // still there past the end: a shield saved it, a fresh start as on the server
+    else if (v.sink) v.sink = Math.max(0, v.sink - dt * QUICK_RISE);
+    const k = Math.min(1, (v.sink ?? 0) / QUICK_SINK);
+    if (!k) { if (v.sink === 0) { v.root.rotation.x = v.root.rotation.z = 0; v.sink = undefined; } return; }
+    v.root.position.y = -k * 0.3 * v.scale;
+    v.root.rotation.x = Math.sin(this.time * 9 + t.id) * 0.06 * k;
+    v.root.rotation.z = Math.cos(this.time * 7 + t.id) * 0.06 * k;
+    if (visible && Math.random() < (4 + k * 10) * dt) {
+      const a = Math.random() * Math.PI * 2;
+      this.debris.emit({ x: t.x + Math.cos(a) * 0.35, y: 0.05, z: t.y + Math.sin(a) * 0.35, vx: Math.cos(a) * 0.5, vy: 1 + Math.random(), vz: Math.sin(a) * 0.5, life: 0.5, s0: 0.05, s1: 0.02, c0: 0xa86f34, c1: 0xe2b56a, grav: 7 });
+    }
+  }
+
+  /** Is this point of the table on quicksand? (iteration 59) */
+  onQuick(x: number, y: number) {
+    if (!this.quickCells.size || x < 0 || y < 0 || x >= W || y >= H) return false;
+    return this.quickCells.has(Math.floor(y) * W + Math.floor(x));
+  }
+
+  /** « Les sables mouvants » (iteration 59): the quicksand cells of a new table, each with its whirl turning slowly. */
+  private setQuick(tiles: number[], belts: number[]) {
+    for (const m of this.quickSwirls) { this.levelGroup.remove(m); (m.material as THREE.Material).dispose(); }
+    this.quickSwirls = [];
+    this.quickCells = new Set(belts.flatMap((b, i) => (b === QUICK && tiles[i] === Tile.Empty ? [i] : [])));
+    if (!this.quickCells.size) return;
+    this.quickTex ??= quickTexture();
+    for (const i of this.quickCells) {
+      const m = new THREE.Mesh(this.quickGeo, new THREE.MeshBasicMaterial({ map: this.quickTex, transparent: true, opacity: 1, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set((i % W) + 0.5, 0.012, Math.floor(i / W) + 0.5);
+      m.userData.phase = (i * 2.399) % (Math.PI * 2);
+      m.rotation.z = m.userData.phase;
+      m.renderOrder = 1;
+      this.levelGroup.add(m);
+      this.quickSwirls.push(m);
+    }
+  }
+
+  private animateQuick(dt: number) {
+    for (const m of this.quickSwirls) {
+      m.rotation.z += dt * 1.3;
+      const k = 0.96 + Math.sin(this.time * 1.7 + m.userData.phase) * 0.04;
+      m.scale.set(k, k, k);
+      if (Math.random() < 1.2 * dt) {
+        // now and then a bubble of air bursts at the heart
+        this.smoke.emit({ x: m.position.x + (Math.random() - 0.5) * 0.25, y: 0.04, z: m.position.z + (Math.random() - 0.5) * 0.25, vy: 0.25, life: 0.5, s0: 0.05, s1: 0.13, c0: 0x8a5a2a, c1: 0xd9b27a, drag: 2 });
+      }
+    }
+  }
+
+  /** « Les sables mouvants »: 0 a mine is swallowed (a puff of sand), 1 a tank is half sunk (bubbles and spatters). */
+  gulp(x: number, y: number, what: number) {
+    const n = what === 1 ? 10 : 8;
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.5 + Math.random() * 0.9;
+      this.debris.emit({ x: x + Math.cos(a) * 0.15, y: 0.08, z: y + Math.sin(a) * 0.15, vx: Math.cos(a) * sp, vy: 1.4 + Math.random() * 1.2, vz: Math.sin(a) * sp, life: 0.6, s0: 0.06, s1: 0.03, c0: 0xb07a3c, c1: 0xe2b56a, grav: 7 });
+    }
+    for (let k = 0; k < 4; k++) this.smoke.emit({ x: x + (Math.random() - 0.5) * 0.4, y: 0.06, z: y + (Math.random() - 0.5) * 0.4, vy: 0.4, life: 0.7, s0: 0.1, s1: 0.28, c0: 0xc9944e, c1: 0xf1dcae, drag: 2 });
+  }
+
+  /** « Les sables mouvants »: a tank swallowed whole, a geyser of sand where it went down. Its position, if known. */
+  swallow(id: number): [number, number] | undefined {
+    const v = this.tanks.get(id);
+    if (!v) return;
+    const x = v.root.position.x, y = v.root.position.z;
+    for (let k = 0; k < 22; k++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.3 + Math.random() * 1.2;
+      this.debris.emit({ x, y: 0.1, z: y, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 2.2, vz: Math.sin(a) * sp, life: 0.9, s0: 0.07, s1: 0.03, c0: 0xa86f34, c1: 0xe8c27e, grav: 8 });
+    }
+    v.sink = undefined;
+    v.root.rotation.x = v.root.rotation.z = 0;
+    return [x, y];
   }
 
   /** Is this point of the table on ice? (tread marks turn to frost, sliding throws ice shavings) */
@@ -3856,6 +3982,7 @@ export class Renderer {
       if (v.sheet) this.tankSpectre(v, t, dt, visible);
       if (v.wand) this.tankConjurer(v, t, dt, visible);
       v.root.position.set(t.x, 0, t.y);
+      if (this.quickCells.size) this.tankSink(v, t, dt, visible);
       v.hull.rotation.y = -t.body;
       v.turret.rotation.y = -t.turret;
       v.recoil = Math.max(0, v.recoil - dt * 4);
@@ -4878,12 +5005,13 @@ export class Renderer {
       // « La neige » (iteration 42): under the snow, the same
       const snowy = this.onSnowR(mn.x, mn.y);
       const buried = !mn.blink && (snowy || this.onSand(mn.x, mn.y));
-      const depth = buried ? -0.115 : 0;
+      const quick = this.onQuick(mn.x, mn.y); // « Les sables mouvants » (iteration 59): the whirl drags it down, lit or not
+      const depth = quick ? -0.24 : buried ? -0.115 : 0;
       if (buried && !g.userData.buried && g.position.y > -0.01) {
         for (let k = 0; k < 6; k++) this.smoke.emit({ x: mn.x + (Math.random() - 0.5) * 0.3, y: 0.06, z: mn.y + (Math.random() - 0.5) * 0.3, vx: (Math.random() - 0.5) * 1.2, vy: 0.5 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 1.2, life: 0.7, s0: 0.08, s1: 0.22, c0: snowy ? 0xffffff : 0xe2b56a, c1: snowy ? 0xe4eef8 : 0xf1dcae, drag: 2 });
       }
       g.userData.buried = buried;
-      g.position.y += (depth - g.position.y) * (buried ? 0.06 : 0.35);
+      g.position.y += (depth - g.position.y) * (quick ? 0.035 : buried ? 0.06 : 0.35);
       const led = g.getObjectByName('led') as THREE.Mesh;
       const on = mn.blink ? Math.sin(this.time * 22) > 0 : Math.sin(this.time * 3) > 0.6;
       led.material = on ? this.ledOn : this.ledOff;
@@ -5225,6 +5353,7 @@ export class Renderer {
     this.smoke.update(dt);
     this.debris.update(dt);
     this.animatePortals(dt);
+    if (this.quickSwirls.length) this.animateQuick(dt);
     this.animateTunnels(dt);
     this.animateSnow(dt);
     this.animateWind(dt);

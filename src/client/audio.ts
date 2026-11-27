@@ -205,6 +205,19 @@ export const sfx = {
     if (decoy) { tone(t + 0.05, 0.25, 1568, 784, 0.06, 'sine'); tone(t + 0.1, 0.3, 2093, 1046, 0.03, 'sine'); }
     else tone(t, 0.1, 2600, 3400, 0.03, 'sine');
   },
+  /**
+   * « Les sables mouvants » (iteration 59): 0 a mine is swallowed (a soft « bloup »), 1 a tank is half sunk (a worried
+   * « glub glub » of bubbles), 2 a tank is swallowed (a long sucking slurp, then a deep « gloup »).
+   */
+  gulp(what: number) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (what === 0) { tone(t, 0.14, 160, 420, 0.16, 'sine'); noise(t, 0.18, 900, 1.2, 0.08, 'lowpass', 300); return; }
+    if (what === 1) { for (let i = 0; i < 3; i++) tone(t + i * 0.12, 0.09, 220 + i * 40, 520 + i * 60, 0.12, 'sine'); return; }
+    noise(t, 0.55, 700, 1.5, 0.2, 'lowpass', 160);
+    tone(t, 0.5, 520, 110, 0.14, 'triangle');
+    tone(t + 0.5, 0.22, 140, 70, 0.22, 'sine');
+  },
   /** The mirrors turn on their pivots: a wooden creak and a glassy shimmer. */
   mirrorTurn() {
     if (!ctx) return;

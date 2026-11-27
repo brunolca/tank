@@ -88,6 +88,8 @@ export const BRUSHES: Brush[] = [
   { ch: '\\', label: 'Miroir ╲', group: 'sol' },
   // iteration 58: « L’Illusionniste » (share-code letter z, the last one: the next brush needs a longer code)
   { ch: 'I', label: 'Illusionniste', group: 'tank' },
+  // iteration 59: « Les sables mouvants » (share code ~A: past z, the letters start again behind a tilde)
+  { ch: '@', label: 'Sables mouvants', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -114,9 +116,13 @@ export const ATELIER_SAMPLE: AtelierMap = {
 };
 
 const CHARS = BRUSHES.map((b) => b.ch).join('');
-/** Share-code letter of a brush: A to Z, then a, b… (iteration 16, older codes only use capitals). */
-const letter = (i: number) => String.fromCharCode(i < 26 ? 65 + i : 97 + i - 26);
-const brushOf = (l: string) => { const c = l.charCodeAt(0); return CHARS[c >= 97 ? c - 97 + 26 : c - 65]; };
+/** Share-code letter of a brush: A to Z, then a, b… (iteration 16, older codes only use capitals), then ~A, ~B… (iteration 59). */
+const letter = (i: number): string => (i >= 52 ? '~' + letter(i - 52) : String.fromCharCode(i < 26 ? 65 + i : 97 + i - 26));
+const brushOf = (l: string): string | undefined => {
+  if (l.length > 1) { const k = l.charCodeAt(1); return CHARS[52 + (k >= 97 ? k - 97 + 26 : k - 65)]; }
+  const c = l.charCodeAt(0);
+  return CHARS[c >= 97 ? c - 97 + 26 : c - 65];
+};
 
 /** An empty table with the two starting spots on the left. */
 export function blankMap(): string[] {
@@ -208,7 +214,7 @@ export function decodeAtelier(code: string): AtelierMap | undefined {
     if (body === undefined) return;
     const name = cleanName(unb64(head));
     let cells = '';
-    const re = /([A-Za-z])(\d*)/g;
+    const re = /(~?[A-Za-z])(\d*)/g;
     let m: RegExpExecArray | null;
     let used = 0;
     while ((m = re.exec(body))) {

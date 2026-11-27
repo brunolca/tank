@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 73, arms: ['canon', 'ricochet'], hud: true, seconds: 22, conjures: [2.5, 12.5], decoyShots: [5, 7, 15.5], newcomers: [[9, ['conjurer']]], caption: 'Itération 58 : l’Illusionniste', sub: '« Abracadabra ! » Il devient trois… mais un seul est le vrai' },
-  { mission: 76, arms: ['fusee', 'canon'], hud: true, seconds: 20, conjures: [2, 11], decoyShots: [4.5, 6.5, 13.5], mirrorShots: [9], caption: 'La galerie des glaces', sub: 'Deux Illusionnistes, quatre mirages, des miroirs partout' },
-  { mission: 73, arms: ['canon', 'sapeur'], hud: true, seconds: 13, conjures: [2], decoyShots: [4, 5.5], caption: 'Pouf !', sub: 'Un obus dissipe un mirage, et leurs obus ne font que des étoiles' },
-  { manual: [8, ['bestiaire'], 'conjurer'], seconds: 8, caption: 'Nouveau au bestiaire', sub: 'Et un pinceau « Illusionniste » dans l’atelier' },
+  { mission: 55, arms: ['canon', 'ricochet'], hud: true, seconds: 22, quickLures: [3, 13], quickMines: [8.5], caption: 'Itération 59 : les sables mouvants', sub: 'Un tourbillon au cœur des dunes : qui s’y attarde est englouti' },
+  { mission: 63, arms: ['fusee', 'canon'], hud: true, seconds: 20, quickLures: [2.5, 11], caption: 'Le sablier', sub: 'Glub ! Les ennemis les contournent… quand ils y pensent' },
+  { mission: 55, arms: ['canon', 'sapeur'], hud: true, seconds: 12, quickMines: [2, 6], quickLures: [4], caption: 'Avalée !', sub: 'Une mine posée dans les sables mouvants disparaît sans exploser' },
+  { manual: [8, ['terrain']], seconds: 8, caption: 'Nouveau sur la table', sub: 'Au manuel, et en pinceau dans l’atelier' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -110,6 +110,8 @@ try {
       for (const [s, n] of shot.lines ?? []) setTimeout(() => d.emote?.(n), s * 1000); // or the first one says that line
       for (const s of shot.trickShots ?? []) setTimeout(() => d.trickShot?.(), s * 1000);
       for (const s of shot.mirrorShots ?? []) setTimeout(() => d.mirrorShot?.(), s * 1000); // « Les miroirs » (iteration 57): a shell turned by a mirror onto an enemy
+      for (const s of shot.quickLures ?? []) setTimeout(() => d.quickLure?.(), s * 1000); // « Les sables mouvants » (iteration 59): an enemy into a whirl, until it is swallowed
+      for (const s of shot.quickMines ?? []) setTimeout(() => d.quickMine?.(), s * 1000); // and a hero's mine swallowed by one
       for (const s of shot.conjures ?? []) setTimeout(() => d.conjure?.(), s * 1000); // « L’Illusionniste » (iteration 58): every Illusionniste does its trick
       for (const s of shot.decoyShots ?? []) setTimeout(() => d.decoyShot?.(), s * 1000); // and a hero shoots a mirage (« Pouf ! »)
       for (const s of shot.spooks ?? []) setTimeout(() => d.spook?.(), s * 1000); // « Le Spectre » (iteration 56): every Spectre fires through a wall at a hero

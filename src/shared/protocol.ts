@@ -64,6 +64,7 @@ export type GameEvent =
   | ['bounce', number, number]
   | ['pop', number, number]
   | ['boom', number, number, number] // x y tankId
+  | ['gulp', number, number, number, number] // x y what tankId: « Les sables mouvants » (iteration 59), 0 a mine swallowed (its owner), 1 a tank half sunk (older clients ignore it)
   | ['ko', number, number, number, number] // victimTankId killerTankId (0: none) cause (KO_*) wallBounces: who did it, right after its 'boom' (« Le ralenti », iteration 32; older clients ignore it)
   | ['mineSet', number, number]
   | ['mineSet', number, number, number] // « Détonateur » (iteration 52): 4th field 1, a remote mine (its own click)

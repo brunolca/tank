@@ -1,4 +1,4 @@
-import { type TankKind, isMirror, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, isSnowman, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
+import { type TankKind, isMirror, isSolidTank as isSolidTankTile, BULLET_SPEED, GATE_COLORS, gateUp, isDrawbridge, isSnowman, reverseBelts, isSolidBullet, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, EMOTES, EMOTE_GAP, EMOTE_TIME, SEED_BLINK, BONUS_INFO, BONUS_KINDS, ICE, SAND, SNOW, PACKED, QUICK, KO_QUICK, isBossKind, CHECKPOINT_EVERY, DT, ENEMY_COLORS, enemyColor, specOf, FLAG_ALERT, FLAG_CHARGING, FLAG_FROZEN, SHELL_HEAVY, SHELL_GHOST, PLAYER_COLORS, SPECS, TANK_R, TICK_RATE, TURBO_MULT, Tile, W, H, WEAPONS, WEAPON_INFO, isPortal, isTunnel, isWeapon, playerSpec, tankRadius, type BonusKind, type TankSpec, type Weapon } from '../shared/constants';
 import { ATELIER_LIVES, ATELIER_SAMPLE, atelierKinds, atelierLevel, decodeAtelier, encodeAtelier } from '../shared/atelier';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, dailyLevel, dailyTwist, dayLabel, dayNumber, formatTicks, TWIST_INFO, type DailyTwist } from '../shared/daily';
 import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type ParsedLevel } from '../shared/levels';
@@ -442,7 +442,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
-  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(SAND) ? ' · Sable' : ''}${snowCells.length ? ' · Neige' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}${levelBlizzard ? ' · Blizzard' : ''}`;
+  const wx = `${msg.night ? ' · Nuit' : ''}${msg.storm ? ' · Orage' : ''}${mapIce ? ' · Glace' : ''}${belts.includes(QUICK) ? ' · Sables mouvants' : belts.includes(SAND) ? ' · Sable' : ''}${snowCells.length ? ' · Neige' : ''}${levelWind !== undefined ? ' · Vent' : ''}${levelFog !== undefined ? ' · Brouillard' : ''}${levelBlizzard ? ' · Blizzard' : ''}`;
   const wxCls = `${msg.night ? ' night' : ''}${msg.storm ? ' storm' : ''}${mapIce ? ' ice' : ''}${levelWind !== undefined ? ' wind' : ''}${levelFog !== undefined ? ' fog' : ''}${levelBlizzard ? ' blizzard' : ''}`;
   bossFight = enemies.some((e) => isBossKind(e.kind));
   const drillFight = enemies.some((e) => e.kind === 'drill');
@@ -487,6 +487,7 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   else if (trainFight) setTimeout(() => toast('Le Tortillard : « Tchou-tchou ! » Ne reste jamais sur les rails devant lui. Son chasse-pierres renvoie les obus de face : vise ses flancs, son dos… ou pose une mine sur la voie ! Quand il siffle à l’arrêt, il repart en marche arrière.', 6000), 2200);
   else if (bombardFight) setTimeout(() => toast('Le Bombardier : sa rangée de cercles rouges tombe d’un bout à l’autre. Cours vers lui ou recule… et file sous un tunnel ! De près, il n’a qu’un petit canon.', 5200), 2200);
   else if (thunderFight) setTimeout(() => toast('Le Grondeur : sa foudre ne le touche jamais, mais elle frappe ses alliés. Les tunnels sont tes seuls abris !', 4400), 2200);
+  else if (belts.includes(QUICK)) setTimeout(() => toast('Sables mouvants ! Les tourbillons t’aspirent vers leur centre et t’engloutissent si tu t’y attardes : traverse-les vite, sans t’arrêter. Ils avalent aussi les mines… et les ennemis les contournent.', 5600), 2200);
   else if (enemies.some((e) => e.kind === 'conjurer')) setTimeout(() => toast('L’Illusionniste : « Abracadabra ! » Pouf, il se dédouble en trois tanks identiques. Deux sont des mirages : leurs obus ne font que des étoiles… mais lequel est le vrai ? Un obus suffit à dissiper un mirage, et ton tank passe à travers.', 6200), 2200);
   else if (enemies.some((e) => e.kind === 'spectre')) setTimeout(() => toast('Le Spectre : ses obus passent à travers le premier mur qu’ils touchent. Aucun abri ne te protège ! Écoute le « wouuh » d’un obus qui entre dans le mur… et bouge. Il recharge lentement : fonce-lui dessus.', 5600), 2200);
   else if (enemies.some((e) => e.kind === 'watcher')) setTimeout(() => toast(msg.night ? 'Le Veilleur balaie la nuit de son faisceau. S’il t’éclaire, l’alarme sonne, tous les ennemis savent où tu es… et sa fusée suit la lumière : sors du faisceau !' : 'Le Veilleur balaie la table de son faisceau. S’il t’éclaire, l’alarme sonne et sa fusée suit la lumière : sors du faisceau ! Hors de sa lumière, il ne voit rien.', 5400), 2200);
@@ -548,6 +549,7 @@ function weatherWords(night: boolean | undefined, storm: boolean | undefined, bl
   if (storm) w.push('Orage');
   if (bl.includes(ICE)) w.push('Glace');
   if (bl.includes(SAND)) w.push('Sable');
+  if (bl.includes(QUICK)) w.push('Sables mouvants');
   if (bl.includes(SNOW) || bl.includes(PACKED)) w.push('Neige');
   if (wind !== undefined) w.push(levelBlizzard ? 'Blizzard' : 'Vent');
   if (fog !== undefined) w.push('Brouillard');
@@ -1137,7 +1139,19 @@ function handleEvent(e: GameEvent, audible: boolean) {
       }
       if (e[3] === myTankId && online) { toast('Détruit !', 1500); controls.rumble(1, 320); }
       break;
+    case 'gulp': // « Les sables mouvants » (iteration 59): 0 a mine swallowed, 1 a tank half sunk
+      renderer.gulp(e[1], e[2], e[3]);
+      if (e[3] === 1) floater(e[1], e[2], e[4] === myTankId && online ? 'Tu t’enlises !' : 'Glub !', 0xc98a3e);
+      else floater(e[1], e[2], 'Avalée !', 0xc98a3e);
+      if (audible) sfx.gulp(e[3]);
+      if (e[3] === 1 && e[4] === myTankId && online) controls.rumble(0.4, 200);
+      break;
     case 'ko': // who did it (iteration 32): the film keeps it for the replay's caption
+      if (e[3] === KO_QUICK) { // « Les sables mouvants » (iteration 59)
+        const p = renderer.swallow(e[1]);
+        if (p) floater(p[0], p[1], 'Englouti !', 0xc98a3e);
+        if (audible) sfx.gulp(2);
+      }
       if (e[1] === reelWanted && !online) { reelWanted = -1; queueReel(true); }
       break;
     case 'mineSet':
@@ -3480,7 +3494,8 @@ const TERRAIN: [string, string, string, boolean?][] = [
   ['[]', 'Barrières', 'Les rouges sont levées au départ, les bleues baissées. Une barrière levée arrête tout ; elle attend que la place soit libre pour monter.'],
   ['{}', 'Ponts-levis', 'Au-dessus d’un trou. Les rouges sont levés au départ, les bleus baissés, et l’interrupteur les fait basculer. Levé, il laisse passer les obus mais pas les tanks. Et à chaque « Clac ! », les tapis roulants changent de sens.'],
   ['8', 'Bonhomme de neige', 'Il arrête les tanks et avale les obus, sans ricochet. Le premier obus lui fait perdre la tête, le deuxième le renverse dans la neige. Une mine le fait tomber d’un coup. Et il te suit des yeux…'],
-  ['/', 'Miroir', 'Il arrête les tanks, mais un obus qui touche sa vitre repart à angle droit, sans perdre de ricochet : de quoi tirer derrière les coins. À chaque « Clac ! » d’un interrupteur, tous les miroirs pivotent d’un quart de tour.', true],
+  ['/', 'Miroir', 'Il arrête les tanks, mais un obus qui touche sa vitre repart à angle droit, sans perdre de ricochet : de quoi tirer derrière les coins. À chaque « Clac ! » d’un interrupteur, tous les miroirs pivotent d’un quart de tour.'],
+  ['@', 'Sables mouvants', 'Un tourbillon de sable : on y roule deux fois moins vite, il t’aspire vers son centre et t’engloutit si tu t’y attardes trois secondes. Traverse sans t’arrêter ! Les mines qu’on y pose disparaissent, les obus passent au-dessus, et les caisses s’y laissent attirer.', true],
 ];
 /** « Le temps qu’il fait » (iteration 41): the weathers of the table, on the same page as the terrain. */
 const WEATHER: [string, string, string, boolean?][] = [
@@ -4302,6 +4317,44 @@ if (params.has('demo')) {
      * « Les dunes » (iteration 36), and « La neige » (iteration 42): a hero's mine is buried in the sand (or the snow) just ahead of a moving enemy, on its way: it does
      * not see it and drives into the trap (its fall plays again in slow motion). Returns how far ahead it lies (0: none).
      */
+    /**
+     * « Les sables mouvants » (iteration 59): the moving enemy nearest to a whirl drives into it and stays there (the
+     * hook keeps steering it back for a few seconds), until the sand swallows it. Returns its id (0: none).
+     */
+    quickLure(hold = 4.5) {
+      const g = attract;
+      if (!g) return 0;
+      const cells = g.belts.flatMap((b, i) => (b === QUICK && g.tiles[i] === Tile.Empty ? [i] : []));
+      const heroes = g.tanks.filter((t) => t.alive && t.kind === 'player');
+      const foes = g.tanks.filter((t) => t.alive && t.ai && t.team !== heroes[0]?.team && g.sinks(t) && t.spec.speed > 0 && !t.watch && !t.rail);
+      let best: { foe: (typeof foes)[number]; c: number; d: number } | undefined;
+      for (const f of foes) for (const c of cells) {
+        const d = Math.hypot(f.x - (c % W) - 0.5, f.y - Math.floor(c / W) - 0.5);
+        if (!best || d < best.d) best = { foe: f, c, d };
+      }
+      if (!best) return 0;
+      const { foe, c } = best;
+      const until = performance.now() + hold * 1000;
+      const iv = setInterval(() => {
+        if (attract !== g || !foe.alive || performance.now() > until || !foe.ai) { clearInterval(iv); return; }
+        foe.ai.path = [c]; foe.ai.pathT = 1; foe.ai.dodgeT = 0; foe.ai.goal = undefined;
+      }, 15);
+      reelWanted = foe.id;
+      return foe.id;
+    },
+    /** « Les sables mouvants »: a hero's mine laid in the whirl nearest to the heroes (it is swallowed, harmlessly). */
+    quickMine() {
+      const g = attract;
+      if (!g) return 0;
+      const hero = g.tanks.find((t) => t.alive && t.kind === 'player');
+      if (!hero) return 0;
+      const cells = g.belts.flatMap((b, i) => (b === QUICK && g.tiles[i] === Tile.Empty ? [i] : []));
+      cells.sort((a, b) => Math.hypot(hero.x - (a % W), hero.y - Math.floor(a / W)) - Math.hypot(hero.x - (b % W), hero.y - Math.floor(b / W)));
+      const c = cells[0];
+      if (c === undefined) return 0;
+      g.mines.push({ id: 921000 + g.tick, owner: hero.id, team: hero.team, x: (c % W) + 0.35, y: Math.floor(c / W) + 0.6, t: 0.5, fuse: -1, dead: false });
+      return 1;
+    },
     sandTrap() {
       const g = attract;
       if (!g) return 0;

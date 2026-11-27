@@ -1,7 +1,7 @@
 {
-  "iteration": 58,
-  "date": "2026-11-26",
-  "title": "L’Illusionniste",
+  "iteration": 59,
+  "date": "2026-11-27",
+  "title": "Les sables mouvants",
   "journal": [
     {
       "iteration": 1,
@@ -707,6 +707,18 @@
         "Un seul obus dissipe un mirage. Les plus malins le remarquent : ton tank passe à travers les mirages, et les mines les ignorent.",
         "Deux missions faites main : « Le petit théâtre » (mission 73) et « La galerie des glaces » (mission 76), avec deux Illusionnistes entre les miroirs. Ensuite, il se glisse dans les missions générées.",
         "Sa fiche entre au bestiaire, et l’atelier gagne un pinceau « Illusionniste »."
+      ]
+    },
+    {
+      "iteration": 59,
+      "date": "2026-11-27",
+      "title": "Les sables mouvants",
+      "notes": [
+        "Nouvelle case : les sables mouvants. Un tourbillon de sable mouillé qui tourne doucement au cœur des dunes.",
+        "On y roule deux fois moins vite, il t’aspire vers son centre… et si tu t’y attardes trois secondes, ton tank s’enfonce et disparaît, « Glub ! ». Traverse sans t’arrêter, et ressors vite : on remonte plus vite qu’on ne s’enfonce.",
+        "Les mines qu’on y pose sont avalées sans exploser, les obus passent au-dessus, et les caisses bonus s’y laissent attirer : à toi de voir si le jeu en vaut la chandelle. Les ennemis les contournent… sauf quand ils esquivent un obus de travers.",
+        "Deux nouvelles missions : « Les sables mouvants » (la 55ᵉ) et « Le sablier » (la 63ᵉ), où les tanks blancs laissent leurs traces dans le sable. À partir de la 81ᵉ, des tourbillons se cachent aussi dans les dunes des missions générées.",
+        "Le manuel présente la nouvelle case, et l’atelier gagne un pinceau « Sables mouvants » pour piéger tes propres missions."
       ]
     }
   ]

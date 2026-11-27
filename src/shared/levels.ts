@@ -1,4 +1,4 @@
-import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, MIRROR_A_CHAR, MIRROR_B_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, W, Tile, TankKind } from './constants';
+import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, MIRROR_A_CHAR, MIRROR_B_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, QUICK, QUICK_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -462,6 +462,54 @@ export const LEVELS: LevelDef[] = [
  * missions around them where they are, and the boss missions stay boss missions.
  */
 export const EXTRA_LEVELS: Record<number, LevelDef> = {
+  // iteration 59, « Les sables mouvants »: dunes with whirls of quicksand in their hearts. Two yellows sow mines the sand
+  // swallows, two violets and a pink hold the far side; cut between the whirls, never through them
+  55: {
+    name: 'Les sables mouvants',
+    map: [
+      '......................',
+      '....,,,,......,,,,..v.',
+      '...,,,@,,....,,@,,,...',
+      '...,,,,,..##..,,,,....',
+      '..1.......##.......y..',
+      '.......o......o.......',
+      '......,,,,..,,,,......',
+      '..###.,,@,..,@,,.###..',
+      '......,,,,..,,,,...p..',
+      '..###.,,@,..,@,,.###..',
+      '......,,,,..,,,,......',
+      '.......o......o.......',
+      '..2.......##.......y..',
+      '...,,,,,..##..,,,,....',
+      '...,,,@,,....,,@,,,...',
+      '....,,,,......,,,,..v.',
+      '......................',
+    ],
+  },
+  // iteration 59: an hourglass of walls around a column of quicksand. Two whites (their tracks show in the sand), two
+  // Pilleurs after the crates the whirls draw in, and a Mortier at the back
+  63: {
+    name: 'Le sablier',
+    map: [
+      '......................',
+      '..1.....,,,,,,....w...',
+      '.......,,,@@,,,.......',
+      '...##...,,,,,,...##...',
+      '....#............#....',
+      '.....#....,,....#..t..',
+      '......#..,@@,..#......',
+      '..o.....,,@@,,.....o..',
+      '........,,,,,,.....M..',
+      '..o.....,,@@,,.....o..',
+      '......#..,@@,..#......',
+      '.....#....,,....#..t..',
+      '....#............#....',
+      '...##...,,,,,,...##...',
+      '.......,,,@@,,,.......',
+      '..2.....,,,,,,....w...',
+      '......................',
+    ],
+  },
   // « Les miroirs » (iteration 57): mirrors on pivots turn the shells a quarter turn, without using up a bounce
   47: {
     name: 'Le palais des glaces',
@@ -1693,6 +1741,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[i] = ICE;
       else if (c === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SAND;
       else if (c === SNOW_CHAR) (belts ??= new Array(W * H).fill(0))[i] = SNOW;
+      else if (c === QUICK_CHAR) (belts ??= new Array(W * H).fill(0))[i] = QUICK; // « Les sables mouvants » (iteration 59)
       else if (c >= '1' && c <= '4') spawns[+c - 1] = [x + 0.5, y + 0.5];
       else if (ENEMY_CHARS[c]) enemies.push({ kind: ENEMY_CHARS[c], x: x + 0.5, y: y + 0.5 });
     }
@@ -1709,6 +1758,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
         else if (row[x] === ICE_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = ICE;
         else if (row[x] === SAND_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = SAND;
         else if (row[x] === SNOW_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = SNOW;
+        else if (row[x] === QUICK_CHAR) (belts ??= new Array(W * H).fill(0))[y * W + x] = QUICK;
 
       }
     }
@@ -1936,6 +1986,25 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
       : wind !== undefined
       ? storm ? `Tempête ${mission}` : night ? `Nuit de vent ${mission}` : `Coup de vent ${mission}`
       : storm ? (night ? `Orage de nuit ${mission}` : `Mission d’orage ${mission}`) : night ? `Mission de nuit ${mission}` : belts ? `Mission des sables ${mission}` : `Mission spéciale ${mission}`;
+    // « Les sables mouvants » (iteration 59): from the 81st, about half the dunes hide a whirl or two in their hearts (a
+    // sand cell ringed with sand), mirrored like the rest, far from every tank; own stream, nothing else moves
+    if (belts && mission > 80) {
+      const rq = rng(mission * 7411 + 113);
+      if (rq() < 0.5) {
+        const far = (i: number) => [...spawns, ...enemies.map((e) => [e.x, e.y] as [number, number])].every(([x, y]) => Math.hypot(x - (i % W) - 0.5, y - Math.floor(i / W) - 0.5) > 2.2);
+        const hearts: number[] = [];
+        for (let i = 0; i < (W * H) / 2; i++) {
+          const x = i % W, y = Math.floor(i / W);
+          if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1 || belts[i] !== SAND) continue;
+          if ([-W - 1, -W, -W + 1, -1, 1, W - 1, W, W + 1].every((d) => belts![i + d] === SAND || belts![i + d] === QUICK) && far(i) && far(W * H - 1 - i)) hearts.push(i);
+        }
+        for (let k = 0, n = 1 + Math.floor(rq() * 2); k < n && hearts.length; k++) {
+          const i = hearts.splice(Math.floor(rq() * hearts.length), 1)[0];
+          belts[i] = QUICK;
+          belts[W * H - 1 - i] = QUICK;
+        }
+      }
+    }
     return { name: opt.name ?? name, tiles, spawns, enemies, night, storm, wind, fog, belts };
   }
   return parseLevel(LEVELS[0]);

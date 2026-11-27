@@ -1,4 +1,4 @@
-import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isSnowman, isTunnel, isPit, mirrorOf, Tile } from './constants';
+import { GHOST_DEPTH, BELT_DIRS, BELT_SPEED, ICE, ICE_GRIP, QUICK, QUICK_PULL, QUICK_SLOW, SAND, SAND_SLOW, SNOW, PACKED, SNOW_SLOW, H, W, PORTAL_MAX_R, isPortal, isSolidTank, isSolidBullet, isSnowman, isTunnel, isPit, mirrorOf, Tile } from './constants';
 
 export function tileAt(tiles: ArrayLike<number>, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return Tile.Wall;
@@ -355,6 +355,7 @@ export function beltAt(belts: ArrayLike<number> | undefined, x: number, y: numbe
  */
 export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | undefined, x: number, y: number, r: number, dt: number): [number, number] {
   const b = beltAt(belts, x, y);
+  if (b === QUICK) return quickStep(tiles, x, y, r, dt);
   if (!b || b > 4) return [x, y]; // ice, sand and snow do not carry anything (iterations 21, 36 and 42)
   const [dx, dy] = BELT_DIRS[b] ?? [0, 0];
   const px = x, py = y;
@@ -371,6 +372,24 @@ export function beltStep(tiles: ArrayLike<number>, belts: ArrayLike<number> | un
   return [x, y];
 }
 
+/**
+ * « Les sables mouvants » (iteration 59): the whirl draws whatever sits on it toward the middle of its cell, at
+ * QUICK_PULL tiles/s (never past it). The big tanks (the bosses, the train) are too heavy to be drawn in.
+ */
+function quickStep(tiles: ArrayLike<number>, x: number, y: number, r: number, dt: number): [number, number] {
+  if (r > PORTAL_MAX_R) return [x, y];
+  const dx = Math.floor(x) + 0.5 - x, dy = Math.floor(y) + 0.5 - y;
+  const d = Math.hypot(dx, dy);
+  if (d < 1e-4) return [x, y];
+  const k = Math.min(d, QUICK_PULL * dt) / d;
+  return moveCircle(tiles, x, y, dx * k, dy * k, r);
+}
+
+/** Is the centre of this point on quicksand? (iteration 59) */
+export function onQuick(belts: ArrayLike<number> | undefined, x: number, y: number): boolean {
+  return beltAt(belts, x, y) === QUICK;
+}
+
 /** Is the centre of this point on a sand cell? (iteration 36) */
 export function onSand(belts: ArrayLike<number> | undefined, x: number, y: number): boolean {
   return beltAt(belts, x, y) === SAND;
@@ -385,7 +404,7 @@ export function onSnow(belts: ArrayLike<number> | undefined, x: number, y: numbe
 /** Share of its speed a tank keeps where it stands: SAND_SLOW on sand, SNOW_SLOW in deep snow, 1 elsewhere (server and client prediction alike). */
 export function floorSpeed(belts: ArrayLike<number> | undefined, x: number, y: number): number {
   const b = beltAt(belts, x, y);
-  return b === SAND ? SAND_SLOW : b === SNOW ? SNOW_SLOW : 1;
+  return b === SAND ? SAND_SLOW : b === SNOW ? SNOW_SLOW : b === QUICK ? QUICK_SLOW : 1;
 }
 
 /** Is the centre of this point on an ice cell? (iteration 21) */

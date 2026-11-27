@@ -4,7 +4,8 @@ import { ATELIER_SAMPLE, atelierLevel, blankMap, checkAtelier, cleanName, decode
 import { councilVerdict, taupeLevel, TAUPE_STAGES } from '../src/shared/taupe';
 import { applyTwist, DAILY_STAGES, DAILY_TWISTS, EIGHT_TWISTS_FROM, SEVEN_TWISTS_FROM, SIX_TWISTS_FROM, dailyLevel, dailyTwist, dayNumber, formatTicks } from '../src/shared/daily';
 import { EXTRA_LEVELS, VERSUS_ARENAS, bossOf, getMission, isBossMission, LEVELS, parseLevel, versusArena } from '../src/shared/levels';
-import { floorSpeed } from '../src/shared/physics';
+import { floorSpeed, onQuick } from '../src/shared/physics';
+import { KO_QUICK, QUICK, QUICK_MINE, QUICK_SINK, QUICK_SLOW, TANK_R } from '../src/shared/constants';
 import { Game, driveStep, slideDrive } from '../src/shared/sim';
 import { KO_MIRROR, KO_GHOST, SHELL_GHOST, REMOTE_LIFE, FLAG_REPAIR, FLAG_PATCHED, MECA_FIX, MECA_COOL, KO_TRAIN, TRAIN_SPEED, FLAG_SPOT, WATCH_RANGE, SNOW, PACKED, SNOW_SLOW, SNOW_REFILL, KO_SNOW, FLAG_AIR, HOP_MAX, HOP_MIN, KO_FALL, KO_LOB, KO_MINE, KO_SAND, SAND, SAND_SLOW, MORTAR_BLAST, MORTAR_MAX, MORTAR_MIN, MORTAR_WARN, FLAG_CHARGING, EMOTES, EMOTE_BOT_GAP, BONUS_INFO, FLAG_FROZEN, BOLT_R, BULLET_SPEED, FLAG_MAGNET, MAGNET_HELD_SHIFT, MAGNET_ON, MAGNET_R, ICE, BOLT_WARN, DT, FLAG_BURROW, MASON_MAX, H, SPECS, STEEL_STRIPPED, Tile, W, WEAPONS, isBossKind, isSolidTank, playerSpec } from '../src/shared/constants';
 import { beltStep, castRicochet, castWindy, tunnelAxis } from '../src/shared/physics';
@@ -513,7 +514,7 @@ console.log('total', Date.now() - t0, 'ms');
   const fail = (m: string) => { console.error('ORAGE:', m); process.exitCode = 1; };
   if (!getMission(16).storm) fail('« Tempête » (16) devrait se jouer sous l’orage');
   const storms: number[] = [];
-  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).storm) storms.push(mission);
+  for (let mission = 1; mission <= 100; mission++) if (getMission(mission).storm) storms.push(mission); // up to the 100th since iteration 59: the handmade missions fill the 50s and 60s
   if (storms.length < 8) fail(`trop peu de missions d’orage (${storms.length})`);
   if (storms.some((m) => m < 21 && m !== 16)) fail('orage avant la 21ᵉ mission');
   if (![0, 1, 2, 3, 4, 5, 6, 7].some((r) => versusArena(r).storm)) fail('aucune manche versus sous l’orage');
@@ -598,7 +599,7 @@ console.log('total', Date.now() - t0, 'ms');
   const fail = (m: string) => { console.error('ACIER:', m); process.exitCode = 1; };
   if (!getMission(12).enemies.some((e) => e.kind === 'steel')) fail('« Forteresse » (12) devrait avoir un tank d’acier');
   const steelMissions: number[] = [];
-  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'steel')) steelMissions.push(mission);
+  for (let mission = 1; mission <= 100; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'steel')) steelMissions.push(mission); // up to the 100th since iteration 59: the handmade missions fill the 50s and 60s
   if (steelMissions.some((m) => m !== 12 && m < 21)) fail('tank d’acier avant la 21ᵉ mission (hors Forteresse)');
   if (steelMissions.length < 15) fail(`trop peu de missions avec des tanks d’acier (${steelMissions.length})`);
   // the days already played keep their twist and their stages
@@ -738,7 +739,7 @@ console.log('total', Date.now() - t0, 'ms');
   if (getMission(21).name !== 'Le chantier' || getMission(21).enemies.filter((e) => e.kind === 'mason').length < 2) fail('« Le chantier » (21) devrait avoir des maçons');
   if (!getMission(20).enemies.some((e) => e.kind === 'drill') || !getMission(30).enemies.some((e) => e.kind === 'thunder')) fail('les boss ont bougé');
   const masonMissions: number[] = [];
-  for (let mission = 1; mission <= 80; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'mason')) masonMissions.push(mission);
+  for (let mission = 1; mission <= 100; mission++) if (getMission(mission).enemies.some((e) => e.kind === 'mason')) masonMissions.push(mission); // up to the 100th since iteration 59: the handmade missions fill the 50s and 60s
   if (masonMissions.some((m) => m < 21)) fail('maçon avant la 21ᵉ mission');
   if (masonMissions.length < 12) fail(`trop peu de missions avec des maçons (${masonMissions.length})`);
   for (let day = SEVEN_TWISTS_FROM - 3; day < SEVEN_TWISTS_FROM + 20; day++) {
@@ -2706,7 +2707,7 @@ console.log('total', Date.now() - t0, 'ms');
     const lvl = getMission(n);
     if (EXTRA_LEVELS[n] || isBossMission(n) || !lvl.belts?.includes(SAND)) continue;
     if (n < 47) fail(`du sable trop tôt (mission ${n})`);
-    lvl.belts.forEach((b, i) => { if (b === SAND && lvl.tiles[i] !== Tile.Empty) fail(`mission ${n} : du sable sous un mur`); if (b && b !== SAND) fail(`mission ${n} : code de sol inattendu`); });
+    lvl.belts.forEach((b, i) => { if (b === SAND && lvl.tiles[i] !== Tile.Empty) fail(`mission ${n} : du sable sous un mur`); if (b && b !== SAND && b !== QUICK) fail(`mission ${n} : code de sol inattendu`); });
     dunes.push(n);
   }
   if (dunes.length < 15 || dunes.length > 50) fail(`missions des sables : ${dunes.length} sur 90`);
@@ -3996,4 +3997,143 @@ console.log('total', Date.now() - t0, 'ms');
   if (cleared === 0) fail('l’IA ne vient jamais à bout des missions de l’Illusionniste');
   if (!tricks) fail('aucun tour pendant les parties');
   if (process.exitCode !== 1) console.log(`Illusionniste OK (${gen} missions générées, ${cleared} partie(s) gagnée(s) par l’IA, ${tricks} tour(s), ${poofs} « pouf », ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Les sables mouvants » (iteration 59): quicksand slows the tanks, draws them toward the heart of its cell, swallows
+// those that linger QUICK_SINK seconds (not the bosses), swallows mines harmlessly, and the AI plans around it
+{
+  const fail = (m: string) => { console.error('SABLES MOUVANTS :', m); process.exitCode = 1; };
+  const open = new Array(W * H).fill(Tile.Empty);
+  const quick = new Array(W * H).fill(0);
+  for (let y = 7; y <= 9; y++) for (let x = 9; x <= 11; x++) quick[y * W + x] = QUICK;
+  // slowed down, and drawn in: the client prediction (driveStep + floorSpeed + beltStep) matches the server
+  {
+    const g = new Game(open, quick);
+    const t = g.addTank('player', 1, 8.6, 8.5, 0x3d7bff, 'p1', 'P');
+    g.frozen = false;
+    let [px, py, pb] = [t.x, t.y, t.body];
+    for (let i = 0; i < 20; i++) {
+      g.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+      [px, py, pb] = driveStep(open, px, py, pb, 1, 0, playerSpec().speed * floorSpeed(quick, px, py), DT);
+      [px, py] = beltStep(open, quick, px, py, TANK_R, DT);
+    }
+    if (Math.hypot(px - t.x, py - t.y) > 1e-6) fail(`la prédiction ne colle pas au serveur (${px.toFixed(3)} contre ${t.x.toFixed(3)})`);
+    if (floorSpeed(quick, 10.5, 8.5) !== QUICK_SLOW) fail('les sables mouvants ne ralentissent pas');
+    // a tank at rest off the middle is drawn toward the heart of its cell
+    const g2 = new Game(open, quick);
+    const u = g2.addTank('player', 1, 10.2, 8.8, 0x3d7bff, 'p1', 'P');
+    g2.frozen = false;
+    for (let i = 0; i < 40; i++) g2.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+    if (Math.hypot(u.x - 10.5, u.y - 8.5) > 0.05) fail(`le tourbillon n’aspire pas (${u.x.toFixed(2)}, ${u.y.toFixed(2)})`);
+  }
+  // linger and you are swallowed, told as such; drive straight through and nothing happens
+  {
+    const g = new Game(open, quick);
+    const t = g.addTank('player', 1, 10.5, 8.5, 0x3d7bff, 'p1', 'P');
+    g.frozen = false;
+    let ko: unknown[] | undefined, glub = false, at = 0;
+    for (let i = 0; i < 30 * 5 && !ko; i++) {
+      g.step(new Map([['p1', { s: i, mx: 0, my: 0, a: 0, f: 0, m: 0 }]]));
+      if (g.events.some((e) => e[0] === 'gulp' && e[3] === 1 && e[4] === t.id)) glub = true;
+      ko = g.events.find((e) => e[0] === 'ko' && e[1] === t.id);
+      at = i;
+      g.events = [];
+    }
+    if (!ko || ko[3] !== KO_QUICK) fail(`un tank immobile n’est pas englouti (${JSON.stringify(ko)})`);
+    if (Math.abs((at + 1) * DT - QUICK_SINK) > 0.1) fail(`englouti au bout de ${((at + 1) * DT).toFixed(2)} s au lieu de ${QUICK_SINK}`);
+    if (!glub) fail('pas de « glub » à mi-chemin');
+    const g2 = new Game(open, quick);
+    const v = g2.addTank('player', 1, 8.3, 8.5, 0x3d7bff, 'p1', 'P');
+    g2.frozen = false;
+    for (let i = 0; i < 90; i++) g2.step(new Map([['p1', { s: i, mx: 1, my: 0, a: 0, f: 0, m: 0 }]]));
+    if (!v.alive || v.x < 12) fail(`traverser d’un trait devrait suffire (${v.alive}, x ${v.x.toFixed(2)})`);
+    // a shield buys a fresh start; a boss never sinks
+    const g3 = new Game(open, quick);
+    const w = g3.addTank('player', 1, 10.5, 8.5, 0x3d7bff, 'p1', 'P');
+    w.buffs.shield = true;
+    const boss = g3.addTank('boss', 99, 10.5, 7.5, 0);
+    boss.ai = undefined;
+    g3.frozen = false;
+    for (let i = 0; i < Math.ceil(QUICK_SINK / DT) + 2; i++) g3.step(new Map());
+    if (!w.alive || w.buffs.shield) fail('le bouclier devrait sauver le tank une fois');
+    for (let i = 0; i < 30 * 4; i++) g3.step(new Map());
+    if (w.alive) fail('après le bouclier, le tank devrait finir englouti');
+    if (!boss.alive) fail('un boss ne devrait jamais être englouti');
+  }
+  // mines are swallowed, without a blast
+  {
+    const g = new Game(open, quick);
+    const t = g.addTank('player', 1, 3.5, 3.5, 0x3d7bff, 'p1', 'P');
+    g.frozen = false;
+    g.mines.push({ id: 1, owner: t.id, team: 1, x: 10.4, y: 8.5, t: 1, fuse: -1, dead: false }, { id: 2, owner: t.id, team: 1, x: 3.5, y: 12.5, t: 1, fuse: -1, dead: false });
+    let gulp = false, boom = false;
+    for (let i = 0; i < Math.ceil(QUICK_MINE / DT) + 3; i++) {
+      g.step(new Map());
+      for (const e of g.events) { if (e[0] === 'gulp' && e[3] === 0) gulp = true; if (e[0] === 'mboom') boom = true; }
+      g.events = [];
+    }
+    if (g.mines.some((m) => m.id === 1)) fail('la mine posée dans les sables mouvants n’est pas avalée');
+    if (!g.mines.some((m) => m.id === 2)) fail('la mine hors des sables a disparu');
+    if (!gulp || boom) fail('une mine avalée devrait faire « bloup », pas exploser');
+  }
+  // the AI plans around it
+  {
+    const g = new Game(open, quick);
+    const a = g.addTank('violet', 99, 6.5, 8.5, 0);
+    const p = g.addTank('player', 1, 15.5, 8.5, 0x3d7bff, 'p1', 'P');
+    p.buffs.invuln = 999;
+    g.frozen = false;
+    let inside = 0;
+    for (let i = 0; i < 30 * 20; i++) { g.step(new Map()); if (onQuick(quick, a.x, a.y)) inside++; g.events = []; }
+    if (inside > 30) fail(`l’IA roule dans les sables mouvants (${inside} ticks)`);
+  }
+  // the missions: two handmade ones, whirls in generated dunes from the 81st, never in the daily challenge
+  for (const n of [55, 63]) if (!getMission(n).belts?.includes(QUICK)) fail(`la mission ${n} devrait avoir des sables mouvants`);
+  let gen = 0;
+  for (let n = 1; n <= 240; n++) {
+    if (EXTRA_LEVELS[n] || isBossMission(n)) continue;
+    const l = getMission(n);
+    if (!l.belts?.includes(QUICK)) continue;
+    if (n <= 80) fail(`des sables mouvants trop tôt (mission ${n})`);
+    gen++;
+    l.belts.forEach((b, i) => {
+      if (b !== QUICK) return;
+      if (l.tiles[i] !== Tile.Empty) fail(`mission ${n} : sables mouvants sous un mur`);
+      const x = (i % W) + 0.5, y = Math.floor(i / W) + 0.5;
+      if ([...l.spawns, ...l.enemies.map((e) => [e.x, e.y])].some(([ex, ey]) => Math.hypot(ex - x, ey - y) < 2)) fail(`mission ${n} : un tank part dans les sables mouvants`);
+    });
+  }
+  if (gen < 5) fail(`trop peu de sables mouvants dans les missions générées (${gen})`);
+  for (let d = 0; d < 30; d++) for (let st = 0; st < DAILY_STAGES; st++) if (dailyLevel(20000 + d, st).belts?.includes(QUICK)) fail('des sables mouvants dans le défi du jour');
+  // the workshop: past z, the share code goes on behind a tilde, and older codes still read
+  const am = { name: 'Sablier', map: blankMap() };
+  am.map[8] = am.map[8].slice(0, 9) + '@@@' + am.map[8].slice(12);
+  am.map[3] = am.map[3].slice(0, 15) + 'I' + am.map[3].slice(16);
+  const code = encodeAtelier(am);
+  const back = decodeAtelier(code);
+  if (!back || back.map[8].slice(9, 12) !== '@@@' || back.map[3][15] !== 'I') fail(`les sables mouvants se perdent dans le code de partage (${code})`);
+  { const why = checkAtelier(am.map); if (why) fail(`l’atelier refuse les sables mouvants (${why})`); }
+  if (!atelierLevel(am).belts?.includes(QUICK)) fail('atelier : pas de sables mouvants dans la mission jouée');
+  if (decodeAtelier(encodeAtelier(ATELIER_SAMPLE))?.map.join() !== ATELIER_SAMPLE.map.join()) fail('les anciens codes de partage ne se relisent plus');
+  // its missions: AI duos clear them, some enemies get swallowed, the tick stays cheap
+  let cleared = 0, spent = 0, steps = 0, swallowed = 0;
+  for (let run2 = 0; run2 < 8 && cleared < 2; run2++) {
+    const l = getMission(run2 % 2 ? 63 : 55);
+    const s2 = new Game(l.tiles, l.belts);
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 150 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      for (const e of s2.events) if (e[0] === 'ko' && e[3] === KO_QUICK) swallowed++;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions des sables mouvants');
+  if (process.exitCode !== 1) console.log(`sables mouvants OK (${gen} missions générées, ${cleared} partie(s) gagnée(s) par l’IA, ${swallowed} englouti(s), ${per.toFixed(3)} ms/tick)`);
 }

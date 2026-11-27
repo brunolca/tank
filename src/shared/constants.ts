@@ -405,6 +405,22 @@ export const SAND_SLOW = 0.6;
 /** A buried mine (laid on sand) stays hidden from the foes' AI until its fuse is lit, unless they come this close. */
 export const SAND_SPOT = 0.9;
 
+// ------------------------------------------------------------------ « Les sables mouvants » (iteration 59)
+/** Map character of a quicksand cell: a whirl of wet sand in the floor layer (code QUICK), the cell itself stays floor. */
+export const QUICK_CHAR = '@';
+/** Floor-layer code of a quicksand cell (7 stays unused, 8 and 9 are the snow). */
+export const QUICK = 10;
+/** How much of its speed a tank keeps in quicksand. */
+export const QUICK_SLOW = 0.55;
+/** How fast the whirl draws whatever sits on it toward the middle of its cell (tiles/s). */
+export const QUICK_PULL = 0.55;
+/** Seconds a tank can stay in quicksand before it is swallowed (it climbs back out twice as fast as it sinks). */
+export const QUICK_SINK = 3;
+/** How much faster a tank climbs back out of the sand than it sank in. */
+export const QUICK_RISE = 1.6;
+/** Seconds before a mine laid in quicksand is swallowed (harmless: it never goes off). */
+export const QUICK_MINE = 1.1;
+
 // ------------------------------------------------------------------ snow (iteration 42)
 /** Map character of a snow cell. Like the sand, snow lives in the floor layer, the cell itself stays floor. */
 export const SNOW_CHAR = '&';
@@ -636,6 +652,7 @@ export const KO_SNOW = 7; // « La neige » (iteration 42): a mine buried in the
 export const KO_TRAIN = 8; // « Le Tortillard » (iteration 49): run over by the train
 export const KO_GHOST = 9; // « Passe-muraille » (iteration 52): a shell that went through a wall (older tabs read a plain shell)
 export const KO_MIRROR = 10; // « Les miroirs » (iteration 57): a shell turned by a mirror (older tabs read a plain shell)
+export const KO_QUICK = 11; // « Les sables mouvants » (iteration 59): swallowed by the quicksand (older tabs read a plain shell)
 
 // ------------------------------------------------------------------ bridges (iteration 33)
 /** Map character of a bridge (it spans a pit: its floor neighbours give its direction). */
