@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { mission: 70, arms: ['canon', 'ricochet'], hud: true, seconds: 26, conjures: [3.2, 14], magusShots: [6.5, 9.5, 17, 20.5], caption: 'Itération 60 : le Grand Illusionniste', sub: 'Le septième boss : d’un coup de baguette, il devient quatre' },
-  { mission: 70, arms: ['fusee', 'canon'], hud: true, seconds: 17, bossHp: 3, conjures: [2.8], magusShots: [5.5, 8.5, 11.5], caption: 'Escamoté !', sub: 'Chaque coup reçu l’échange avec un mirage… et à la fin, les colombes' },
-  { mission: 73, arms: ['canon', 'ricochet'], hud: true, seconds: 11, conjures: [2.5], decoyShots: [6, 8], caption: 'Le chapeau de travers', sub: 'Un indice pour les yeux perçants : les mirages portent leur chapeau de biais' },
-  { manual: [8, ['bestiaire'], 'magus'], seconds: 8, caption: 'Au bestiaire', sub: 'Le Grand Illusionniste rejoint les boss' },
+  { petard: [0, [2, 2, 2, 2], 5, 1], seconds: 24, passes: [8.5, 15], caption: 'Itération 61 : le pétard', sub: 'Un nouveau mode : refile le pétard allumé avant qu’il t’éclate au nez' },
+  { rivals: 6, lobby: 'petard', seconds: 6, caption: 'Au salon : « Pétard »', sub: 'Seul contre des rivaux pilotés par l’ordinateur, ou jusqu’à quatre en ligne' },
+  { petard: [1, [2, 2, 2, 2], 5, 1], seconds: 26, passes: [3.5, 10], caption: 'Les obus ne font que sonner', sub: 'Un tir du porteur, même en bande, et le pétard change de main' },
+  { manual: [7, ['modes']], seconds: 7, caption: 'Au manuel', sub: 'Le pétard rejoint les modes de jeu' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -64,6 +64,7 @@ try {
       else if (shot.playAtelier) { const a = d.atelierSample(); d.playAtelier({ ...a, ...shot.playAtelier }, shot.arms); }
       else if (shot.arsenal) { d.play(3, true, false, undefined, undefined, ['canon', 'fusee']); d.arsenal(shot.arsenal * 1000); }
       else if (shot.versus) d.versus(shot.versus[0], shot.versus[1], shot.arms);
+      else if (shot.petard) d.petard(shot.petard[0], shot.petard[1], shot.arms, shot.petard[2], !!shot.petard[3]); // « Le pétard » (iteration 61)
       else if (shot.ballon) d.ballon(shot.ballon[0], shot.ballon[1], shot.arms, shot.ballon[2], !!shot.ballon[3]); // « Le ballon » (iteration 55)
       else if (shot.couronne) d.couronne(shot.couronne[0], shot.couronne[1], shot.arms, shot.couronne[2], !!shot.couronne[4], shot.couronne[3]); // « La couronne » (iteration 50)
       else if (shot.caisses) d.caisses(shot.caisses[0], shot.caisses[1], shot.arms, shot.caisses[2], !!shot.caisses[3]); // « La chasse aux caisses » (iteration 37)
@@ -95,6 +96,7 @@ try {
       for (const s of shot.shieldShots ?? []) setTimeout(() => d.shieldShot?.(), s * 1000); // the Rempart's shield (iteration 22)
       for (const s of shot.magnetShots ?? []) setTimeout(() => d.magnetShot?.(), s * 1000); // the Aimant (iteration 27)
       for (const s of shot.goalShots ?? []) setTimeout(() => d.goalShot?.(), s * 1000); // « Le ballon » (iteration 55): a Bleu lines up a shot at the goal
+      for (const s of shot.passes ?? []) setTimeout(() => d.pass?.(true), s * 1000); // « Le pétard » (iteration 61): the carrier hands it over to its nearest rival, « en bande ! »
       for (const s of shot.crowns ?? []) setTimeout(() => d.crown?.(), s * 1000); // « La couronne » (iteration 50): the crown onto the nearest rival's head
       for (const s of shot.trainMines ?? []) setTimeout(() => d.trainMine?.(), s * 1000); // « Le Tortillard » (iteration 49): a mine on the track ahead of the train
       for (const s of shot.reverses ?? []) setTimeout(() => d.reverse?.(), s * 1000); // and it stops whistling, then backs up

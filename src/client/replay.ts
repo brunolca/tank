@@ -3,7 +3,7 @@
 // again in slow motion, the camera leaning toward it. Nothing goes through the network: it is only a film of what
 // this screen already showed, so it works the same online, alone against rivals and in the demo.
 import type { GameEvent } from '../shared/protocol';
-import { KO_BOLT, KO_DRILL, KO_FALL, KO_GHOST, KO_LOB, KO_MINE, KO_MIRROR, KO_QUICK, KO_SAND, KO_SNOW, KO_TRAIN } from '../shared/constants';
+import { KO_BOLT, KO_DRILL, KO_FALL, KO_GHOST, KO_LOB, KO_MINE, KO_MIRROR, KO_PETARD, KO_QUICK, KO_SAND, KO_SNOW, KO_TRAIN } from '../shared/constants';
 import type { RBonus, RBullet, RFlag, RLob, RMine, RTank } from './render';
 
 export interface FilmFrame { dt: number; tanks: RTank[]; bullets: RBullet[]; mines: RMine[]; bonuses: RBonus[]; flags?: RFlag[]; lobs?: RLob[]; events: GameEvent[] } // lobs: the Mortier's cannonballs (iteration 34)
@@ -148,6 +148,7 @@ export function koCaption(r: Reel, name: (id: number) => string | undefined, bos
   else if (cause === KO_GHOST) how = self ? 'Son propre obus fantôme !' : n > 0 ? 'À travers le mur… et ricochet !' : 'À travers le mur !'; // « Passe-muraille » (iteration 52)
   else if (cause === KO_MIRROR) how = self ? 'Son propre reflet !' : n > 0 ? 'Par le miroir… et ricochet !' : 'Par le miroir !'; // « Les miroirs » (iteration 57)
   else if (cause === KO_QUICK) how = 'Englouti par les sables !'; // « Les sables mouvants » (iteration 59)
+  else if (cause === KO_PETARD) how = 'Le pétard lui éclate au nez !'; // « Le pétard » (iteration 61)
   else if (self) how = n > 0 ? 'Son propre ricochet !' : 'Oups !';
   else if (n >= 3) how = `Ricochet ×${n} : chapeau !`;
   else if (n === 2) how = 'Double ricochet !';

@@ -38,6 +38,7 @@ const P: Record<string, string> = {
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
   // the skill branches
   burst: '<path d="M12 2l2 6 6-3-3 6 6 2-6 2 3 6-6-3-2 6-2-6-6 3 3-6-6-2 6-2-3-6 6 3z"/>',
+  petard: '<rect x="5" y="9" width="10" height="12" rx="2"/><path d="M5 13h10M5 17h10M10 9V6c0-2 2-3 4-2M17 3.5l1.5-1M18.5 6h1.5M16.5 1.5V0"/>', // « Le pétard » (iteration 61)
   bomb: '<circle cx="10.5" cy="14" r="7"/><path d="M15.5 9l2-2M17 5.5l1-1M19 7.5l1.5-.5M18.5 3.5l.3-1.3"/>',
   // the bosses
   pick: '<path d="M4 9c5-6 11-6 16 0M12 5v16"/>',

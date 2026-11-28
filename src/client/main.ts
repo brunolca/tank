@@ -5,6 +5,7 @@ import { EXTRA_LEVELS, LEVELS, getMission, nearestFree, versusArena, type Parsed
 import { CTF_RESPAWN, CTF_ROUND, CTF_TARGET, TEAM_COLORS, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags, type NetFlag } from '../shared/drapeau';
 import { GOLD_COLOR, HUNT_GOLD, HUNT_GOLD_AT, HUNT_HURRY, HUNT_RESPAWN, HUNT_ROUND, HUNT_TARGET, huntArena, newHunt, HUNT_CRATES } from '../shared/caisses';
 import { CROWN_COLOR, CROWN_HOLD, CROWN_HURRY, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, CROWN_TARGET, crownArena, newCrown } from '../shared/couronne';
+import { PETARD_COLOR, PETARD_SPEED, PETARD_TARGET, PETARD_WARN, newPetard, petardArena } from '../shared/petard';
 import { BALL_HURRY, BALL_RESPAWN, BALL_ROUND, BALL_TARGET, ballArena, goalOf, newBall } from '../shared/ballon';
 import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, isRivalId, makeRival, rivalLevel, rivalMode } from '../shared/rivals';
 import META from '../shared/meta.json';
@@ -63,9 +64,9 @@ let bestMission = Math.max(1, Number(localStorage.getItem('tanks.best')) || 1);
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 /** The coop campaign and the daily challenge share their rules (lives, enemies, results). */
-const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses' && m !== 'couronne' && m !== 'ballon';
+const coopLike = (m: Mode) => m !== 'versus' && m !== 'drapeau' && m !== 'caisses' && m !== 'couronne' && m !== 'ballon' && m !== 'petard';
 /** Free-for-all modes that need at least two tanks (rivals count). */
-const needsTwo = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne' || m === 'ballon';
+const needsTwo = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne' || m === 'ballon' || m === 'petard';
 /** Modes played Bleus against Rouges: « Drapeaux » (iteration 24) and « Le ballon » (iteration 55). */
 const teamPlay = (m: Mode) => m === 'drapeau' || m === 'ballon';
 
@@ -259,6 +260,10 @@ let huntGot = new Map<number, number>();
 let huntKey = '';
 const HUNT_RESPAWN_TXT = String(HUNT_RESPAWN).replace('.', ','); // « 2,5 »
 /** « La couronne » (iteration 50): its cushion, and each tank's reign this round in tenths of a second (tank id → tenths), from the snapshots. */
+/** « Le pétard » (iteration 61): who carries the lit firecracker (0: nobody), its fuse in tenths (when the snapshot came), the fuse it had, and the handovers of each tank this round. */
+let petardHudTxt = '';
+let petardHolder = 0, petardFuse = 0, petardLen = 0, petardAt = 0, petardKey = '';
+let petardPasses = new Map<number, number>();
 let crownHome: [number, number] | undefined;
 let crownHeld = new Map<number, number>();
 let crownHolder = 0;
@@ -393,6 +398,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   crownHeld = new Map(); crownHolder = 0; crownKey = '';
   renderer.setCrown(crownHome);
   if (msg.mode === 'couronne') { ctfLeft = CROWN_ROUND; ctfLeftAt = performance.now(); }
+  petardHolder = petardFuse = petardLen = 0; petardKey = ''; petardHudTxt = ''; petardPasses = new Map();
+  renderer.setPetard(msg.mode === 'petard');
   // « Drapeaux » (iteration 24): the two bases, and a ring of the team's colour under each tank
   const bs = msg.mode === 'drapeau' && Array.isArray(msg.bases) && msg.bases.length >= 4 ? msg.bases.map(Number) : undefined;
   ctfBases = bs && bs.every(Number.isFinite) ? [[bs[0], bs[1]], [bs[2], bs[3]]] : undefined;
@@ -439,6 +446,8 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
     ? `<b>Manche ${msg.mission}</b><span>La couronne · premier à ${CROWN_TARGET}</span>`
     : msg.mode === 'ballon'
     ? `<b>Manche ${msg.mission}</b><span>Le ballon · premier à ${BALL_TARGET} buts</span>`
+    : msg.mode === 'petard'
+    ? `<b>Manche ${msg.mission}</b><span>Le pétard · premier à ${PETARD_TARGET}</span>`
     : `<b>Manche ${msg.mission}</b><span>Versus · premier à 5</span>`;
   $('#hud').dataset.mode = msg.mode;
   const enemies = msg.tanks.filter((t) => t.team === 99);
@@ -480,6 +489,9 @@ function startLevel(msg: Extract<ServerMsg, { t: 'level' }>) {
   } else if (msg.mode === 'couronne') {
     banner(`La couronne · manche ${msg.mission}${wx}`, 'Prends la couronne et garde-la !',
       `Porte-la ${CROWN_HOLD} secondes en tout pour gagner la manche. Touché ? Elle tombe de ta tête.`, `intro crown${wxCls}`);
+  } else if (msg.mode === 'petard') {
+    banner(`Le pétard · manche ${msg.mission}${wx}`, 'Refile le pétard avant qu’il éclate !',
+      'Fonce dans un tank ou touche-le d’un obus pour le lui passer. Les obus ne font que sonner. Le dernier debout gagne.', `intro petard${wxCls}`);
   } else {
     banner(`Manche ${msg.mission}${wx}`, 'Versus', 'Le dernier tank debout gagne la manche', `intro${wxCls}`);
   }
@@ -673,6 +685,9 @@ function onPhase(msg: Extract<ServerMsg, { t: 'phase' }>) {
         const mine = crownHeld.get(myTankId);
         const won = /règne/.test(msg.text ?? '');
         banner(won ? 'Vive le roi !' : 'Fin du règne', msg.text ?? '', mine !== undefined ? `Tu as porté la couronne ${Math.floor(mine / 10)} s` : '', 'good crown');
+      } else if (currentMode === 'petard') {
+        const mine = petardPasses.get(myTankId) ?? 0;
+        banner(/dernier/.test(msg.text ?? '') ? 'Boum !' : 'Fin de manche', msg.text ?? '', `Tu as refilé le pétard ${mine} fois`, 'good petard');
       } else banner('Fin de manche', msg.text ?? '', '', 'good');
       break;
     case 'gameover':
@@ -712,6 +727,18 @@ function onSnap(msg: Extract<ServerMsg, { t: 'snap' }>) {
       huntKey = key;
       huntGot = new Map();
       for (let k = 0; k + 1 < msg.H.length; k += 2) huntGot.set(msg.H[k] | 0, Math.max(0, msg.H[k + 1] | 0));
+      renderHud();
+    }
+  }
+  if (Array.isArray(msg.Q) && msg.Q.length >= 3) {
+    // « Le pétard » (iteration 61): who carries it, the fuse, and the handovers for the scoreboard
+    petardFuse = Math.max(0, Number(msg.Q[1]) || 0); petardLen = Math.max(1, Number(msg.Q[2]) || 1); petardAt = performance.now();
+    const key = msg.Q.filter((_, i) => i !== 1 && i !== 2).join(',');
+    if (key !== petardKey) {
+      petardKey = key;
+      petardHolder = msg.Q[0] | 0;
+      petardPasses = new Map();
+      for (let k = 3; k + 1 < msg.Q.length; k += 2) petardPasses.set(msg.Q[k] | 0, Math.max(0, msg.Q[k + 1] | 0));
       renderHud();
     }
   }
@@ -789,7 +816,7 @@ function predictStep(x: number, y: number, body: number, vx: number, vy: number,
   const snap = s ?? snaps[snaps.length - 1];
   const fl = snap?.T.get(myTankId)?.[5] ?? 0;
   const turbo = fl & BONUS_INFO.turbo.flag;
-  const speed = mySpec.speed * (turbo ? TURBO_MULT : 1) * (belts.length ? floorSpeed(belts, x, y) : 1); // sand slows us down, as on the server (iteration 36)
+  const speed = mySpec.speed * (turbo ? TURBO_MULT : 1) * (petardHolder && petardHolder === myTankId && currentMode === 'petard' ? PETARD_SPEED : 1) * (belts.length ? floorSpeed(belts, x, y) : 1); // sand slows us down, as on the server (iteration 36)
   if (fl & FLAG_FROZEN) { // « Gel » (iteration 29): stuck in the ice cube, only a belt moves it, as on the server
     if (belts.length) [x, y] = beltStep(tiles, belts, x, y, TANK_R, DT);
     return [x, y, body, 0, 0];
@@ -1040,6 +1067,13 @@ function onlineFrame(dt: number) {
     const left = Math.max(0, Math.ceil(phase === 'playing' ? ctfLeft - (performance.now() - ctfLeftAt) / 1000 : ctfLeft));
     $('#hud-enemies').textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     $('#hud-enemies').classList.toggle('hurry', left <= (currentMode === 'caisses' ? HUNT_HURRY : currentMode === 'couronne' ? CROWN_HURRY : currentMode === 'ballon' ? BALL_HURRY : 30) && phase === 'playing');
+  } else if (currentMode === 'petard') {
+    // « Le pétard » (iteration 61): whose back it burns on, and the last seconds of the fuse
+    const left = petardHolder ? Math.max(0, petardFuse / 10 - (phase === 'playing' ? (performance.now() - petardAt) / 1000 : 0)) : 0;
+    const who = petardHolder === myTankId ? 'sur toi !' : petardHolder ? `chez ${infos.get(petardHolder)?.name ?? '?'}` : '…';
+    const txt = `${who}${petardHolder && left <= PETARD_WARN ? ` · ${Math.ceil(left)}` : ''}`;
+    if (txt !== petardHudTxt) { petardHudTxt = txt; $('#hud-enemies').innerHTML = `${icon('petard')} ${escapeHtml(txt)}`; }
+    $('#hud-enemies').classList.toggle('hurry', !!petardHolder && left <= PETARD_WARN && phase === 'playing');
   } else if (!coopLike(currentMode)) {
     plainEnemies($('#hud-enemies'), '');
     $('#hud-enemies').classList.remove('hurry');
@@ -1075,6 +1109,7 @@ function onlineFrame(dt: number) {
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = ctfBases ? a.F.map((f) => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
+  if (currentMode === 'petard') renderer.syncPetard(petardHolder, petardHolder ? Math.max(0, petardFuse / 10 - (phase === 'playing' ? (performance.now() - petardAt) / 1000 : 0)) : 0, petardLen / 10);
   if (crownHome && a.C) renderer.syncCrown({ x: a.C[0], y: a.C[1], holder: a.C[2], state: a.C[3], left: a.C[4] / 10 });
   if (ballOn && a.O) {
     // « Le ballon » (iteration 55): it rolls between two snapshots like the tanks do
@@ -1355,6 +1390,49 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (attract) renderAttractCrown();
       break;
     }
+    case 'petard': {
+      // « Le pétard » (iteration 61): [x, y, tankId, what, fromId] 0 lit, 1-2-4 handed over, 3 fuse nearly out, 5 dazed, 6 bang
+      const [, x, y, who, what, from] = e;
+      const me = online && who === myTankId;
+      const tankOf = (id: number) => (online ? infos.get(id) : attract?.tankById(id));
+      const name = tankOf(who)?.name ?? '';
+      const fromName = tankOf(from)?.name ?? '';
+      const demoOn = !!attractVs?.petard && document.body.classList.contains('demo') && screen === 'game';
+      if (what === 0) {
+        renderer.bonusBurst(x, y, PETARD_COLOR, true);
+        floater(x, y - 0.5, me ? 'Le pétard est sur toi !' : name ? `Pétard allumé chez ${name} !` : 'Pétard allumé !', PETARD_COLOR);
+        if (audible) sfx.petard(0, me);
+        if (online && audible && me) toast('Le pétard est allumé sur ton dos ! Fonce dans un tank ou touche-le d’un obus pour le lui refiler.', 3200);
+        if (me) controls.rumble(0.3, 120);
+      } else if (what === 1 || what === 2 || what === 4) {
+        renderer.bonusBurst(x, y, PETARD_COLOR);
+        const how = what === 4 ? 'En bande !' : what === 2 ? 'Passe !' : 'Refilé !';
+        floater(x, y - 0.5, me ? `${how} À toi le pétard !` : online && from === myTankId ? `${how} Bon débarras !` : how, what === 4 ? 0xffd45a : PETARD_COLOR);
+        if (audible) sfx.petard(what, me || (online && from === myTankId));
+        if (me) controls.rumble(0.5, 140);
+        if (demoOn && what === 4 && fromName) toast(`${fromName} le refile en bande à ${name || 'un rival'} !`, 2000);
+      } else if (what === 3) {
+        floater(x, y - 0.6, 'Tsss…', 0xff6a4a);
+        if (audible) sfx.petard(3, me);
+        if (online && audible && me) toast('La mèche est presque consumée : refile-le, vite !', 2200);
+      } else if (what === 5) {
+        renderer.starPuff(x, y, 0.5);
+        floater(x, y - 0.4, me ? 'Sonné !' : 'Bing !', 0xffe27a);
+        if (audible) sfx.petard(5, me);
+        if (me) controls.rumble(0.4, 160);
+      } else if (what === 6) {
+        renderer.explosion(x, y, true, PETARD_COLOR);
+        renderer.bonusBurst(x, y, 0xffd45a, true);
+        floater(x, y - 0.7, 'BOUM !', PETARD_COLOR);
+        if (audible) sfx.petard(6, me);
+        if (online && audible && me) toast(fromName ? `Le pétard t’éclate au nez ! Merci qui ? Merci ${fromName}…` : 'Le pétard t’éclate au nez ! Tu es hors de la manche.', 3000);
+        else if ((online && audible) || demoOn) toast(name ? `${name} saute avec le pétard !` : 'Boum !', 2000);
+        if (me) controls.rumble(1, 300);
+      }
+      if (attract && attractVs?.petard) renderVsBoard();
+      else renderHud();
+      break;
+    }
     case 'bonus': {
       const kind = BONUS_KINDS[e[3]];
       if (!kind) break;
@@ -1383,6 +1461,7 @@ function handleEvent(e: GameEvent, audible: boolean) {
       if (renderer.tankKind(e[3]) !== 'player' && online) toast('Brrr ! Un ennemi a pris le gel : te voilà pris dans la glace.', 3000);
       break;
     case 'thaw':
+      if (renderer.petardOn) break; // « Le pétard »: the dazed tank comes to its senses (no ice cube to break)
       renderer.thaw(e[1], e[2]);
       if (audible) sfx.thaw();
       break;
@@ -1978,6 +2057,13 @@ function renderHud() {
     sb.innerHTML = crownRows([...infos.values()].filter((t) => t.kind === 'player').map((t) => ({
       id: t.id, name: t.name ?? '?', color: t.color, bot: isRivalId(t.pid ?? ''), tenths: crownHeld.get(t.id) ?? 0, rounds: scores[t.pid ?? ''] ?? 0, mine: t.id === myTankId, king: t.id === crownHolder,
     })));
+  } else if (currentMode === 'petard') {
+    // « Le pétard » (iteration 61): who carries it, who is out, handovers this round, then rounds won
+    const snap = snaps[snaps.length - 1];
+    sb.innerHTML = petardRows([...infos.values()].filter((t) => t.kind === 'player').map((t) => ({
+      name: t.name ?? '?', color: t.color, bot: isRivalId(t.pid ?? ''), passes: petardPasses.get(t.id) ?? 0, rounds: scores[t.pid ?? ''] ?? 0, mine: t.id === myTankId,
+      hot: t.id === petardHolder, out: !!snap && !((snap.T.get(t.id)?.[5] ?? 1) & 1),
+    })));
   } else if (currentMode === 'versus') {
     sb.innerHTML = lobbyPlayers
       .filter((p) => scores[p.id] !== undefined)
@@ -1987,6 +2073,13 @@ function renderHud() {
   } else sb.innerHTML = '';
   const isHost = lobbyPlayers.find((p) => p.id === pid)?.host;
   $('#menu-lobby').hidden = !isHost;
+}
+
+/** « Le pétard » (iteration 61): the scoreboard rows, most rounds first; the carrier's row burns, the blown-up ones are struck out. */
+function petardRows(rows: { name: string; color: number; bot: boolean; passes: number; rounds: number; mine: boolean; hot: boolean; out: boolean }[]) {
+  return rows.sort((a, b) => b.rounds - a.rounds || Number(a.out) - Number(b.out))
+    .map((r) => `<div class="sb-row petard${r.mine ? ' mine' : ''}${r.hot ? ' hot' : ''}${r.out ? ' out' : ''}"><i style="--c:${hex(r.color)}"></i><span>${r.hot ? `${icon('petard')} ` : ''}${escapeHtml(r.name)}${r.bot ? ' <em>IA</em>' : ''}</span><em class="passes" title="Pétards refilés cette manche">⇄ ${r.passes}</em><b title="Manches gagnées">${r.rounds}</b></div>`)
+    .join('');
 }
 
 /** « La couronne » (iteration 50): the scoreboard rows, longest reign first; the crowned tank's row glows. */
@@ -2060,6 +2153,8 @@ function renderLobby() {
     ? `La chasse aux caisses : chacun pour soi, ${HUNT_ROUND} secondes par manche, et les caisses pleuvent. Chaque caisse ramassée vaut un point (et son bonus). Un tank touché lâche une de ses caisses et revient dans son coin ${HUNT_RESPAWN_TXT} secondes plus tard. À ${HUNT_GOLD_AT} secondes de la fin tombe la caisse dorée : ${HUNT_GOLD} points d’un coup ! Le plus gros tas gagne la manche, premier à ${HUNT_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
     : lobbyMode === 'ballon'
     ? `Le ballon : les Bleus contre les Rouges (les tanks de la liste sont répartis un sur deux), un gros ballon de plage au milieu de la table et un but de chaque côté. Chaque obus qui frappe le ballon le fait rouler, chaque tank qui fonce dedans le pousse, et le souffle d’une mine l’envoie valser. Un but gagne la manche, et la première équipe à ${BALL_TARGET} buts remporte le match. Un tank touché revient sur son terrain ${BALL_RESPAWN_TXT} secondes plus tard. Gare aux ricochets : le tir ami compte ! Pas assez de joueurs ? Ajoute des rivaux.`
+    : lobbyMode === 'petard'
+    ? `Le pétard : chacun pour soi, et un pétard allumé sur le dos de l’un des tanks. Ici, les obus ne détruisent personne : ils sonnent une seconde. Pour te débarrasser du pétard, fonce dans un autre tank ou touche-le d’un obus (en bande, c’est plus beau). Quand la mèche est consumée : boum, son porteur sort de la manche et un nouveau pétard s’allume. Le dernier debout gagne. Premier à ${PETARD_TARGET} manches. Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.`
     : lobbyMode === 'couronne'
     ? `La couronne : chacun pour soi, et une seule couronne posée sur son coussin au milieu de la table. Roule dessus pour la mettre : chaque seconde passée couronné compte, et ${CROWN_HOLD} secondes en tout font gagner la manche. Touché ? Elle tombe là où tu es, et le premier qui passe la ramasse ; laissée à terre ${CROWN_RETURN} secondes, elle rentre sur son coussin. Un tank touché revient dans son coin ${CROWN_RESPAWN_TXT} secondes plus tard. Au bout de ${Math.floor(CROWN_ROUND / 60)} min ${CROWN_ROUND % 60}, le plus long règne l’emporte. Premier à ${CROWN_TARGET} manches. Ajoute des rivaux pilotés par l’ordinateur si vous êtes peu.`
     : 'Chacun pour soi : le dernier tank debout marque un point. Premier à 5 manches. Les caisses bonus tombent plus souvent : fonce les chercher ! Seul ou à deux ? Ajoute des rivaux pilotés par l’ordinateur.';
@@ -2317,24 +2412,26 @@ function showResults(r: Results) {
     : r.drapeau ? (r.drapeau.winner ? `Les ${TEAM_NAMES[r.drapeau.winner - 1]} remportent les drapeaux ! (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})` : `Égalité aux drapeaux (${r.drapeau.teams[0]} à ${r.drapeau.teams[1]})`)
     : r.mode === 'caisses' ? `${r.players[0]?.name ?? ''} remporte la chasse aux caisses !`
     : r.mode === 'couronne' ? `${r.players[0]?.name ?? ''} règne sur la table !`
+    : r.mode === 'petard' ? `${r.players[0]?.name ?? ''} n’a jamais sauté !`
     : r.mode === 'coop' ? `Partie terminée · Mission ${r.mission}` : `${r.players[0]?.name ?? ''} remporte le versus !`;
   const ctf = !!r.drapeau;
   const hunt = r.mode === 'caisses';
   const reign = r.mode === 'couronne';
+  const hot = r.mode === 'petard'; // « Le pétard » (iteration 61): firecrackers handed over
   const coop = coopLike(r.mode);
   const ff = coop && r.players.some((p) => p.ff !== undefined);
   const gal = r.players.some((p) => p.g !== undefined);
   $('#results-title').textContent = title;
   $('#results-body').innerHTML = `
     <table>
-      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? (r.mode === 'ballon' ? '<th title="Buts marqués">Buts</th>' : '<th title="Drapeaux rapportés à la base">Drapeaux</th>') : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}${reign ? '<th title="Secondes passées couronné pendant la partie">Règne</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
+      <thead><tr><th>Joueur</th>${coop ? kinds.map((k) => `<th title="${specOf(k).label}"><i class="dot" style="--c:${hex(enemyColor(k))}"></i></th>`).join('') : '<th>Kills</th>'}${ff ? '<th title="Coéquipiers détruits">Tirs amis</th>' : ''}${gal ? '<th title="Galons gagnés pendant la campagne">★</th>' : ''}${ctf ? (r.mode === 'ballon' ? '<th title="Buts marqués">Buts</th>' : '<th title="Drapeaux rapportés à la base">Drapeaux</th>') : ''}${hunt ? '<th title="Caisses ramassées pendant la partie">Caisses</th>' : ''}${reign ? '<th title="Secondes passées couronné pendant la partie">Règne</th>' : ''}${hot ? '<th title="Pétards refilés pendant la partie">Passes</th>' : ''}<th>Morts</th><th>${coop ? 'Total' : 'Manches'}</th></tr></thead>
       <tbody>${r.players
         .map((p) => {
           const kills = Object.values(p.kills).reduce((s, v) => s + (v ?? 0), 0);
           const team = ctf && (p.team === 1 || p.team === 2) ? ` <em class="ia" style="color:${hex(TEAM_COLORS[p.team - 1])}">${TEAM_NAMES[p.team - 1]}</em>` : '';
           return `<tr><td><i class="dot" style="--c:${hex(p.color)}"></i>${escapeHtml(p.name)}${team}${p.bot !== undefined ? ` <em class="ia">IA ${RIVAL_LEVELS[rivalLevel(p.bot)].label.toLowerCase()}</em>` : ''}</td>${
             coop ? kinds.map((k) => `<td>${p.kills[k] ?? '·'}</td>`).join('') : `<td>${kills}</td>`
-          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}${hunt ? `<td>${p.crates || '·'}</td>` : ''}${reign ? `<td>${p.crown ? `${p.crown} s` : '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
+          }${ff ? `<td>${p.ff || '·'}</td>` : ''}${gal ? `<td>${p.g ?? '·'}</td>` : ''}${ctf ? `<td>${p.caps || '·'}</td>` : ''}${hunt ? `<td>${p.crates || '·'}</td>` : ''}${reign ? `<td>${p.crown ? `${p.crown} s` : '·'}</td>` : ''}${hot ? `<td>${p.passes || '·'}</td>` : ''}<td>${p.deaths}</td><td><b>${p.score}</b></td></tr>`;
         })
         .join('')}</tbody>
     </table>${coop && runStars.missions ? starsResultHtml(r.mode === 'coop') : ''}${r.daily ? dailyResultHtml(r.daily) : ''}${r.rush ? rushResultHtml(r.rush) : ''}${r.taupe ? taupeResultHtml(r.taupe, r.players) : ''}`;
@@ -2358,7 +2455,7 @@ let attractName = '';
 let attractPrev = new Map<number, { x: number; y: number; body: number; turret: number }>();
 
 /** A versus of AI rivals (iteration 17): the videos, and now and then the home-screen background. */
-interface AttractVersus { round: number; levels?: number[]; scores?: number[]; chain?: boolean }
+interface AttractVersus { round: number; levels?: number[]; scores?: number[]; chain?: boolean; petard?: boolean; fuse?: number } // petard: « Le pétard » (iteration 61), its rules on its arenas; fuse: seconds of the first fuse (videos)
 /** « Drapeaux » (iteration 24): two teams of AI rivals, for the videos and the home-screen background. */
 interface AttractFlags { round: number; levels?: number[]; teams?: [number, number]; chain?: boolean; carry?: boolean } // carry: the round opens with a Bleu already holding the red flag, by the Rouges' base (videos)
 /** « La chasse aux caisses » (iteration 37): four AI rivals racing for the crates, for the videos and the home-screen background. */
@@ -2387,6 +2484,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
   reelWanted = -1;
   film.clear();
   clearBubbles();
+  renderer.setPetard(false);
   attractOpts = opts;
   // now and then, the home-screen background is a versus of AI rivals (iteration 17)
   if (!opts.versus && !opts.drapeau && !opts.caisses && !opts.couronne && !opts.ballon && !opts.heroes && opts.mission === undefined && !opts.atelier && !opts.daily && !opts.taupe && !opts.rush) {
@@ -2395,6 +2493,7 @@ function startAttract(opts: AttractOpts = attractOpts) {
     if (r < 0.2) { startAttractFlags({ round: Math.floor(Math.random() * 12), levels: [1, 2, 2, 1] }); return; } // and, from iteration 24, a flag round
     if (r < 0.3) { startAttractHunt({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 37, a crate hunt
     if (r < 0.4) { startAttractCrown({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2] }); return; } // and, from iteration 50, a fight over the crown
+    if (r < 0.58 && r >= 0.5) { startAttractVersus({ round: Math.floor(Math.random() * 12), levels: [1, 2, 1, 2], petard: true }); return; } // and, from iteration 61, a firecracker
     if (r < 0.5) { startAttractBall({ round: Math.floor(Math.random() * 12), levels: [2, 2, 1, 2] }); return; } // and, from iteration 55, a match
   }
   if (opts.ballon) { startAttractBall(opts.ballon, opts.arms); return; }
@@ -2477,13 +2576,22 @@ function stopAttract() {
 
 const VS_ARMS: Weapon[] = ['ricochet', 'canon', 'fusee', 'sapeur'];
 let attractVs: (AttractVersus & { scores: number[]; names: string[] }) | undefined;
+/** « Le pétard » in the videos: the fuse the first firecracker gets once it is lit (0: a normal one). */
+let petardFirstFuse = 0;
 
 /** Four rivals, one team each, on a versus arena: the last one standing scores (and, in the videos, the next round follows). */
 function startAttractVersus(vs: AttractVersus, arms?: Weapon[]) {
-  const lvl = versusArena(vs.round);
+  const lvl = vs.petard ? petardArena(vs.round) : versusArena(vs.round);
   const g = new Game(lvl.tiles, lvl.belts);
   g.bonusOn = true;
   g.bonusNext = 3; g.bonusEvery = [6, 9];
+  if (vs.petard) {
+    // « Le pétard » (iteration 61): the same rules as online
+    g.petard = newPetard();
+    g.bonusKinds = ['shield', 'bounce', 'fan', 'heavy'];
+    if (vs.fuse) { g.petard.wait = 0.8; petardFirstFuse = vs.fuse; } else petardFirstFuse = 0;
+  }
+  renderer.setPetard(!!vs.petard);
   g.night = !!lvl.night;
   g.storm = !!lvl.storm;
   g.wind = lvl.wind;
@@ -2805,6 +2913,16 @@ function renderVsBoard() {
   if (!vs || !document.body.classList.contains('demo') || screen !== 'game') return;
   document.body.classList.add('vs-demo');
   $('#hud').hidden = false;
+  const g = attract;
+  if (vs.petard && g?.petard) {
+    const p = g.petard;
+    const holder = p.holder ? g.tankById(p.holder) : undefined;
+    $('#hud-enemies').innerHTML = `${icon('petard')} ${escapeHtml(holder ? `chez ${holder.name ?? '?'}` : `Le pétard · manche ${vs.round + 1}`)}`;
+    $('#scoreboard').innerHTML = petardRows(g.tanks.filter((t) => t.kind === 'player').map((t, i) => ({
+      name: t.name ?? '', color: t.color, bot: true, passes: p.passes.get(t.id) ?? 0, rounds: vs.scores[i] ?? 0, mine: false, hot: t.id === p.holder, out: !t.alive,
+    })));
+    return;
+  }
   $('#hud-enemies').textContent = `Manche ${vs.round + 1} · premier à 5`;
   $('#scoreboard').innerHTML = vs.names
     .map((n, i) => ({ n, i, s: vs.scores[i] }))
@@ -2821,7 +2939,8 @@ function endAttractVersus(g: Game) {
   if (w >= 0) { vs.scores[w]++; g.cheer(alive[0].team); }
   renderVsBoard();
   if (document.body.classList.contains('demo') && screen === 'game') {
-    banner(`Versus · manche ${vs.round + 1}`, w >= 0 ? `${vs.names[w]} gagne la manche !` : 'Égalité !', w >= 0 ? `${vs.scores[w]} point${vs.scores[w] > 1 ? 's' : ''}` : '', 'intro');
+    if (vs.petard) banner(`Le pétard · manche ${vs.round + 1}`, w >= 0 ? `${vs.names[w]} est le dernier debout !` : 'Égalité !', w >= 0 ? `${vs.scores[w]} manche${vs.scores[w] > 1 ? 's' : ''} gagnée${vs.scores[w] > 1 ? 's' : ''}` : '', 'intro petard');
+    else banner(`Versus · manche ${vs.round + 1}`, w >= 0 ? `${vs.names[w]} gagne la manche !` : 'Égalité !', w >= 0 ? `${vs.scores[w]} point${vs.scores[w] > 1 ? 's' : ''}` : '', 'intro');
     setTimeout(hideBanner, 2200);
   }
 }
@@ -2948,6 +3067,10 @@ function attractFrame(dt: number) {
   renderer.syncBonuses(bonuses);
   const flags: RFlag[] | undefined = g.flags ? g.netFlags()!.map((f): RFlag => ({ team: f[0], x: f[1], y: f[2], carrier: f[3], state: f[4], left: f[5] })) : undefined;
   if (flags) renderer.syncFlags(flags);
+  if (g.petard) {
+    if (petardFirstFuse && g.petard.holder) { g.petard.fuse = g.petard.len = petardFirstFuse; petardFirstFuse = 0; } // the videos: a shorter first fuse
+    renderer.syncPetard(g.petard.holder, g.petard.fuse, g.petard.len);
+  }
   if (g.crown) renderer.syncCrown({ x: g.crown.x, y: g.crown.y, holder: g.crown.holder, state: g.crown.state, left: CROWN_RETURN - g.crown.dropT });
   if (g.ball) renderer.syncBall(lerp(attractBallPrev[0], g.ball.x, u), lerp(attractBallPrev[1], g.ball.y, u), dt);
   const lobs: RLob[] = g.lobs.map((l) => ({ id: l.id, x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1, t: l.t + u * DT, dur: l.dur }));
@@ -2993,7 +3116,7 @@ function attractFrame(dt: number) {
     }
   } else if (attractOpts.versus) {
     const alive = g.tanks.filter((t) => t.alive && t.kind === 'player').length;
-    if (!attractEnd && (alive <= 1 || g.tick > TICK_RATE * 60)) { attractEnd = g.tick + TICK_RATE * 2.5; endAttractVersus(g); }
+    if (!attractEnd && (alive <= 1 || g.tick > TICK_RATE * (attractVs?.petard ? 90 : 60))) { attractEnd = g.tick + TICK_RATE * 2.5; endAttractVersus(g); }
     if (attractEnd && g.tick > attractEnd) {
       const vs = attractVs!;
       attract = undefined;
@@ -3460,6 +3583,7 @@ const MODES: [string, string, string, string][] = [
   ['flag', 'Drapeaux', '2 à 4', `Les Bleus contre les Rouges : prends le drapeau d’en face et rapporte-le chez toi. Première équipe à ${CTF_TARGET} manches.`],
   ['ball', 'Le ballon', '2 à 4', `Les Bleus contre les Rouges, un ballon de plage et deux buts : pousse-le à coups d’obus, de chenilles ou de mines. Première équipe à ${BALL_TARGET} buts.`],
   ['crate', 'La chasse aux caisses', '2 à 4', `Les caisses pleuvent, chacune vaut un point, et la caisse dorée en vaut ${HUNT_GOLD}. Premier à ${HUNT_TARGET} manches.`],
+  ['petard', 'Le pétard', '2 à 4', `Un pétard allumé à refiler : fonce dans un tank ou touche-le d’un obus. Les obus ne font que sonner. Quand la mèche est consumée, son porteur saute ! Le dernier debout gagne, premier à ${PETARD_TARGET} manches.`],
   ['crown', 'La couronne', '2 à 4', `Une seule couronne au milieu de la table : mets-la et garde-la ${CROWN_HOLD} secondes. Touché ? Elle tombe de ta tête. Premier à ${CROWN_TARGET} manches.`],
   ['mask', 'La taupe', `${TAUPE_MIN_PLAYERS} ou 4`, 'Une campagne coop… avec un traître tiré au sort en secret. Après chaque mission, le conseil vote pour le démasquer.'],
   ['hammer', 'L’atelier', '1 à 4', 'Dessine ta mission case par case (murs, liège, tunnels, portails, ennemis, météo), puis jouez-la ensemble.'],
@@ -3858,7 +3982,7 @@ function debugMoved() {
 }
 (window as unknown as { __debug: unknown }).__debug = {
   get state() {
-    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, crown: currentMode === 'couronne' || attractCrown ? { home: !!crownHome || !!attract?.crown, holder: attract?.crown ? attract.crown.holder : crownHolder, state: attract?.crown ? attract.crown.state : snaps[snaps.length - 1]?.C?.[3], held: Object.fromEntries(attract?.crown ? [...attract.crown.held].map(([k, v]) => [k, Math.floor(v * 10)]) : crownHeld), board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, ball: currentMode === 'ballon' || attractBall ? { on: ballOn || !!attract?.ball, team: myTeam, teams: attractBall ? attractBall.teams : teamScores, pos: attract?.ball ? [attract.ball.x, attract.ball.y] : snaps[snaps.length - 1]?.O?.slice(0, 2), board: $('#scoreboard').children.length } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
+    return { screen, phase, online, replays, replaying: !!reel, snaps: snaps.length, latestK, myTankId, room: roomCode, iteration: META.iteration, attract: attractState, mole: myRole, lives, mission: currentMission, council, belts: belts.filter(Boolean).length, ice: belts.filter((b) => b === ICE).length, slide: Math.hypot(pred.vx, pred.vy), pred: { x: pred.x + offset.x, y: pred.y + offset.y }, tanks: infos.size, moved: debugMoved(), galons: prog[pid], tree: treeOpen, rallies, bubbles: bubblesShown, emoteBtn: !$('#hud-emote').hidden, rallyBtn: !$('#hud-rally').hidden, reticle: reticleFrame || $('#reticle').classList.contains('on') ? { out: shellsOut(), max: mySpec.maxBullets, pips: document.querySelectorAll('#reticle .shells rect.full').length, mines: document.querySelectorAll('#reticle .mines circle.full').length } : undefined, ctf: currentMode === 'drapeau' ? { bases: !!ctfBases, team: myTeam, flags: snaps[snaps.length - 1]?.F.length ?? 0, teams: teamScores, board: $('#scoreboard').children.length } : undefined, crown: currentMode === 'couronne' || attractCrown ? { home: !!crownHome || !!attract?.crown, holder: attract?.crown ? attract.crown.holder : crownHolder, state: attract?.crown ? attract.crown.state : snaps[snaps.length - 1]?.C?.[3], held: Object.fromEntries(attract?.crown ? [...attract.crown.held].map(([k, v]) => [k, Math.floor(v * 10)]) : crownHeld), board: $('#scoreboard').children.length } : undefined, hunt: currentMode === 'caisses' || attractHunt ? { got: Object.fromEntries(attractHunt && attract?.hunt ? attract.hunt.got : huntGot), board: $('#scoreboard').children.length, gold: (attract?.bonuses ?? []).some((c) => c.gold) || (snaps[snaps.length - 1]?.P ?? []).some((c) => c[5] === 1) } : undefined, ball: currentMode === 'ballon' || attractBall ? { on: ballOn || !!attract?.ball, team: myTeam, teams: attractBall ? attractBall.teams : teamScores, pos: attract?.ball ? [attract.ball.x, attract.ball.y] : snaps[snaps.length - 1]?.O?.slice(0, 2), board: $('#scoreboard').children.length } : undefined, petard: currentMode === 'petard' || (attract && attractVs?.petard) ? { on: renderer.petardOn, holder: attract?.petard ? attract.petard.holder : petardHolder, fuse: attract?.petard ? attract.petard.fuse : petardFuse / 10, passes: Object.fromEntries(attract?.petard ? attract.petard.passes : petardPasses), bangs: attract?.petard?.bangs, board: $('#scoreboard').children.length, hud: $('#hud-enemies').innerText } : undefined, rush: currentMode === 'rush' && rushState ? { stage: rushState.stage, bosses: rushState.bosses, clock: !$('#hud-clock').hidden, bar: !$('#boss-bar').hidden } : undefined };
   },
 };
 if (params.has('demo')) {
@@ -3997,13 +4121,36 @@ if (params.has('demo')) {
       }
       return g.rally(heroes[0]);
     },
+    /**
+     * « Le pétard » (iteration 61): four AI rivals handing a lit firecracker round on the arena of that round. `fuse`:
+     * seconds of the first fuse (a short one for the videos). Returns the rivals' names.
+     */
+    petard(round = 0, levels?: number[], arms?: Weapon[], fuse = 0, chain = false) {
+      show('game');
+      attract = undefined;
+      startAttract({ versus: { round, levels, chain, petard: true, fuse }, arms: arms?.filter(isWeapon) });
+      return attractVs?.names;
+    },
+    /** « Le pétard »: the carrier hands it over at once to the tank nearest to it, by a ricochet if `bank` (for the videos). Returns 1 when done. */
+    pass(bank = true) {
+      const g = attract;
+      const p = g?.petard;
+      if (!g || !p || !p.holder) return 0;
+      const from = g.tankById(p.holder)!;
+      const to = g.tanks.filter((o) => o.alive && o.kind === 'player' && o !== from).sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y))[0];
+      if (!to) return 0;
+      p.holder = to.id; p.last = from.id; p.cool = 0.9;
+      p.passes.set(from.id, (p.passes.get(from.id) ?? 0) + 1);
+      g.events.push(['petard', to.x, to.y, to.id, bank ? 4 : 1, from.id]);
+      return 1;
+    },
     /** Show a versus lobby (or, iteration 20, a coop one) with a player and AI tanks for a moment, the host adding them one by one (for the videos). */
     rivals(ms = 6000, mode: Mode = 'versus') {
       const keep = { players: lobbyPlayers, mode: lobbyMode, room: roomCode, phase };
       const me: PlayerInfo = { id: pid, name: myName, color: PLAYER_COLORS[0], host: true, connected: true, score: 0, weapon: myWeapon };
       const bots: PlayerInfo[] = [0, 1, 2].map((i) => ({ id: `ia:${i + 1}`, name: RIVAL_NAMES[i * 3], color: PLAYER_COLORS[i + 1], host: false, connected: true, score: 0, weapon: VS_ARMS[i], bot: i }));
       lobbyPlayers = [me];
-      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' || mode === 'couronne' || mode === 'ballon' ? mode : 'versus';
+      lobbyMode = mode === 'coop' || mode === 'drapeau' || mode === 'caisses' || mode === 'couronne' || mode === 'ballon' || mode === 'petard' ? mode : 'versus';
       roomCode = 'SOLO7';
       phase = 'lobby';
       renderLobby();
@@ -4201,6 +4348,7 @@ if (params.has('demo')) {
         const page = $('#manual-page');
         // the bestiary jumps to the newest card (« Le Tortillard », iteration 49), the terrain page rolls down to the weather
         if (t === 'bestiaire') later(() => page.querySelector(`[data-k="${focusKind}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 900);
+        else if (t === 'modes') later(() => [...page.querySelectorAll('.modes li')].find((li) => /pétard/.test(li.textContent ?? ''))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 900); // « Le pétard » (iteration 61)
         else if (t === 'terrain') {
           // the newest cell (« Les ponts-levis », iteration 48) comes into view; without one, the page rolls down to the weather
           const fresh = page.querySelector('li.new');

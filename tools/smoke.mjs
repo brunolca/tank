@@ -208,6 +208,30 @@ try {
   if (ks.moved < 0.3) fail(`couronne : les rivaux ne bougent pas (${ks.moved})`);
   await king.context().close();
 
+  // « Le pétard » (iteration 61): alone against two rivals, a firecracker lit on somebody's back, shells that only daze
+  const pet = await page('pétard', server.url + '/');
+  await sleep(1500);
+  await pet.click('#btn-create');
+  await pet.waitForURL(/\/r\/[A-Z0-9]+/, { timeout: 20000 });
+  await sleep(1000);
+  await pet.click('#mode-select button[data-mode="petard"]');
+  await pet.waitForSelector('#rival-select:not([hidden])', { timeout: 10000 });
+  await pet.click('#btn-rival');
+  await sleep(500);
+  await pet.click('#btn-rival');
+  await sleep(1000);
+  await pet.click('#btn-start');
+  await sleep(9000); // intro, then the first firecracker is lit
+  let ps = await state(pet);
+  for (let i = 0; i < 16 && ps.petard && !ps.petard.holder && !ps.petard.bangs; i++) { await sleep(500); ps = await state(pet); }
+  if (!ps.online || ps.myTankId < 0) fail(`pétard : pas en partie (écran ${ps.screen}, phase ${ps.phase})`);
+  if (ps.tanks !== 3) fail(`pétard : ${ps.tanks} tank(s) au lieu de 3`);
+  if (!ps.petard?.on) fail(`pétard : le mode n’est pas affiché (${JSON.stringify(ps.petard)})`);
+  if (ps.petard && !ps.petard.holder && ps.phase === 'playing') fail('pétard : aucun pétard allumé après l’intro');
+  if (ps.petard?.board !== 3) fail('pétard : le tableau ne montre pas les 3 tanks');
+  if (ps.moved < 0.3) fail(`pétard : les rivaux ne bougent pas (${ps.moved})`);
+  await pet.context().close();
+
   // « Le ballon » (iteration 55): alone with three rivals, Bleus against Rouges, the ball leaves the kick-off spot
   const foot = await page('ballon', server.url + '/');
   await sleep(1500);
@@ -284,5 +308,5 @@ try {
 }
 
 if (errors.length) { console.error('Test de fumée en échec :\n- ' + errors.join('\n- ')); process.exit(1); }
-console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, couronne, ballon, coop avec un coéquipier, ronde des boss, mode démo).');
+console.log('OK : test de fumée (partie en ligne à 2, arbre des galons, feedback, versus contre les rivaux, drapeaux, chasse aux caisses, couronne, pétard, ballon, coop avec un coéquipier, ronde des boss, mode démo).');
 process.exit(0);

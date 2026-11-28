@@ -1,7 +1,7 @@
 {
-  "iteration": 60,
-  "date": "2026-11-27",
-  "title": "Le Grand Illusionniste",
+  "iteration": 61,
+  "date": "2026-11-28",
+  "title": "Le pétard",
   "journal": [
     {
       "iteration": 1,
@@ -732,6 +732,18 @@
         "Il se bat au théâtre de jour, et au cabaret de nuit une fois sur deux. Quand il tombe, des colombes s’envolent de son chapeau, « Ta-daa ! ».",
         "Un indice pour les yeux perçants : les mirages, ceux de l’Illusionniste comme les siens, portent maintenant leur chapeau de travers.",
         "Le Grand Illusionniste a sa fiche au bestiaire, et sa barre de vie aux couleurs de la magie."
+      ]
+    },
+    {
+      "iteration": 61,
+      "date": "2026-11-28",
+      "title": "Le pétard",
+      "notes": [
+        "Un nouveau mode de 2 à 4 joueurs : « Le pétard ». Un pétard allumé grésille sur le dos de l’un des tanks, et personne ne veut le garder !",
+        "Pour t’en débarrasser, fonce dans un autre tank ou touche-le d’un obus. Une passe en bande, après un ricochet, c’est la classe.",
+        "Ici, les obus ne détruisent personne : ils sonnent une seconde, avec des étoiles qui tournent au-dessus de la tourelle. Sonne le porteur pour lui échapper !",
+        "Quand la mèche est consumée, BOUM : le porteur sort de la manche et un nouveau pétard s’allume. Le dernier debout gagne, premier à 3 manches.",
+        "Le porteur file un peu plus vite que les autres, et sa mèche clignote et siffle dans les dernières secondes. Des rivaux pilotés par l’ordinateur complètent la table."
       ]
     }
   ]

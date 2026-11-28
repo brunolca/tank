@@ -15,6 +15,8 @@ import { BLIZZARD_PERIOD, BLIZZARD_REFILL, SQUALL_FULL, SQUALL_RISE, squallIn, w
 import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { HUNT_CRATES, HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, huntArena, huntLeader, newHunt } from '../src/shared/caisses';
 import { BALL_IDLE, BALL_PITCH_COUNT, BALL_R, BALL_ROUND, GOAL_BOTTOM, GOAL_TOP, KICKOFF, ballArena, goalAt, newBall } from '../src/shared/ballon';
+import { PETARD_COOL, PETARD_DAZE, PETARD_FUSE, PETARD_RELIGHT, newPetard, petardArena } from '../src/shared/petard';
+import { KO_PETARD } from '../src/shared/constants';
 import { CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, crownArena, crownLeader, newCrown } from '../src/shared/couronne';
 import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
@@ -2992,6 +2994,84 @@ console.log('total', Date.now() - t0, 'ms');
   if (reigns < 8 * 15) fail(`les rivaux ne portent presque pas la couronne (${reigns.toFixed(0)} s en 8 manches)`);
   if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
   if (process.exitCode !== 1) console.log(`couronne OK (${decided}/8 manches décidées, ${reigns.toFixed(0)} s de règne, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
+}
+
+// « Le pétard » (iteration 61): shells only daze, the carrier hands it over by bumping or by a shell (not straight
+// back), the fuse goes off on its carrier's back, a new one is lit on a survivor; AI rounds end with one tank standing
+{
+  const fail = (m: string) => { console.error('pétard : ' + m); process.exitCode = 1; };
+  {
+    const g = new Game(new Array(W * H).fill(Tile.Empty));
+    g.petard = newPetard();
+    const a = g.addTank('player', 1, 3.5, 3.5, 0, 'a', 'A');
+    const b = g.addTank('player', 2, 18.5, 13.5, 0, 'b', 'B');
+    const c = g.addTank('player', 3, 18.5, 3.5, 0, 'c', 'C');
+    g.frozen = false;
+    for (let i = 0; i < 30 * PETARD_RELIGHT + 2 && !g.petard.holder; i++) g.step(new Map());
+    if (!g.petard.holder) fail('aucun pétard allumé');
+    const fuse = g.petard.fuse;
+    if (fuse < PETARD_FUSE[0] - 0.1 || fuse > PETARD_FUSE[1]) fail(`mèche de ${fuse} s`);
+    // force it onto a, far from the others
+    g.petard.holder = a.id; g.petard.cool = 0; g.petard.fuse = 5;
+    // a shell does not destroy: it dazes
+    g.killTank(b, c);
+    if (!b.alive || b.chill === undefined) fail('un obus détruit au lieu de sonner');
+    if (g.petard.holder !== a.id) fail('le pétard change de main sur un tir qui n’est pas du porteur');
+    for (let i = 0; i < 30 * (PETARD_DAZE + 0.2); i++) g.step(new Map());
+    if (b.chill !== undefined) fail('le tank sonné ne se réveille pas');
+    // the carrier's shell hands it over
+    g.events = [];
+    g.killTank(c, a, 0, 1);
+    if (g.petard.holder !== c.id || g.petard.last !== a.id) fail('l’obus du porteur ne refile pas le pétard');
+    if (!g.events.some((e) => e[0] === 'petard' && e[4] === 4 && e[5] === a.id)) fail('pas d’événement « en bande »');
+    // bump: c (dazed, cooling down) touches a: nothing until the cool-down is over
+    c.chill = undefined; c.buffs.invuln = 0;
+    c.x = a.x + 0.5; c.y = a.y;
+    g.step(new Map());
+    if (g.petard.holder !== c.id) fail(`le pétard repart aussitôt (${PETARD_COOL} s de répit)`);
+    for (let i = 0; i < 30 * PETARD_COOL + 2; i++) { c.x = a.x + 0.5; c.y = a.y; g.step(new Map()); }
+    if (g.petard.holder !== a.id) fail('le contact ne refile pas le pétard');
+    // the bang: a is out, the neighbour dazed, credited to c, a new one lit later
+    c.x = a.x + 1.2; c.buffs.invuln = 0; c.chill = undefined;
+    g.petard.fuse = 0.02;
+    g.events = [];
+    g.step(new Map());
+    if (a.alive) fail('le pétard n’élimine pas son porteur');
+    if (!g.events.some((e) => e[0] === 'ko' && e[1] === a.id && e[2] === c.id && e[3] === KO_PETARD)) fail('pas de KO « pétard » au nom du dernier passeur');
+    if (c.chill === undefined) fail('le souffle ne sonne pas le voisin');
+    if (!c.alive || !b.alive) fail('le souffle détruit les voisins');
+    for (let i = 0; i < 30 * PETARD_RELIGHT + 2; i++) g.step(new Map());
+    if (!g.petard.holder || g.petard.holder === a.id) fail('pas de nouveau pétard sur un survivant');
+    const net = g.netPetard()!;
+    if (net[0] !== g.petard.holder || net[1] <= 0 || net[2] < PETARD_FUSE[0] * 10 - 1) fail(`vue réseau inattendue ${JSON.stringify(net)}`);
+  }
+  let decided = 0, worst = 0, spent = 0, steps = 0, passes = 0;
+  for (let round = 0; round < 8; round++) {
+    const lvl = petardArena(round);
+    if (lvl.storm || lvl.night || lvl.fog !== undefined || lvl.blizzard) fail(`${lvl.name} : nuit, orage ou brouillard dans l’arène`);
+    const g = new Game(lvl.tiles, lvl.belts);
+    g.setRail(lvl.rail);
+    g.bonusOn = true; g.bonusNext = 5; g.bonusEvery = [8, 12];
+    g.bonusKinds = ['shield', 'bounce', 'fan', 'heavy'];
+    g.wind = lvl.wind;
+    g.petard = newPetard();
+    lvl.spawns.slice(0, 4).forEach(([x, y], i) => makeRival(g, g.addTank('player', i + 1, x, y, 0, `ia:${i + 1}`, `R${i}`), 2));
+    g.frozen = false;
+    while (g.tick < 30 * 120 && g.tanks.filter((t) => t.alive).length > 1) {
+      const t1 = performance.now();
+      g.step(new Map());
+      const dt = performance.now() - t1;
+      spent += dt; steps++; worst = Math.max(worst, dt);
+      g.events = [];
+    }
+    if (g.tanks.filter((t) => t.alive).length === 1) decided++;
+    passes += [...g.petard.passes.values()].reduce((n, v) => n + v, 0);
+  }
+  const per = spent / Math.max(1, steps);
+  if (decided < 7) fail(`trop de manches sans dernier debout (${decided} sur 8)`);
+  if (passes < 8) fail(`les rivaux ne se refilent presque jamais le pétard (${passes} passes en 8 manches)`);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (process.exitCode !== 1) console.log(`pétard OK (${decided}/8 manches décidées, ${passes} passes, ${per.toFixed(3)} ms/tick, pire ${worst.toFixed(2)} ms)`);
 }
 
 // « Les interrupteurs » (iteration 40): a shell on a switch flips every gate, gates never rise onto a tank, the AI copes

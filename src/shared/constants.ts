@@ -659,6 +659,7 @@ export const KO_SNOW = 7; // « La neige » (iteration 42): a mine buried in the
 export const KO_TRAIN = 8; // « Le Tortillard » (iteration 49): run over by the train
 export const KO_GHOST = 9; // « Passe-muraille » (iteration 52): a shell that went through a wall (older tabs read a plain shell)
 export const KO_MIRROR = 10; // « Les miroirs » (iteration 57): a shell turned by a mirror (older tabs read a plain shell)
+export const KO_PETARD = 12; // « Le pétard » (iteration 61): the firecracker went off on its back (older tabs read a plain shell)
 export const KO_QUICK = 11; // « Les sables mouvants » (iteration 59): swallowed by the quicksand (older tabs read a plain shell)
 
 // ------------------------------------------------------------------ bridges (iteration 33)

@@ -623,6 +623,36 @@ export const sfx = {
     }
   },
   /**
+   * « Le pétard » (iteration 61): 0 a match strikes and the wick catches, 1-2-4 the firecracker changes hands (a quick
+   * « hop ! », higher for a ricochet), 3 the wick hisses louder (a few seconds left), 5 a tank is dazed (a little
+   * cartoon « boing » and twittering birds), 6 the bang (a big paper « BANG » and its crackle).
+   */
+  petard(what: number, mine = false) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (what === 0) {
+      noise(t, 0.08, 3000, 1, 0.18, 'highpass');
+      noise(t + 0.06, 0.5, 6000, 0.8, 0.07, 'bandpass', 4000);
+      tone(t + 0.05, 0.12, 300, 520, 0.06, 'triangle');
+    } else if (what === 1 || what === 2 || what === 4) {
+      const f = what === 4 ? 880 : 660;
+      tone(t, 0.07, f, f * 1.5, mine ? 0.14 : 0.08, 'square');
+      tone(t + 0.07, 0.1, f * 1.5, f * 2, mine ? 0.12 : 0.07, 'square');
+      if (what === 4) tone(t + 0.17, 0.16, f * 2, f * 2, 0.06, 'sine');
+    } else if (what === 3) {
+      for (let i = 0; i < 8; i++) noise(t + i * 0.09, 0.07, 7000, 1.4, 0.06 + i * 0.01, 'highpass');
+      tone(t, 0.12, 1760, 1760, mine ? 0.08 : 0.04, 'square');
+      tone(t + 0.25, 0.12, 1760, 1760, mine ? 0.08 : 0.04, 'square');
+    } else if (what === 5) {
+      tone(t, 0.25, 520, 180, 0.12, 'sine');
+      for (let i = 0; i < 4; i++) tone(t + 0.12 + i * 0.08, 0.05, 2400 + (i % 2) * 500, 2600 + (i % 2) * 500, 0.035, 'sine');
+    } else {
+      noise(t, 0.5, 1400, 0.7, 0.5, 'lowpass', 200);
+      tone(t, 0.4, 140, 40, 0.5, 'sine');
+      for (let i = 0; i < 10; i++) noise(t + 0.12 + i * 0.05 + Math.random() * 0.03, 0.03, 5000, 2, 0.08, 'bandpass');
+    }
+  },
+  /**
    * « Le ballon » (iteration 55): 0 a shell kicks the beach ball (a hollow rubber « pok »), 1 a goal (the referee's
    * whistle, then the stands roar; a little fanfare when it is your team's), 2 the ball goes back to the middle (a short
    * whistle), 3 it bounces off a wall (a soft thud, louder the faster it rolls).

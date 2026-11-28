@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { PETARD_WARN } from '../shared/petard';
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, QUICK, QUICK_SINK, QUICK_RISE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
 import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isMirror, isSnowman, mirrorOf, reverseBelts } from '../shared/constants';
@@ -4838,6 +4839,17 @@ export class Renderer {
    */
   private tankIce(v: TankView, t: RTank, dt: number) {
     const frozen = t.alive && !!((t.fx ?? 0) & FLAG_FROZEN) && !v.under && !this.lostInFog(t, v);
+    if (this.petardOn) {
+      // « Le pétard » (iteration 61): no ice cube, a dazed tank sees stars (a little ring of them spins round its turret)
+      if (frozen && v.root.visible) {
+        for (let k = 0; k < 2; k++) {
+          const a = this.time * 9 + t.id + k * Math.PI;
+          this.glow.emit({ x: v.root.position.x + Math.cos(a) * 0.34 * v.scale, y: 0.78 * v.scale + Math.sin(this.time * 6 + k) * 0.04, z: v.root.position.z + Math.sin(a) * 0.34 * v.scale, life: 0.22, s0: 0.11, s1: 0.02, c0: 0xffffff, c1: k ? 0xffd34d : 0xfff3a0 });
+        }
+      }
+      if (v.ice) v.ice.visible = false;
+      return;
+    }
     if (frozen && !v.ice) {
       const g = new THREE.Group();
       const cube = new THREE.Mesh(geo.ice, this.cubeMat);
@@ -5462,6 +5474,7 @@ export class Renderer {
     this.animateBlizzard();
     this.animateFlags(dt);
     this.animateCrown(dt);
+    this.animatePetard(dt);
     if (this.beltMesh) this.beltTex.offset.x = (this.beltTex.offset.x - dt * BELT_SPEED) % 1;
     if (this.night !== this.nightTarget) this.night = Math.min(this.nightTarget, (performance.now() - this.nightStart) / 1200); // real time, even at a low frame rate
     this.applyNight();
@@ -5652,6 +5665,90 @@ export class Renderer {
         v.halo.scale.setScalar(1);
       }
     }
+  }
+
+  // -------------------------------------------------------------- « Le pétard » (iteration 61)
+
+  /** The firecracker round is on (it changes how a dazed tank is drawn: stars instead of an ice cube). */
+  petardOn = false;
+  private petardView?: { group: THREE.Group; stick: THREE.Group; wick: THREE.Mesh; ring: THREE.Mesh; paper: THREE.MeshStandardMaterial; mats: THREE.Material[]; geos: THREE.BufferGeometry[]; pop: number; holder: number };
+
+  /** Build (or take away) the firecracker: a red paper stick with yellow bands, a white cap, a wick, and a red ring on the floor. */
+  setPetard(on: boolean) {
+    this.petardOn = on;
+    const v = this.petardView;
+    if (v) {
+      this.scene.remove(v.group);
+      for (const m of v.mats) m.dispose();
+      for (const g of v.geos) g.dispose();
+      this.petardView = undefined;
+    }
+    if (!on) return;
+    const paper = new THREE.MeshStandardMaterial({ color: 0xe03a2e, roughness: 0.7, emissive: 0x5a0a04, emissiveIntensity: 0.6 });
+    const band = new THREE.MeshStandardMaterial({ color: 0xffc93a, roughness: 0.5, emissive: 0x6a4a00, emissiveIntensity: 0.5 });
+    const cap = new THREE.MeshStandardMaterial({ color: 0xf6efe0, roughness: 0.8 });
+    const cord = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1 });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff4b3a, transparent: true, opacity: 0.5, depthWrite: false });
+    const geos: THREE.BufferGeometry[] = [
+      new THREE.CylinderGeometry(0.09, 0.09, 0.36, 16),
+      new THREE.CylinderGeometry(0.094, 0.094, 0.05, 16),
+      new THREE.CylinderGeometry(0.088, 0.09, 0.03, 16),
+      new THREE.CylinderGeometry(0.012, 0.012, 1, 6).translate(0, 0.5, 0),
+      new THREE.RingGeometry(0.6, 0.76, 40).rotateX(-Math.PI / 2),
+    ];
+    const [bodyG, bandG, capG, wickG, ringG] = geos;
+    const stick = new THREE.Group();
+    stick.rotation.order = 'YXZ'; // spun round the vertical, then tipped over: seen from above, it shows its whole length
+    const body = new THREE.Mesh(bodyG, paper);
+    body.castShadow = true;
+    const b1 = new THREE.Mesh(bandG, band); b1.position.y = 0.1;
+    const b2 = new THREE.Mesh(bandG, band); b2.position.y = -0.1;
+    const top = new THREE.Mesh(capG, cap); top.position.y = 0.19;
+    const wick = new THREE.Mesh(wickG, cord);
+    wick.position.y = 0.2;
+    wick.rotation.z = 0.35;
+    stick.add(body, b1, b2, top, wick);
+    const ring = new THREE.Mesh(ringG, ringMat);
+    ring.position.y = 0.03;
+    const group = new THREE.Group();
+    group.add(stick, ring);
+    group.visible = false;
+    this.scene.add(group);
+    this.petardView = { group, stick, wick, ring, paper, mats: [paper, band, cap, cord, ringMat], geos, pop: 0, holder: 0 };
+  }
+
+  /** Put the firecracker on its carrier's back (as drawn this frame), the wick burnt down to what is left of the fuse. */
+  syncPetard(holder: number, left: number, len: number) {
+    const v = this.petardView;
+    if (!v) return;
+    const t = holder ? this.tanks.get(holder) : undefined;
+    if (!t || !t.root.visible) { v.group.visible = false; v.holder = 0; return; }
+    if (holder !== v.holder) { v.pop = 1; v.holder = holder; }
+    v.group.visible = true;
+    const x = t.root.position.x, z = t.root.position.z;
+    const u = Math.max(0, Math.min(1, len > 0 ? left / len : 0));
+    const hot = left <= PETARD_WARN;
+    v.stick.position.set(x, t.root.position.y + 0.85 * t.scale + v.pop * 0.25 + Math.sin(this.time * 4) * 0.03, z);
+    v.stick.scale.setScalar(1.75 * (1 + v.pop * 0.5) * (hot ? 1 + 0.08 * Math.sin(this.time * 30) : 1));
+    v.stick.rotation.set(1.05 + 0.15 * Math.sin(this.time * 5), this.time * 1.4, 0);
+    v.wick.scale.y = 0.04 + 0.22 * u;
+    v.paper.emissiveIntensity = hot ? 0.6 + 1.4 * (Math.sin(this.time * (10 + (1 - left / PETARD_WARN) * 22)) > 0 ? 1 : 0) : 0.6;
+    v.ring.position.set(x, 0.03, z);
+    v.ring.scale.setScalar(t.scale * (1 + 0.1 * Math.sin(this.time * (hot ? 14 : 5))));
+    (v.ring.material as THREE.MeshBasicMaterial).opacity = hot ? 0.75 : 0.45;
+    // sparks off the end of the wick, faster as it burns down
+    v.stick.updateMatrixWorld();
+    const tip = new THREE.Vector3(0, 1, 0).applyMatrix4(v.wick.matrixWorld);
+    const n = hot ? 3 : 1 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * (hot ? 2.2 : 1.2);
+      this.glow.emit({ x: tip.x, y: tip.y, z: tip.z, vx: Math.cos(a) * sp, vy: 0.8 + Math.random() * 1.5, vz: Math.sin(a) * sp, life: 0.18 + Math.random() * 0.2, s0: 0.06, s1: 0.01, c0: 0xffffff, c1: Math.random() < 0.5 ? 0xffb43d : 0xff5a2a, grav: 5, drag: 1.5 });
+    }
+  }
+
+  private animatePetard(dt: number) {
+    const v = this.petardView;
+    if (v) v.pop = Math.max(0, v.pop - dt * 4);
   }
 
   private animateCrown(dt: number) {

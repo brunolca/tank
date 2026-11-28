@@ -12,8 +12,9 @@ import type { NetFlag } from './drapeau';
 // 'rush' (« La ronde des boss »: the four bosses, then two at once) came with iteration 28: older tabs are told to reload (welcome.v).
 // 'caisses' (« La chasse aux caisses »: every crate is a point) came with iteration 37: older tabs are told to reload (welcome.v).
 // 'couronne' (« La couronne »: wear the crown the longest) came with iteration 50: older tabs are told to reload (welcome.v).
+// 'petard' (« Le pétard »: hand the lit firecracker over before it goes off) came with iteration 61, the same way.
 // 'ballon' (« Le ballon »: a match, Bleus against Rouges, with a ball and two goals) came with iteration 55, the same way.
-export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush' | 'caisses' | 'couronne' | 'ballon';
+export type Mode = 'coop' | 'versus' | 'daily' | 'taupe' | 'atelier' | 'drapeau' | 'rush' | 'caisses' | 'couronne' | 'ballon' | 'petard';
 export type Phase = 'lobby' | 'intro' | 'playing' | 'cleared' | 'failed' | 'roundEnd' | 'council' | 'gameover';
 
 export interface PlayerInfo {
@@ -115,6 +116,7 @@ export type GameEvent =
   | ['unload', number, number, number, number] // x y tankId shells: the Aimant throws back the shells it caught (iteration 27; older clients ignore it)
   | ['emote', number, number, number, number] // x y tankId line: « Les bulles » (iteration 30), a quick-chat bubble (index in EMOTES) above that tank; older clients ignore it
   | ['hunt', number, number, number, number, number] // x y tankId points total: « La chasse aux caisses » (iteration 37), a crate picked up (points 1 or 3), dropped by a destroyed tank (-1), or the golden crate drops (tankId 0)
+  | ['petard', number, number, number, number, number] // x y tankId what fromId: « Le pétard » (iteration 61), 0 lit on that tank, 1 handed over by bumping, 2 by a shell, 4 by a ricochet (or a mirror), 3 a few seconds of fuse left, 5 that tank is dazed (fromId: who hit it), 6 it went off on that tank (fromId: who handed it over last)
   | ['crown', number, number, number, number] // x y tankId what: « La couronne » (iteration 50), 0 put on, 1 dropped (its wearer was hit), 2 flown back to its cushion (tankId 0), 3 a reign of CROWN_HOLD seconds (the round is won), 4 five seconds of reign left
   | ['ball', number, number, number, number, number] // x y what a b: « Le ballon » (iteration 55), 0 a shell kicks it (a: shooter), 1 a goal (a: the team that scores, b: the tank that touched it last), 2 back to the kick-off spot (a b: where), 3 it bounces off a wall (a: tenths of tiles/s), 4 a blast throws it (a: whose)
   | ['flag', number, number, number, number, number]; // x y flagTeam tankId what: « Drapeaux » (iteration 24), 0 grabbed, 1 dropped, 2 sent home (tankId 0: by itself), 3 brought home (a capture), 4 a tank is back at its base, 5 thirty seconds left
@@ -169,7 +171,7 @@ export interface Results {
   // ff: teammates destroyed (coop-like modes, iteration 8)
   // g: galons earned in the coop campaign (iteration 19)
   // team: « Drapeaux », 1 Bleus or 2 Rouges; caps: flags they brought home
-  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number; team?: number; caps?: number; crates?: number; crown?: number }[]; // crown: « La couronne » (iteration 50), seconds of reign over the game; crates: « La chasse aux caisses » (iteration 37), crates picked up over the game
+  players: { id: string; name: string; color: number; kills: Partial<Record<TankKind, number>>; deaths: number; score: number; ff?: number; bot?: number; g?: number; team?: number; caps?: number; crates?: number; crown?: number; passes?: number }[]; // passes: « Le pétard » (iteration 61), firecrackers handed over; // crown: « La couronne » (iteration 50), seconds of reign over the game; crates: « La chasse aux caisses » (iteration 37), crates picked up over the game
   winner?: string;
 }
 
@@ -211,7 +213,7 @@ export type ServerMsg =
     }
   | { t: 'role'; mole: boolean } // mole mode: sent privately to each player
   // D: « L’Illusionniste » (iteration 58), its mirages, flat [id, ownerTankId, x, y, body, turret…] (older tabs ignore it)
-  | { t: 'snap'; k: number; a: number; D?: number[]; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string; C?: number[]; O?: number[] } // O: « Le ballon » (iteration 55), the ball [x, y, vx, vy]; C: « La couronne » (iteration 50), [x, y, holder, state (0 cushion, 1 worn, 2 dropped), tenths before it flies home, then pairs (tankId, tenths of reign)]; N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
+  | { t: 'snap'; k: number; a: number; D?: number[]; T: NetTank[]; B: NetBullet[]; M: NetMine[]; E: GameEvent[]; P?: NetBonus[]; F?: NetFlag[]; I?: number[]; L?: number[][]; H?: number[]; N?: string; C?: number[]; O?: number[]; Q?: number[] } // Q: « Le pétard » (iteration 61), [holder, tenths of fuse left, tenths the fuse had, then pairs (tankId, handovers)]; // O: « Le ballon » (iteration 55), the ball [x, y, vx, vy]; C: « La couronne » (iteration 50), [x, y, holder, state (0 cushion, 1 worn, 2 dropped), tenths before it flies home, then pairs (tankId, tenths of reign)]; N: « La neige » (iteration 42), the packed snow trails, one bit per cell in hexadecimal (older tabs ignore it); H: « La chasse aux caisses » (iteration 37), flat pairs [tankId, crates this round]; L: the Mortier's cannonballs in the air (iteration 34), [id, x0, y0, x1, y1, seconds in the air, flight time]; F: the flags (iteration 24); I: the Givré's frost (iteration 31), flat pairs [cell, tenths of a second before it melts]
   | { t: 'pong'; c: number }
   | { t: 'error'; msg: string };
 

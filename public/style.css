@@ -1034,6 +1034,15 @@ body.replaying #toast { bottom: calc(11vh + 16px); }
 .sb-row.crown.king span::after { content: ''; display: inline-block; width: 1em; height: 1em; margin-left: 0.35em; vertical-align: -0.14em; background: #ffc93a;
   -webkit-mask: var(--ico-crown) center / contain no-repeat; mask: var(--ico-crown) center / contain no-repeat; }
 #banner.crown .b-title { color: #ffd45a; text-shadow: 0 0 24px rgba(255, 190, 40, 0.55); }
+/* « Le pétard » (iteration 61): the carrier's row burns red, the tanks blown out of the round are struck out */
+.sb-row.petard .passes { margin-left: auto; font-size: 12px; font-weight: 900; letter-spacing: 0; color: #ff9a7a; text-transform: none; }
+.sb-row.petard.mine { box-shadow: inset 0 0 0 2px rgba(255, 120, 90, 0.6); }
+.sb-row.petard.hot { background: linear-gradient(90deg, rgba(255, 75, 58, 0.4), transparent 80%); animation: petard-hot 0.5s ease-in-out infinite alternate; }
+.sb-row.petard.hot svg.ico { color: #ff6a4a; }
+.sb-row.petard.out span { text-decoration: line-through; opacity: 0.5; }
+@keyframes petard-hot { to { background-color: rgba(255, 75, 58, 0.18); } }
+@media (prefers-reduced-motion: reduce) { .sb-row.petard.hot { animation: none; } }
+#banner.petard .b-title { color: #ff7a5c; text-shadow: 0 0 24px rgba(255, 75, 58, 0.55); }
 #banner.hunt .b-kicker::before { content: '▣ '; color: #ffc93a; }
 #banner.hunt .b-title { color: #ffd45a; text-shadow: 0 0 24px rgba(255, 190, 40, 0.55); }
 
@@ -1700,7 +1709,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #boss-bar.bombard .boss-top b::before, #boss-bar.magus .boss-top b::before, #boss-bar.duo .boss-top b::before,
 #banner.night .b-kicker::before, #banner.storm .b-kicker::before, #banner.storm.night .b-kicker::before,
 #banner.wind:not(.storm):not(.night) .b-kicker::before, #banner.fog:not(.storm):not(.wind) .b-kicker::before,
-#banner.ctf .b-kicker::before, #banner.hunt .b-kicker::before, #banner.crown .b-kicker::before {
+#banner.ctf .b-kicker::before, #banner.hunt .b-kicker::before, #banner.crown .b-kicker::before, #banner.petard .b-kicker::before {
   content: ''; display: inline-block; width: 1.05em; height: 1.05em; margin-right: 0.4em; vertical-align: -0.16em;
   background: currentColor; -webkit-mask: var(--pi) center / contain no-repeat; mask: var(--pi) center / contain no-repeat;
 }
@@ -1717,6 +1726,7 @@ svg.ico { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; overflow
 #banner.ctf.ball .b-kicker::before { --pi: var(--ico-ball); } /* « Le ballon » (iteration 55) */
 #banner.hunt .b-kicker::before { --pi: var(--ico-crate); }
 #banner.crown .b-kicker::before { --pi: var(--ico-crown); color: #ffc93a; }
+#banner.petard .b-kicker::before { --pi: var(--ico-petard); color: #ff6a4a; }
 .bubble span svg.ico { width: 17px; height: 17px; vertical-align: -0.18em; }
 #emote-pad button svg.ico { width: 15px; height: 15px; vertical-align: -0.2em; }
 

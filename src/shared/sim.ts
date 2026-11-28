@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, KO_QUICK, QUICK, QUICK_MINE, QUICK_RISE, QUICK_SINK, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, KO_QUICK, KO_PETARD, QUICK, QUICK_MINE, QUICK_RISE, QUICK_SINK, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -9,6 +9,7 @@ import { BLIZZARD_PUSH, BLIZZARD_REFILL, blizzardHides, whiteoutAt } from './bli
 import { CTF_CAPTURE, CTF_GRAB, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, CTF_SAFE, type CtfFlag, type NetFlag } from './drapeau';
 import { HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, type HuntState } from './caisses';
 import { CONJ_DECOYS, CONJ_EVERY, CONJ_FIRST, CONJ_LIFE, CONJ_MAX, CONJ_MIN, CONJ_RANGE, CONJ_WARN, POOF_DECOY, POOF_SHELL, MAGUS_DECOYS, MAGUS_EVERY, MAGUS_FIRST, MAGUS_GAP, MAGUS_LIFE, MAGUS_MAX, MAGUS_MIN, MAGUS_RANGE, MAGUS_WARN, type ConjureState, type Decoy } from './mirage';
+import { PETARD_BLAST, PETARD_COOL, PETARD_DAZE, PETARD_RELIGHT, PETARD_SAFE, PETARD_SPEED, PETARD_TOUCH, PETARD_WARN, fuseLength, type PetardState } from './petard';
 import { CROWN_COOL, CROWN_GRAB, CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_WARN, type CrownState } from './couronne';
 import { BALL_BLAST, BALL_BOUNCE, BALL_CAMBER, BALL_SLOPE, BALL_DRAG, BALL_ICE_DRAG, BALL_IDLE, BALL_KICK, BALL_MAX, BALL_PUSH, BALL_R, BALL_RESPAWN, GOAL_BOTTOM, GOAL_TOP, KICKOFF, goalAt, goalOf, ownGoal, type BallState } from './ballon';
 import { angDiff, beltStep, floorSpeed, glideStep, onIce, onQuick, onSand, onSnow, bulletBlocked, castRicochet, castWindy, mirrorHit, mirrorTurn, moveCircle, resolveCircle, rotateToward, segCircle, tileAt, warpTarget } from './physics';
@@ -441,6 +442,8 @@ export class Game {
   crown?: CrownState;
   /** « Le ballon » (iteration 55): the ball of the match (undefined in every other mode). */
   ball?: BallState;
+  /** « Le pétard » (iteration 61): the firecracker of the round (undefined in every other mode). Shells only daze. */
+  petard?: PetardState;
   /** Where each tank stood last tick (« Le ballon »: how fast it drives into the ball). */
   private ballPrev = new Map<number, [number, number]>();
   /**
@@ -645,6 +648,7 @@ export class Game {
     if (this.hunt) this.stepHunt(DT);
     if (this.crown) this.stepCrown(DT);
     if (this.ball) this.stepBall(DT);
+    if (this.petard) this.stepPetard(DT);
   }
 
   // -------------------------------------------------------------- « Les interrupteurs » (iteration 40)
@@ -829,6 +833,143 @@ export class Game {
     if (!c) return undefined;
     const out = [r2(c.x), r2(c.y), c.holder, c.state, c.state === 2 ? Math.max(0, Math.ceil((CROWN_RETURN - c.dropT) * 10)) : 0];
     for (const t of this.tanks) if (t.kind === 'player') out.push(t.id, Math.floor((c.held.get(t.id) ?? 0) * 10));
+    return out;
+  }
+
+  // -------------------------------------------------------------- « Le pétard » (iteration 61)
+
+  /**
+   * The fuse burns on its carrier's back; driving into another tank hands it over (after a short cool-down, so it
+   * cannot bounce straight back). At the end of the fuse: bang, the carrier is out, and a new one is lit a moment later
+   * on a survivor. With one tank left, nothing is lit any more (the room ends the round).
+   */
+  stepPetard(dt: number) {
+    const p = this.petard!;
+    if (p.cool > 0) p.cool -= dt;
+    const alive = this.tanks.filter((t) => t.alive && t.kind === 'player');
+    if (p.holder) {
+      const t = this.tankById(p.holder);
+      if (!t || !t.alive) { p.holder = 0; p.wait = PETARD_RELIGHT; } // (left the room with it)
+      else {
+        p.fuse -= dt;
+        if (!p.warned && p.fuse <= PETARD_WARN) {
+          p.warned = true;
+          this.events.push(['petard', r2(t.x), r2(t.y), t.id, 3, 0]);
+        }
+        if (p.fuse <= 0) { this.petardBang(t); return; }
+        if (p.cool <= 0 && !under(t)) {
+          for (const o of alive) {
+            if (o === t || under(o) || Math.hypot(o.x - t.x, o.y - t.y) > t.r + o.r + PETARD_TOUCH) continue;
+            this.petardPass(t, o, 1);
+            break;
+          }
+        }
+      }
+    } else if (alive.length >= 2) {
+      p.wait -= dt;
+      if (p.wait <= 0) {
+        const t = alive[Math.floor(Math.random() * alive.length)];
+        p.holder = t.id; p.len = p.fuse = fuseLength(Math.random()); p.cool = PETARD_COOL; p.last = 0; p.warned = false;
+        this.events.push(['petard', r2(t.x), r2(t.y), t.id, 0, 0]);
+      }
+    }
+    this.petardBrains();
+  }
+
+  /** The firecracker changes hands: how 1 by bumping into the other tank, 2 with a shell, 4 with a ricochet. */
+  private petardPass(from: Tank, to: Tank, how: number) {
+    const p = this.petard!;
+    p.holder = to.id; p.cool = PETARD_COOL; p.last = from.id;
+    p.passes.set(from.id, (p.passes.get(from.id) ?? 0) + 1);
+    this.events.push(['petard', r2(to.x), r2(to.y), to.id, how, from.id]);
+    this.botSay(from, EMOTE_HEHE);
+    if (from.ai) { from.ai.goal = undefined; from.ai.path = []; from.ai.pathT = 0; }
+    if (to.ai) { to.ai.goal = undefined; to.ai.path = []; to.ai.pathT = 0; }
+  }
+
+  /** A shell (or a blast) that would destroy a tank only dazes it; the carrier's shell hands the firecracker over. */
+  private petardHit(t: Tank, killer: Tank | undefined, cause: number, n: number) {
+    const p = this.petard!;
+    if (p.holder && killer && killer.id === p.holder && t !== killer && t.kind === 'player' && (cause === KO_SHELL || cause === KO_GHOST || cause === KO_MIRROR)) {
+      this.petardPass(killer, t, n > 0 || cause === KO_MIRROR ? 4 : 2);
+    }
+    t.chill = PETARD_DAZE;
+    t.vx = t.vy = 0;
+    t.buffs.invuln = PETARD_DAZE + PETARD_SAFE;
+    this.events.push(['petard', r2(t.x), r2(t.y), t.id, 5, killer?.id ?? 0]);
+  }
+
+  /** The fuse is out: the carrier is blown out of the round, and the tanks around it are dazed. */
+  private petardBang(t: Tank) {
+    const p = this.petard!;
+    const x = t.x, y = t.y;
+    p.holder = 0; p.wait = PETARD_RELIGHT; p.bangs++;
+    this.events.push(['petard', r2(x), r2(y), t.id, 6, p.last]);
+    t.alive = false;
+    t.chill = undefined;
+    this.events.push(['boom', r2(x), r2(y), t.id]);
+    this.events.push(['ko', t.id, p.last, KO_PETARD, 0]);
+    const by = p.last ? this.tankById(p.last) : undefined;
+    this.onKill?.(t, by);
+    if (by) this.botSay(by, EMOTE_HEHE);
+    for (const o of this.tanks) {
+      if (o === t || !o.alive || under(o) || o.buffs.invuln > 0 || Math.hypot(o.x - x, o.y - y) > PETARD_BLAST + o.r * 0.4) continue;
+      o.chill = PETARD_DAZE; o.vx = o.vy = 0; o.buffs.invuln = PETARD_DAZE + PETARD_SAFE;
+      this.events.push(['petard', r2(o.x), r2(o.y), o.id, 5, 0]);
+    }
+    for (const m of this.mines) if (!m.dead && Math.hypot(m.x - x, m.y - y) < PETARD_BLAST) m.fuse = m.fuse >= 0 ? Math.min(m.fuse, 0.05) : 0.05;
+  }
+
+  /** Is o worth a shell from the AI tank t? The carrier aims at whoever is not dazed, the others only at the carrier (to daze it). */
+  petardFoe(t: Tank, o: Tank) {
+    const p = this.petard!;
+    if (!p.holder) return false; // between two firecrackers: nobody shoots
+    if (t.id === p.holder) return o.buffs.invuln <= 0 && o.chill === undefined;
+    return o.id === p.holder;
+  }
+
+  /** AI tanks of a firecracker round: the carrier chases the nearest tank, the others keep as far from it as they can. */
+  private petardBrains() {
+    const p = this.petard!;
+    const holder = p.holder ? this.tankById(p.holder) : undefined;
+    for (const t of this.tanks) {
+      if (!t.alive || !t.ai || t.kind !== 'player') continue;
+      t.ai.mineCd = 5; // the rivals keep their mines: they would only get in the way of the chase
+      let cell: number | undefined;
+      if (!holder) cell = undefined;
+      else if (t === holder) {
+        let best: Tank | undefined, bd = Infinity;
+        for (const o of this.tanks) {
+          if (o === t || !o.alive || o.kind !== 'player') continue;
+          const d = Math.hypot(o.x - t.x, o.y - t.y);
+          if (d < bd) { bd = d; best = o; }
+        }
+        cell = best ? Math.floor(best.y) * W + Math.floor(best.x) : undefined;
+      } else {
+        // flee: a fresh hideout now and then (or when the carrier comes too close to the old one)
+        const old = t.ai.goal;
+        const ox = old !== undefined ? (old % W) + 0.5 : 0, oy = old !== undefined ? ((old / W) | 0) + 0.5 : 0;
+        const stale = old === undefined || (this.tick + t.id * 7) % 36 === 0 || Math.hypot(ox - holder.x, oy - holder.y) < 4;
+        if (!stale) continue;
+        let best = -1, bs = -Infinity;
+        for (let cy = 1; cy < H - 1; cy++) for (let cx = 1; cx < W - 1; cx++) {
+          const i = cy * W + cx;
+          if (this.tiles[i] !== Tile.Empty || (this.belts[i] ?? 0) === QUICK) continue;
+          const s = Math.hypot(cx + 0.5 - holder.x, cy + 0.5 - holder.y) - 0.45 * Math.hypot(cx + 0.5 - t.x, cy + 0.5 - t.y) + ((cx * 7 + cy * 13 + t.id) % 5) * 0.1;
+          if (s > bs) { bs = s; best = i; }
+        }
+        cell = best >= 0 ? best : undefined;
+      }
+      if (cell !== t.ai.goal) { t.ai.goal = cell; t.ai.path = []; t.ai.pathT = 0; }
+    }
+  }
+
+  /** The firecracker for the snapshots: [holder, tenths of fuse left, tenths the fuse had, then pairs (tankId, handovers)]. */
+  netPetard(): number[] | undefined {
+    const p = this.petard;
+    if (!p) return undefined;
+    const out = [p.holder, p.holder ? Math.max(0, Math.ceil(p.fuse * 10)) : 0, Math.round(p.len * 10)];
+    for (const [id, n] of p.passes) out.push(id, n);
     return out;
   }
 
@@ -1390,7 +1531,7 @@ export class Game {
   }
 
   speedOf(t: Tank) {
-    return t.spec.speed * (t.buffs.turbo > 0 ? TURBO_MULT : 1);
+    return t.spec.speed * (t.buffs.turbo > 0 ? TURBO_MULT : 1) * (this.petard && this.petard.holder === t.id ? PETARD_SPEED : 1); // « Le pétard »: its carrier is in a hurry
   }
 
   // -------------------------------------------------------------- boss
@@ -3063,6 +3204,7 @@ export class Game {
       this.events.push(['shield', r2(t.x), r2(t.y), t.id]);
       return;
     }
+    if (this.petard && t.kind === 'player' && cause !== KO_FALL && cause !== KO_QUICK) { this.petardHit(t, killer, cause, n); return; } // « Le pétard » (iteration 61): only dazed
     if (t.rail) this.derail(t, killer); // first, so the locomotive's own blast is the last one (the replay shows it)
     t.alive = false;
     t.chill = undefined;
@@ -3337,6 +3479,7 @@ export class Game {
     let best: Tank | undefined, bd = Infinity;
     for (const o of this.tanks) {
       if (!o.alive || o.team === t.team || under(o) || !this.canSee(t, o)) continue;
+      if (this.petard && !this.petardFoe(t, o)) continue;
       const d = Math.hypot(o.x - t.x, o.y - t.y);
       if (d < bd) { bd = d; best = o; }
     }
@@ -3498,6 +3641,7 @@ export class Game {
     const tryAng = (ang: number, bias: number) => {
       const res = this.traceShot(t, ang, spec.bounces);
       if (!res.hit || res.hit.team === t.team) return;
+      if (this.petard && !this.petardFoe(t, res.hit)) return;
       const turn = Math.abs(angDiff(t.turret, ang));
       const score = bias - res.len * 0.08 - turn * 0.6;
       if (score > bestScore) { bestScore = score; bestAng = ang; }
@@ -3554,6 +3698,7 @@ export class Game {
       if (t.spec.skill < 2 && (b.id + t.id) % 3 === 0) continue;
       if (t.kind === 'rampart' && this.shieldFaces(t, t.x - b.vx, t.y - b.vy)) continue; // head-on: it trusts its shield
       if (t.mag?.on) continue; // its field will catch it
+      if (this.petard && this.petard.holder === t.id && (b.id + this.tick) % 3 !== 0) continue; // « Le pétard »: the carrier is in too much of a hurry to dodge (most of the time)
       const cx = rx - b.vx * tt, cy = ry - b.vy * tt;
       const d = Math.hypot(cx, cy);
       if (d > t.r + 0.55) continue;

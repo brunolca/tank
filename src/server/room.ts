@@ -12,6 +12,7 @@ import { MAX_RIVALS, RIVAL_LEVELS, RIVAL_NAMES, RIVAL_PREFIX, isRivalId, makeRiv
 import { canBuy, canBuyAny, killXp, startGalons, TRAINING_SECONDS, XP_CLEAR, XP_PER_GALON, type Progress } from '../shared/skills';
 import { HUNT_CRATES, HUNT_ROUND, HUNT_TARGET, huntArena, huntLeader, newHunt } from '../shared/caisses';
 import { CROWN_HOLD, CROWN_ROUND, CROWN_TARGET, crownArena, crownLeader, newCrown } from '../shared/couronne';
+import { PETARD_TARGET, newPetard, petardArena } from '../shared/petard';
 import { BALL_ROUND, BALL_TARGET, ballArena, newBall } from '../shared/ballon';
 import { CTF_ROUND, CTF_TARGET, TEAM_NAMES, TEAM_TANK_COLORS, ctfArena, ctfTeam, newFlags } from '../shared/drapeau';
 import { COUNCIL_SECONDS, councilVerdict, TAUPE_LIVES, TAUPE_MIN_PLAYERS, TAUPE_STAGES, taupeLevel, VERDICT_SECONDS, type CouncilState, type TaupeResult } from '../shared/taupe';
@@ -57,9 +58,9 @@ const VERSUS_TARGET = 5;
 /** Modes played in rounds between players and rivals: free-for-all versus, and « Drapeaux » in two teams (iteration 24). */
 /** Seconds between the end of a mission (or round) and what comes next: room for « Le ralenti » (iteration 32, was 3.5). */
 const END_PAUSE = 4.5;
-const pvp = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne' || m === 'ballon'; // « La chasse aux caisses » (iteration 37), « La couronne » (iteration 50) and « Le ballon » (iteration 55) too
+const pvp = (m: Mode) => m === 'versus' || m === 'drapeau' || m === 'caisses' || m === 'couronne' || m === 'ballon' || m === 'petard'; // « Le pétard » (iteration 61) too; « La chasse aux caisses » (iteration 37), « La couronne » (iteration 50) and « Le ballon » (iteration 55) too
 /** Free-for-all modes played in rounds on the versus arenas: one team per tank. */
-const ffa = (m: Mode) => m === 'versus' || m === 'caisses' || m === 'couronne';
+const ffa = (m: Mode) => m === 'versus' || m === 'caisses' || m === 'couronne' || m === 'petard';
 /** Modes played in two teams, Bleus against Rouges: « Drapeaux » (iteration 24) and « Le ballon » (iteration 55). */
 const teamPlay = (m: Mode) => m === 'drapeau' || m === 'ballon';
 const EMPTY_INPUT: Input = { s: 0, mx: 0, my: 0, a: 0, f: 0, m: 0 };
@@ -100,6 +101,7 @@ export class Room extends DurableObject<Env> {
   private teams: [number, number] = [0, 0]; // « Drapeaux »: rounds won by the Bleus and the Rouges
   private caps = new Map<string, number>(); // « Drapeaux »: flags each entrant brought home
   private crates = new Map<string, number>(); // « La chasse aux caisses » (iteration 37): crates each entrant picked up, all rounds
+  private passes = new Map<string, number>(); // « Le pétard » (iteration 61): firecrackers each entrant handed over, all rounds
   private reigns = new Map<string, number>(); // « La couronne » (iteration 50): seconds each entrant wore the crown, all rounds
   private bases?: [number, number][]; // « Drapeaux »: the bases of the round
   private roundWin = 0; // « Drapeaux »: the team that took the last round
@@ -238,7 +240,7 @@ export class Room extends DurableObject<Env> {
         }
         break;
       case 'mode':
-        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush' || msg.mode === 'caisses' || msg.mode === 'couronne' || msg.mode === 'ballon')) {
+        if (p.pid === this.hostId() && this.phase === 'lobby' && (msg.mode === 'coop' || msg.mode === 'versus' || msg.mode === 'daily' || msg.mode === 'taupe' || msg.mode === 'atelier' || msg.mode === 'drapeau' || msg.mode === 'rush' || msg.mode === 'caisses' || msg.mode === 'couronne' || msg.mode === 'ballon' || msg.mode === 'petard')) {
           this.mode = msg.mode;
           if (!rivalMode(this.mode)) this.rivals = [];
           await this.ctx.storage.put('mode', this.mode);
@@ -401,7 +403,7 @@ export class Room extends DurableObject<Env> {
   private startGame() {
     const active = [...this.players.values()].filter((p) => p.ws);
     if (pvp(this.mode) && active.length + this.versusRivals().length < 2) {
-      for (const p of active) this.send(p.ws!, { t: 'error', msg: this.mode === 'drapeau' ? 'Il faut au moins 2 tanks pour jouer aux drapeaux : invite un ami ou ajoute un rival.' : this.mode === 'caisses' ? 'Il faut au moins 2 tanks pour la chasse aux caisses : invite un ami ou ajoute un rival.' : this.mode === 'couronne' ? 'Il faut au moins 2 tanks pour se disputer la couronne : invite un ami ou ajoute un rival.' : this.mode === 'ballon' ? 'Il faut au moins 2 tanks pour jouer au ballon : invite un ami ou ajoute un rival.' : 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
+      for (const p of active) this.send(p.ws!, { t: 'error', msg: this.mode === 'drapeau' ? 'Il faut au moins 2 tanks pour jouer aux drapeaux : invite un ami ou ajoute un rival.' : this.mode === 'caisses' ? 'Il faut au moins 2 tanks pour la chasse aux caisses : invite un ami ou ajoute un rival.' : this.mode === 'couronne' ? 'Il faut au moins 2 tanks pour se disputer la couronne : invite un ami ou ajoute un rival.' : this.mode === 'ballon' ? 'Il faut au moins 2 tanks pour jouer au ballon : invite un ami ou ajoute un rival.' : this.mode === 'petard' ? 'Il faut au moins 2 tanks pour se refiler le pétard : invite un ami ou ajoute un rival.' : 'Il faut au moins 2 tanks pour le mode versus : invite un ami ou ajoute un rival.' });
       return;
     }
     if (this.mode === 'atelier' && !this.atelier) {
@@ -431,6 +433,7 @@ export class Room extends DurableObject<Env> {
     this.caps.clear();
     this.crates.clear();
     this.reigns.clear();
+    this.passes.clear();
     this.day = dayNumber();
     this.week = weekNumber(this.day);
     this.splits = [];
@@ -463,6 +466,7 @@ export class Room extends DurableObject<Env> {
       : this.mode === 'caisses' ? huntArena(this.round)
       : this.mode === 'couronne' ? crownArena(this.round)
       : this.mode === 'ballon' ? ballArena(this.round)
+      : this.mode === 'petard' ? petardArena(this.arenaBase + this.round)
       : versusArena(this.arenaBase + this.round);
     this.bases = this.mode === 'drapeau' ? (this.level as ReturnType<typeof ctfArena>).bases : undefined;
     this.council = undefined;
@@ -529,6 +533,10 @@ export class Room extends DurableObject<Env> {
     if (this.mode === 'couronne') {
       const [cx, cy] = (this.level as ReturnType<typeof crownArena>).crown;
       game.crown = newCrown(cx, cy);
+    }
+    if (this.mode === 'petard') { // « Le pétard » (iteration 61): no « Gel » nor remote mines (shells only daze anyway)
+      game.petard = newPetard();
+      game.bonusKinds = ['shield', 'bounce', 'fan', 'heavy'];
     }
     if (this.mode === 'ballon') game.ball = newBall(); // « Le ballon » (iteration 55): on the kick-off spot
     if (this.mode === 'daily') applyTwist(game, dailyTwist(this.day));
@@ -777,6 +785,7 @@ export class Room extends DurableObject<Env> {
       for (const pl of players) pl.crates = this.crates.get(pl.id) ?? 0;
       players.sort((a, b) => b.score - a.score || (b.crates ?? 0) - (a.crates ?? 0));
     }
+    if (this.mode === 'petard') for (const pl of players) pl.passes = this.passes.get(pl.id) ?? 0;
     if (this.mode === 'couronne') {
       for (const pl of players) pl.crown = Math.round(this.reigns.get(pl.id) ?? 0);
       players.sort((a, b) => b.score - a.score || (b.crown ?? 0) - (a.crown ?? 0));
@@ -821,10 +830,10 @@ export class Room extends DurableObject<Env> {
     }
     game.step(inputs);
 
-    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), O = game.netBall(), D = game.netDecoys(), E = game.events;
+    const T = game.netTanks(), B = game.netBullets(), M = game.netMines(), P = game.netBonuses(), F = game.netFlags(), I = game.netFrost(), L = game.netLobs(), H = game.netHunt(), N = game.netSnow(), C = game.netCrown(), O = game.netBall(), Q = game.netPetard(), D = game.netDecoys(), E = game.events;
     game.events = [];
     for (const p of this.players.values()) {
-      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C, O, D });
+      if (p.ws) this.send(p.ws, { t: 'snap', k: game.tick, a: p.ack, T, B, M, E, P, F, I, L, H, N, C, O, D, Q });
     }
 
     this.phaseTimer -= DT;
@@ -870,7 +879,7 @@ export class Room extends DurableObject<Env> {
       case 'roundEnd':
         if (this.phaseTimer <= 0) {
           const best = Math.max(...[...this.players.values(), ...this.versusRivals()].map((p) => p.score));
-          if (teamPlay(this.mode) ? Math.max(...this.teams) >= (this.mode === 'ballon' ? BALL_TARGET : CTF_TARGET) : best >= (this.mode === 'caisses' ? HUNT_TARGET : this.mode === 'couronne' ? CROWN_TARGET : VERSUS_TARGET)) { this.setPhase('gameover', 8); this.broadcastPhase(); }
+          if (teamPlay(this.mode) ? Math.max(...this.teams) >= (this.mode === 'ballon' ? BALL_TARGET : CTF_TARGET) : best >= (this.mode === 'caisses' ? HUNT_TARGET : this.mode === 'couronne' ? CROWN_TARGET : this.mode === 'petard' ? PETARD_TARGET : VERSUS_TARGET)) { this.setPhase('gameover', 8); this.broadcastPhase(); }
           else { this.round++; this.loadStage(); }
         }
         break;
@@ -940,7 +949,7 @@ export class Room extends DurableObject<Env> {
     if (this.mode === 'caisses') { this.checkHunt(game); return; }
     if (this.mode === 'couronne') { this.checkCrown(game); return; }
     if (this.mode === 'ballon') { this.checkBall(game); return; }
-    if (this.mode !== 'versus') {
+    if (this.mode !== 'versus' && this.mode !== 'petard') {
       const playersAlive = game.aliveCount(0);
       const enemiesAlive = game.aliveCount(99);
       if (enemiesAlive === 0) {
@@ -977,9 +986,10 @@ export class Room extends DurableObject<Env> {
       if (alive.length <= 1 && (game.bullets.length === 0 || this.settle >= SETTLE_MAX)) {
         const w = this.entrant(alive[0]?.pid);
         if (w) w.score++;
+        if (game.petard) for (const [id, n] of game.petard.passes) { const pid = game.tankById(id)?.pid; if (pid) this.passes.set(pid, (this.passes.get(pid) ?? 0) + n); }
         if (alive[0]) game.cheer(alive[0].team); // a rival that wins the round gloats (iteration 30)
         this.setPhase('roundEnd', END_PAUSE);
-        this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: w ? `${w.name} gagne la manche !` : 'Égalité !' });
+        this.broadcast({ ...(this.phaseMsg() as Extract<ServerMsg, { t: 'phase' }>), text: w ? (this.mode === 'petard' ? `${w.name} est le dernier debout et gagne la manche !` : `${w.name} gagne la manche !`) : 'Égalité !' });
       }
     }
   }
