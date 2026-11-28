@@ -16,7 +16,7 @@ import { RIVAL_LEVELS, makeRival, rivalLevel } from '../src/shared/rivals';
 import { HUNT_CRATES, HUNT_GOLD, HUNT_GOLD_AT, HUNT_RESPAWN, HUNT_ROUND, huntArena, huntLeader, newHunt } from '../src/shared/caisses';
 import { BALL_IDLE, BALL_PITCH_COUNT, BALL_R, BALL_ROUND, GOAL_BOTTOM, GOAL_TOP, KICKOFF, ballArena, goalAt, newBall } from '../src/shared/ballon';
 import { PETARD_COOL, PETARD_DAZE, PETARD_FUSE, PETARD_RELIGHT, newPetard, petardArena } from '../src/shared/petard';
-import { KO_PETARD } from '../src/shared/constants';
+import { KO_PETARD, LAMP_OUT, LAMP_WARN } from '../src/shared/constants';
 import { CROWN_HOLD, CROWN_RESPAWN, CROWN_RETURN, CROWN_ROUND, crownArena, crownLeader, newCrown } from '../src/shared/couronne';
 import { CTF_ARENA_COUNT, CTF_RESPAWN, CTF_RETURN, CTF_ROUND, ctfArena, ctfTeam, newFlags } from '../src/shared/drapeau';
 import { canBuy, canBuyAny, cleanRanks, freeGalons, killXp, spentGalons, startGalons, trainSpec, type Progress } from '../src/shared/skills';
@@ -340,7 +340,7 @@ console.log('total', Date.now() - t0, 'ms');
     }
   }
   const withPortals = [];
-  for (let mission = 19; mission <= 60; mission++) if (getMission(mission).tiles.includes(Tile.PortalA)) withPortals.push(mission);
+  for (let mission = 19; mission <= 100; mission++) if (getMission(mission).tiles.includes(Tile.PortalA)) withPortals.push(mission); // up to the 100th since iteration 62: the lamps of the 56th and the 59th took two generated portals
   if (withPortals.length < 5) fail(`trop peu de missions générées à portails (${withPortals.length})`);
   const tiles = new Array(W * H).fill(Tile.Empty);
   tiles[8 * W + 4] = Tile.PortalA;
@@ -4323,4 +4323,107 @@ console.log('total', Date.now() - t0, 'ms');
   if (cleared === 0) fail('l’IA ne vient jamais à bout du Grand Illusionniste');
   if (!tricks || !swaps) fail(`pas de tour (${tricks}) ou pas d’escamotage (${swaps}) pendant les parties`);
   if (process.exitCode !== 1) console.log(`Grand Illusionniste OK (${cleared} partie(s) gagnée(s) par l’IA, ${tricks} tour(s), ${swaps} escamotage(s), ${per.toFixed(3)} ms/tick)`);
+}
+
+// « Les réverbères » (iteration 62): a street lamp stops tanks and shells; a shell (or a blast) breaks its globe and still
+// bounces, the lamp flickers then comes back on LAMP_OUT seconds later; at night, a tank in its light is seen from the
+// whole table; missions 56 and 59 have them, about half the night missions from the 81st, never the daily challenge;
+// the workshop knows them; the AI clears their missions and the tick stays cheap
+{
+  const fail = (m: string) => { console.error('RÉVERBÈRES:', m); process.exitCode = 1; };
+  if (!isSolidTank(Tile.Lamp) || !isSolidTank(Tile.LampOff)) fail('un réverbère doit arrêter les tanks');
+  {
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    tiles[8 * W + 12] = Tile.Lamp;
+    const g = new Game(tiles);
+    g.frozen = false;
+    const p = g.addTank('player', 0, 4.5, 8.5, 0x3d7bff, 'p1', 'P');
+    p.turret = 0; p.fireCd = 0;
+    g.tryFire(p);
+    const b = g.bullets[0];
+    let broke = false, warn = -1, lit = -1, i = 0;
+    for (; i < 30 * 20 && lit < 0; i++) {
+      g.step(new Map());
+      for (const ev of g.events) if (ev[0] === 'lamp') { if (ev[3] === 0) broke = ev[1] === 12 && ev[2] === 8 && ev[4] === p.id; else if (ev[3] === 2) warn = i; else if (ev[3] === 1) lit = i; }
+      g.events = [];
+      if (i === 40 && g.tiles[8 * W + 12] !== Tile.LampOff) fail('l’obus n’a pas cassé le globe');
+      if (i === 40 && (b.dead && b.bounces < 0 ? false : b.vx > 0)) fail('l’obus ne ricoche pas sur le réverbère');
+    }
+    if (!broke) fail('pas d’événement « lamp » 0 (avec le tireur)');
+    if (lit < 0 || g.tiles[8 * W + 12] !== Tile.Lamp) fail('le réverbère ne se rallume pas');
+    if (warn < 0 || lit - warn < 30 * LAMP_WARN - 2) fail('le réverbère se rallume sans grésiller avant');
+    if (lit > 0 && Math.abs(lit / 30 - LAMP_OUT - 0.5) > 1) fail(`il se rallume au bout de ${(lit / 30).toFixed(1)} s`);
+  }
+  {
+    // at night: a far enemy sees the player under the lamp, not in the dark, nor once the lamp is broken
+    const tiles = new Array(W * H).fill(Tile.Empty);
+    tiles[8 * W + 4] = Tile.Lamp;
+    const g = new Game(tiles);
+    g.night = true;
+    const p = g.addTank('player', 0, 5.5, 9.5, 0x3d7bff, 'p1', 'P');
+    const e = g.addTank('ash', 99, 18.5, 9.5, 0);
+    if (!g.canSee(e, p)) fail('de nuit, le joueur sous le réverbère reste invisible de loin');
+    p.x = 10.5;
+    if (g.canSee(e, p)) fail('de nuit, le joueur hors de la lumière est vu de loin');
+    p.x = 5.5;
+    g.breakLamp(8 * W + 4, 0);
+    if (g.canSee(e, p)) fail('le réverbère cassé éclaire encore');
+    g.night = false;
+    if (!g.canSee(e, p)) fail('de jour, tout le monde se voit');
+    // a mine blast next to a lit lamp breaks it
+    const g2 = new Game(tiles);
+    g2.mines.push({ id: 999, owner: 0, team: 0, x: 5.6, y: 8.5, t: 1, fuse: -1, dead: false });
+    g2.explodeMine(g2.mines[0]);
+    if (g2.tiles[8 * W + 4] !== Tile.LampOff) fail('une mine ne casse pas le réverbère voisin');
+  }
+  // the workshop: brush, share code
+  const am = { name: 'Rue', map: blankMap() };
+  am.map[8] = am.map[8].slice(0, 10) + '!' + am.map[8].slice(11);
+  am.map[4] = am.map[4].slice(0, 15) + 'a' + am.map[4].slice(16);
+  if (checkAtelier(am.map)) fail(`l’atelier refuse les réverbères : ${checkAtelier(am.map)}`);
+  const back = decodeAtelier(encodeAtelier({ ...am, night: true }));
+  if (!back || back.map[8][10] !== '!' || !back.night) fail('les réverbères se perdent dans le code de partage');
+  if (atelierLevel(am).tiles[8 * W + 10] !== Tile.Lamp) fail('l’atelier ne pose pas les réverbères');
+  // the missions
+  for (const m of [56, 59]) {
+    const l = getMission(m);
+    if (!l.night || l.tiles.filter((t) => t === Tile.Lamp).length < 5) fail(`la mission ${m} devrait être de nuit, avec des réverbères`);
+  }
+  if (!getMission(59).storm || !getMission(59).enemies.some((e) => e.kind === 'mason')) fail('la 59ᵉ garde son orage et son Maçon');
+  const lampy: number[] = [];
+  for (let m = 1; m <= 400; m++) {
+    const l = getMission(m);
+    if (!l.tiles.includes(Tile.Lamp)) continue;
+    if (m !== 56 && m !== 59) lampy.push(m);
+    if (m !== 56 && m !== 59 && (m <= 80 || !l.night)) fail(`la mission ${m} a des réverbères`);
+    for (let i = 0; i < W * H; i++) if (l.tiles[i] === Tile.Lamp && m > 80 && l.tiles[W * H - 1 - i] !== Tile.Lamp) fail(`mission ${m} : réverbères pas symétriques`);
+    for (const [sx, sy] of l.spawns) if (l.tiles[Math.floor(sy) * W + Math.floor(sx)] !== Tile.Empty) fail(`mission ${m} : un départ sur un réverbère`);
+    for (const en of l.enemies) if (l.tiles[Math.floor(en.y) * W + Math.floor(en.x)] === Tile.Lamp) fail(`mission ${m} : un ennemi sur un réverbère`);
+  }
+  if (lampy.length < 10) fail(`trop peu de missions générées avec des réverbères (${lampy.length})`);
+  for (let day = SEVEN_TWISTS_FROM; day < SEVEN_TWISTS_FROM + 60; day++) for (let st = 1; st <= DAILY_STAGES; st++) if (dailyLevel(day, st).tiles.includes(Tile.Lamp)) fail(`défi du jour ${day} : un réverbère est apparu`);
+  // AI duos clear the two missions, lamps get broken, the tick stays cheap
+  let cleared = 0, broken = 0, spent = 0, steps = 0;
+  for (let run2 = 0; run2 < 8 && cleared < 2; run2++) {
+    const l = getMission(run2 % 2 ? 59 : 56);
+    const s2 = new Game(l.tiles, l.belts);
+    s2.night = !!l.night;
+    s2.storm = !!l.storm;
+    for (const [sx, sy] of l.spawns) { const pl = s2.addTank('player', 0, sx, sy, 0x3d7bff); s2.enableAI(pl, { skill: 3, aimError: 0.02 }); }
+    for (const en of l.enemies) s2.addTank(en.kind, 99, en.x, en.y, 0);
+    s2.frozen = false;
+    for (let i = 0; i < 30 * 180 && s2.aliveCount(99) > 0 && s2.aliveCount(0) > 0; i++) {
+      const t1 = performance.now();
+      s2.step(new Map());
+      spent += performance.now() - t1; steps++;
+      broken += s2.events.filter((ev) => ev[0] === 'lamp' && ev[3] === 0).length;
+      s2.events = [];
+    }
+    if (s2.aliveCount(99) === 0) cleared++;
+  }
+  const per = spent / Math.max(1, steps);
+  if (per > 0.5) fail(`${per.toFixed(3)} ms par tick`);
+  if (cleared === 0) fail('l’IA ne vient jamais à bout des missions des réverbères');
+  if (!broken) fail('aucun globe cassé pendant les parties');
+  if (process.exitCode !== 1) console.log(`réverbères OK (${cleared} partie(s) gagnée(s) par l’IA, ${broken} globe(s) cassé(s), ${lampy.length} mission(s) générée(s) éclairée(s), ${per.toFixed(3)} ms/tick)`);
 }

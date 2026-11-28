@@ -7,7 +7,7 @@ import { bridgeAxis, tunnelAxis } from '../shared/physics';
 import type { AtelierMap } from '../shared/protocol';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const GROUND = '.#Ho_=*+><^V~,%[]&/\\@'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
+const GROUND = '.#Ho_=*+><^V~,%[]&/\\@!'; // then four conveyor belts (iteration 16), the ice (iteration 21), the sand (iteration 36), the switch and its gates (iteration 40)
 
 /** Draw a map onto a 2D canvas (the editor, the lobby preview). `hot`: a cell to highlight (the brush under the cursor). */
 export function drawMap(cv: HTMLCanvasElement, map: string[], hot?: { x: number; y: number; ch: string }) {
@@ -182,6 +182,15 @@ function drawCell(g: CanvasRenderingContext2D, px: number, py: number, s: number
     }
     g.stroke();
     g.lineWidth = 1; g.lineCap = 'butt';
+  } else if (c === '!') {
+    // a street lamp (iteration 62): a warm pool of light, the stone plinth, the post and its glowing globe
+    const cx = px + s / 2, cy = py + s / 2;
+    const glow = g.createRadialGradient(cx, cy, s * 0.05, cx, cy, s * 0.5);
+    glow.addColorStop(0, 'rgba(255,214,120,0.95)'); glow.addColorStop(1, 'rgba(255,214,120,0)');
+    g.fillStyle = glow; g.fillRect(px, py, s, s);
+    g.fillStyle = '#8f8a80'; g.fillRect(px + s * 0.28, py + s * 0.28, s * 0.44, s * 0.44);
+    g.fillStyle = '#2f3138'; g.beginPath(); g.arc(cx, cy, s * 0.17, 0, 7); g.fill();
+    g.fillStyle = '#ffe9a8'; g.beginPath(); g.arc(cx, cy, s * 0.1, 0, 7); g.fill();
   } else if (c === '@') {
     // quicksand (iteration 59): darker wet sand on the gold, and a whirl drawn toward its heart
     g.fillStyle = '#e6b866'; g.fillRect(px, py, s, s);

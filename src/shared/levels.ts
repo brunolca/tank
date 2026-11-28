@@ -1,4 +1,4 @@
-import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, MIRROR_A_CHAR, MIRROR_B_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, QUICK, QUICK_CHAR, W, Tile, TankKind } from './constants';
+import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR, LAMP_CHAR, MIRROR_A_CHAR, MIRROR_B_CHAR, SNOWMAN_CHAR, RED_GATE_CHAR, RED_LIFT_CHAR, SWITCH_CHAR, H, ICE, ICE_CHAR, SAND, SAND_CHAR, SNOW, SNOW_CHAR, QUICK, QUICK_CHAR, W, Tile, TankKind } from './constants';
 
 // Legend: . empty  # wall  H tall wall  o cork (destructible)  _ hole
 //         * + portals (each symbol appears exactly twice: going into one pops you out of the other)
@@ -14,6 +14,8 @@ import { type BonusKind, BELT_CHARS, BLUE_GATE_CHAR, BLUE_LIFT_CHAR, BRIDGE_CHAR
 //           bridge) over a pit, flipped by the same switches; on a flip of the switches, the conveyor belts turn round too
 //         / \\ « Les miroirs » (iteration 57): a mirror on the diagonal of its cell (a backslash is written twice in the
 //           strings); it stops tanks, turns shells a quarter turn (no bounce used up), and turns round on a flip of the switches
+//         ! « Les réverbères » (iteration 62): a street lamp; it stops tanks and shells; at night its light gives away whoever
+//           stands in it, a shell (or a blast) breaks its globe for a while
 //         1 2 player spawns
 //         b brown  a ash  m marine  y yellow  p pink  g green  v violet  w white  k black  s steel  X boss  D drill (the Foreur)  c mason (the Maçon)  t thief (the Pilleur)  G thunder (the Grondeur)  r rampart (the Rempart)  S sower (the Semeur)  A magnet (the Aimant)  f frost (the Givré)  M mortar (the Mortier)  B bombard (the Bombardier)  h hopper (the Sauterelle)  L watcher (the Veilleur)  R mechanic (the Mécano)  P spectre (the Spectre)  I conjurer (the Illusionniste)
 export const ENEMY_CHARS: Record<string, TankKind> = {
@@ -507,6 +509,56 @@ export const EXTRA_LEVELS: Record<number, LevelDef> = {
       '...##...,,,,,,...##...',
       '.......,,,@@,,,.......',
       '..2.....,,,,,,....w...',
+      '......................',
+    ],
+  },
+  // « Les réverbères » (iteration 62): a street at night, lit by six lamps. Whoever stands in their light is seen from the
+  // whole table, the players as well as their foes: break the globes to slip into the dark… for fourteen seconds
+  56: {
+    name: 'La rue des réverbères',
+    night: true, // (the generated 56th was a night mission: the nights stay as many)
+    map: [
+      '......................',
+      '..HHH....HHH....HHH...',
+      '..HHH....HHH....HHH.y.',
+      '......................',
+      '......!...!......!....',
+      '......................',
+      '..1...........s.......',
+      '...........##.........',
+      '......o....##....o..v.',
+      '...........##.........',
+      '..2...........s.......',
+      '......................',
+      '......!....!.....!....',
+      '......................',
+      '..HHH....HHH....HHH.w.',
+      '..HHH....HHH....HHH.a.',
+      '......................',
+    ],
+  },
+  // and a park at night, under the storm, round a bandstand: the lightning shows everyone, the lamps show whoever lingers
+  59: {
+    name: 'Le kiosque à musique',
+    night: true,
+    storm: true, // (the generated 59th was a storm mission, with a Maçon and a Rempart: they stay)
+    map: [
+      '......................',
+      '..1........o.......w..',
+      '...........o..........',
+      '..2...!....o....!..y..',
+      '......................',
+      '.......#........#.....',
+      '.........#.##.#.......',
+      '...!.....#....#....c..',
+      '.........#.!..#.......',
+      '.........#....#.......',
+      '.........#.##.#.....a.',
+      '.......#........#.....',
+      '......................',
+      '......!.........!..r..',
+      '...........o..........',
+      '...........o.......b..',
       '......................',
     ],
   },
@@ -1730,6 +1782,7 @@ export function parseLevel(def: LevelDef): ParsedLevel {
       else if (c === '=') tiles[i] = Tile.Tunnel;
       else if (c === BRIDGE_CHAR) tiles[i] = Tile.Bridge;
       else if (c === SNOWMAN_CHAR) tiles[i] = Tile.Snowman;
+      else if (c === LAMP_CHAR) tiles[i] = Tile.Lamp;
       else if (c === MIRROR_A_CHAR) tiles[i] = Tile.MirrorA;
       else if (c === MIRROR_B_CHAR) tiles[i] = Tile.MirrorB;
       else if (c === SWITCH_CHAR) tiles[i] = Tile.Switch;
@@ -2002,6 +2055,27 @@ export function proceduralLevel(mission: number, opt: GenOptions = {}): ParsedLe
           const i = hearts.splice(Math.floor(rq() * hearts.length), 1)[0];
           belts[i] = QUICK;
           belts[W * H - 1 - i] = QUICK;
+        }
+      }
+    }
+    // « Les réverbères » (iteration 62): from the 81st, about half the night missions light a pair or two of street lamps
+    // (mirrored like the rest) on open ground, a free cell all round so that no corridor is closed; own stream, nothing else moves
+    if (night && opt.seed === undefined && mission > 80) {
+      const rl = rng(mission * 5059 + 127);
+      if (rl() < 0.5) {
+        const open = (i: number) => tiles[i] === Tile.Empty && !belts?.[i];
+        const near = (i: number, d: number) => [...spawns, ...enemies.map((e) => [e.x, e.y] as [number, number])].some(([x, y]) => Math.hypot(x - (i % W) - 0.5, y - Math.floor(i / W) - 0.5) < d);
+        const spots: number[] = [];
+        for (let i = 0; i < (W * H) / 2; i++) {
+          const x = i % W, y = Math.floor(i / W);
+          if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2 || !open(i) || !open(W * H - 1 - i)) continue;
+          if ([-W - 1, -W, -W + 1, -1, 1, W - 1, W, W + 1].every((d) => open(i + d) && open(W * H - 1 - i + d)) && !near(i, 1.5) && !near(W * H - 1 - i, 1.5)) spots.push(i);
+        }
+        for (let k = 0, n = 1 + Math.floor(rl() * 2); k < n && spots.length; k++) {
+          const i = spots.splice(Math.floor(rl() * spots.length), 1)[0];
+          tiles[i] = Tile.Lamp;
+          tiles[W * H - 1 - i] = Tile.Lamp;
+          for (let j = spots.length - 1; j >= 0; j--) if (Math.hypot((spots[j] % W) - (i % W), Math.floor(spots[j] / W) - Math.floor(i / W)) < 4) spots.splice(j, 1); // apart from each other
         }
       }
     }

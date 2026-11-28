@@ -89,6 +89,7 @@ export type GameEvent =
   | ['spot', number, number, number, number] // x y watcherId foeId: « Le Veilleur » (iteration 47) caught that foe in its light (older tabs ignore it)
   | ['flip', number, number, number, number] // cx cy state shooterTankId: « Les interrupteurs » (iteration 40), a shell hit that switch block; state 0: the red gates stand, 1: the blue ones (older tabs are told to reload)
   | ['gate', number, number, number] // cx cy tile: that gate cell rises or sinks, its new tile (Tile.RedUp…Tile.BlueDown)
+  | ['lamp', number, number, number, number] // cx cy state shooterTankId: « Les réverbères » (iteration 62), 0 that street lamp is broken (by that tank, 0: nobody), 2 it flickers (about to come back), 1 it is lit again (older tabs are told to reload)
   | ['bridge', number, number] // cx cy: « Les ponts » (iteration 33), that bridge cell gives way and becomes a hole (older tabs are told to reload)
   | ['bonus', number, number, number, number] // x y kind tankId (picked up)
   | ['shield', number, number, number] // x y tankId (a shield absorbed a hit)

@@ -55,6 +55,11 @@ export const enum Tile {
   // switches turns every mirror a quarter turn (MirrorA <-> MirrorB)
   MirrorA = 20,
   MirrorB = 21,
+  // iteration 62, « Les réverbères »: a street lamp on its stone plinth, stops tanks and shells like a wall. At night a lit
+  // lamp throws a pool of light (LAMP_R): whoever stands in it is seen from the whole table. A shell breaks its globe
+  // (Lamp -> LampOff, the shell bounces off the post as usual); LAMP_OUT seconds later it flickers and comes back on
+  Lamp = 22,
+  LampOff = 23,
 }
 
 export type TankKind =
@@ -490,7 +495,11 @@ export function isPortal(t: number) {
   return t === Tile.PortalA || t === Tile.PortalB;
 }
 export function isSolidBullet(t: number) {
-  return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork || t === Tile.Tunnel || t === Tile.Switch || t === Tile.RedUp || t === Tile.BlueUp || t === Tile.Snowman || t === Tile.SnowLow;
+  return t === Tile.Wall || t === Tile.Tall || t === Tile.Cork || t === Tile.Tunnel || t === Tile.Switch || t === Tile.RedUp || t === Tile.BlueUp || t === Tile.Snowman || t === Tile.SnowLow || t === Tile.Lamp || t === Tile.LampOff;
+}
+/** « Les réverbères » (iteration 62): a street lamp, lit or broken. */
+export function isLamp(t: number) {
+  return t === Tile.Lamp || t === Tile.LampOff;
 }
 /** « Les bonshommes de neige » (iteration 53): a snowman, whole or headless. A shell hitting it is swallowed, not bounced. */
 export function isSnowman(t: number) {
@@ -676,6 +685,16 @@ export const MIRROR_A_CHAR = '/';
 export const MIRROR_B_CHAR = '\\';
 /** A shell turned by this many mirrors fades out (two facing mirrors would otherwise keep it flying round forever). */
 export const MIRROR_MAX = 12;
+
+// ------------------------------------------------------------------ « Les réverbères » (iteration 62)
+/** Map character of a street lamp (a post with its globe on top). */
+export const LAMP_CHAR = '!';
+/** At night, a tank within this distance (tiles, from the lamp's centre) of a lit lamp is seen from anywhere. */
+export const LAMP_R = 2.6;
+/** Seconds a broken lamp stays dark before it comes back on. */
+export const LAMP_OUT = 14;
+/** Seconds of flickering (and buzzing) before it does: time to get out of its light. */
+export const LAMP_WARN = 1.6;
 
 // ------------------------------------------------------------------ « Les interrupteurs » (iteration 40)
 /** Map characters: the switch block, a red gate (raised at the start) and a blue gate (lowered at the start). */

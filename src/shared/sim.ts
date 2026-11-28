@@ -1,7 +1,7 @@
 import {
   BELT_DIRS, BELT_SPEED, SWITCH_COOLDOWN, gateFlipped, gateUp, isGate, isDrawbridge, isSwitchable, reverseBelts, ICE, SAND, SAND_SPOT, FROST_LIFE, FROST_REACH, FROST_THAW, BOLT_EVERY, BOLT_FLASH, DRILL_BLAST, DRILL_DIG_EVERY, DRILL_DIG_WARN, DRILL_RING_SHOTS, DRILL_RISE_WARN, DRILL_UNDER_MAX, DRILL_UNDER_SPEED, FLAG_BURROW, MASON_EVERY, MASON_FIRST, MASON_MAX, MASON_REACH, BOLT_R, BOLT_WARN, BONUS_INFO, BONUS_KINDS, BONUS_LIFE, BONUS_R, BOSS_VOLLEY_EVERY, BOSS_VOLLEY_SHOTS, BOSS_VOLLEY_WARN, BULLET_R, BULLET_SPEED, BonusKind, DT,
   FAN_SPREAD, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, H, NIGHT_REVEAL, NIGHT_SIGHT, MINE_BLAST, PORTAL_MAX_R, RAMPART_ARC, MINE_FUSE, MINE_R, MINE_TRIGGER_R, ROCKET_SPEED, SPECS, STEEL_STRIPPED, SUBSTEPS, TANK_R, THIEF_CRATE_RUSH, THIEF_REACH, TURBO_MULT,
-  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, KO_QUICK, KO_PETARD, QUICK, QUICK_MINE, QUICK_RISE, QUICK_SINK, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
+  TankKind, TankSpec, THUNDER_EVERY, THUNDER_MAX, THUNDER_PER_FOE, THUNDER_WARN, SEED_BLAST, SEED_BLINK, SEED_FLIGHT, SEED_RIPEN, SOWER_EVERY, SOWER_MAX, SOWER_SEEDS, SOWER_WARN, FLAG_MAGNET, FLAG_FROZEN, FREEZE_BOSS, FREEZE_TIME, SHELL_HEAVY, SHELL_GHOST, GHOST_DEPTH, REMOTE_FUSE, REMOTE_LIFE, MAGNET_FAN_MAX, MAGNET_FAN_STEP, MAGNET_HELD_SHIFT, MAGNET_HOLD, MAGNET_OFF, MAGNET_ON, MAGNET_PULL, MAGNET_R, MAGNET_WARN, Tile, TUNNEL_SIGHT, isBossKind, EMOTES, EMOTE_GAP, EMOTE_BOT_GAP, EMOTE_BRAVO, EMOTE_MERCI, EMOTE_OUPS, EMOTE_ICI, EMOTE_ATTENTION, EMOTE_HEHE, KO_BOLT, KO_DRILL, KO_FALL, KO_LOB, KO_MINE, KO_SAND, KO_SNOW, KO_SHELL, KO_GHOST, KO_MIRROR, KO_QUICK, KO_PETARD, QUICK, QUICK_MINE, QUICK_RISE, QUICK_SINK, SNOW, PACKED, SNOW_REFILL, MORTAR_BLAST, MORTAR_EVERY, MORTAR_FIRST, MORTAR_FLIGHT, MORTAR_FLIGHT_PER, MORTAR_LEAD, MORTAR_MAX, MORTAR_MIN, MORTAR_SPREAD, MORTAR_WARN, BOMBARD_BEHIND, BOMBARD_EVERY, BOMBARD_FLIGHT, BOMBARD_GAP, BOMBARD_LATER, BOMBARD_ROW, BOMBARD_STEP, BOMBARD_WARN, BRIDGE_REACH, HOP_EVERY, HOP_FIRST, HOP_FLIGHT, HOP_FLIGHT_PER, HOP_MAX, HOP_MIN, HOP_WARN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, MECA_COOL, MECA_FIX, MECA_REACH, MECA_SAFE, WATCH_FLIP, WATCH_HALF, WATCH_LOCK, WATCH_LOSE, WATCH_RANGE, WATCH_REVEAL, WATCH_SWEEP, WATCH_TRACK, TRAIN_ACCEL, TRAIN_ARC, TRAIN_GAP, TRAIN_LOOK, TRAIN_RAM_SPEED, TRAIN_REVERSE_EVERY, TRAIN_REVERSE_FIRST, TRAIN_SPEED, TRAIN_STOP, WAGON_CLOSE, WAGON_GAP, KO_TRAIN, W, Weapon, MIRROR_MAX, isFragile, isLamp, LAMP_OUT, LAMP_R, LAMP_WARN, isMirror, isPortal, isSnowman, isSolidTank, isTunnel, playerSpec,
 } from './constants';
 import { bend, windAt } from './wind';
 import { fogBanks, fogHides, type FogBank } from './fog';
@@ -456,6 +456,10 @@ export class Game {
   snowmen = false;
   /** « Les miroirs » (iteration 57): the table has mirrors (shells crossing their glass are turned a quarter turn). */
   mirrors = false;
+  /** « Les réverbères » (iteration 62): the cells of the table's street lamps (lit or broken). */
+  lamps: number[] = [];
+  /** Broken lamps, by cell: seconds before each comes back on. */
+  lampOut = new Map<number, number>();
   /** How many times the switches were flipped (even: the red gates stand, as at the start). */
   flips = 0;
   /** Seconds before a switch takes another shell. */
@@ -482,6 +486,7 @@ export class Game {
     this.gates = this.tiles.includes(Tile.Switch);
     this.snowmen = this.tiles.some(isSnowman);
     this.mirrors = this.tiles.some(isMirror);
+    this.tiles.forEach((t, i) => { if (isLamp(t)) this.lamps.push(i); });
   }
 
   addTank(kind: TankKind, team: number, x: number, y: number, color: number, pid?: string, name?: string): Tank {
@@ -640,6 +645,7 @@ export class Game {
     const sdt = DT / SUBSTEPS;
     for (let s = 0; s < SUBSTEPS; s++) this.stepBullets(sdt);
     if (this.gates) this.stepGates(DT);
+    if (this.lampOut.size) this.stepLamps(DT);
     this.stepMines(DT);
     if (this.lobs.length) this.stepLobs(DT);
     if (this.storm || this.bolts.length || this.flash > 0) this.stepStorm(DT);
@@ -649,6 +655,47 @@ export class Game {
     if (this.crown) this.stepCrown(DT);
     if (this.ball) this.stepBall(DT);
     if (this.petard) this.stepPetard(DT);
+  }
+
+  // -------------------------------------------------------------- « Les réverbères » (iteration 62)
+
+  /** A shell at (x, y) runs into a lit street lamp: its globe breaks, the lamp goes dark (the shell bounces off the post). */
+  hitLamp(x: number, y: number, owner: number) {
+    for (const [cx, cy] of [[x - BULLET_R, y - BULLET_R], [x + BULLET_R, y - BULLET_R], [x - BULLET_R, y + BULLET_R], [x + BULLET_R, y + BULLET_R]]) {
+      const fx = Math.floor(cx), fy = Math.floor(cy);
+      if (tileAt(this.tiles, fx, fy) !== Tile.Lamp) continue;
+      this.breakLamp(fy * W + fx, owner);
+      return;
+    }
+  }
+
+  /** The lamp of cell i goes dark for LAMP_OUT seconds (owner: who broke it, 0 for nobody). */
+  breakLamp(i: number, owner: number) {
+    if (this.tiles[i] !== Tile.Lamp) return;
+    this.tiles[i] = Tile.LampOff;
+    this.lampOut.set(i, LAMP_OUT);
+    this.events.push(['lamp', i % W, (i / W) | 0, 0, owner]);
+  }
+
+  /** The broken lamps flicker LAMP_WARN seconds before they come back on, then light up again. */
+  stepLamps(dt: number) {
+    for (const [i, t] of this.lampOut) {
+      const n = t - dt;
+      if (t > LAMP_WARN && n <= LAMP_WARN) this.events.push(['lamp', i % W, (i / W) | 0, 2, 0]);
+      if (n > 0) { this.lampOut.set(i, n); continue; }
+      this.lampOut.delete(i);
+      this.tiles[i] = Tile.Lamp;
+      this.events.push(['lamp', i % W, (i / W) | 0, 1, 0]);
+    }
+  }
+
+  /** Is (x, y) in the pool of light of a lit street lamp? (At night, whoever stands there is seen from the whole table.) */
+  inLamplight(x: number, y: number): boolean {
+    for (const i of this.lamps) {
+      if (this.tiles[i] !== Tile.Lamp) continue;
+      if ((x - (i % W) - 0.5) ** 2 + (y - ((i / W) | 0) - 0.5) ** 2 < LAMP_R * LAMP_R) return true;
+    }
+    return false;
   }
 
   // -------------------------------------------------------------- « Les interrupteurs » (iteration 40)
@@ -1721,7 +1768,7 @@ export class Game {
       if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) return false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const tl = this.tiles[(cy + dy) * W + cx + dx];
-        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || tl === Tile.Switch || isSwitchable(tl) || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
+        if (tl === Tile.Wall || tl === Tile.Tall || tl === Tile.Hole || tl === Tile.Switch || isLamp(tl) || isSwitchable(tl) || ((dx || dy) ? false : isPortal(tl) || tl === Tile.Tunnel)) return false;
       }
       return true;
     };
@@ -2060,11 +2107,11 @@ export class Game {
     if (this.decoys.some((d) => d.life <= 0)) this.decoys = this.decoys.filter((d) => d.life > 0);
   }
 
-  /** A shell of stars meets a switch block or a snowman: it bursts there (nothing flips, nothing falls). */
+  /** A shell of stars meets a switch block, a snowman or a lit lamp: it bursts there (nothing flips, nothing falls). */
   mirageStops(x: number, y: number): boolean {
     for (const [cx, cy] of [[x - BULLET_R, y - BULLET_R], [x + BULLET_R, y - BULLET_R], [x - BULLET_R, y + BULLET_R], [x + BULLET_R, y + BULLET_R]]) {
       const tl = tileAt(this.tiles, Math.floor(cx), Math.floor(cy));
-      if (tl === Tile.Switch || isSnowman(tl)) return true;
+      if (tl === Tile.Switch || isSnowman(tl) || tl === Tile.Lamp) return true; // nor breaks a street lamp (iteration 62)
     }
     return false;
   }
@@ -2857,6 +2904,7 @@ export class Game {
       if (bulletBlocked(this.tiles, nx, b.y, BULLET_R)) {
         if (b.mirage && this.mirageStops(nx, b.y)) { this.poofShell(b); continue; } // a mirage flips no switch, knocks down no snowman
         if (this.gates) this.pressSwitch(nx, b.y, b.owner);
+        if (this.lamps.length) this.hitLamp(nx, b.y, b.owner);
         if (this.snowmen && this.hitSnowman(nx, b.y, !!b.heavy)) {
           if (!b.heavy || bulletBlocked(this.tiles, nx, b.y, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
           b.x = nx; // « Gros calibre »: straight through the snow
@@ -2869,6 +2917,7 @@ export class Game {
       if (bulletBlocked(this.tiles, b.x, ny, BULLET_R)) {
         if (b.mirage && this.mirageStops(b.x, ny)) { this.poofShell(b); continue; }
         if (this.gates) this.pressSwitch(b.x, ny, b.owner);
+        if (this.lamps.length) this.hitLamp(b.x, ny, b.owner);
         if (this.snowmen && this.hitSnowman(b.x, ny, !!b.heavy)) {
           if (!b.heavy || bulletBlocked(this.tiles, b.x, ny, BULLET_R)) { b.dead = true; this.events.push(['pop', r2(b.x), r2(b.y)]); continue; }
           b.y = ny;
@@ -3158,6 +3207,8 @@ export class Game {
       }
     }
     this.collapseBridges(m.x, m.y, R, killer);
+    // « Les réverbères » (iteration 62): the blast shatters the globes of the lamps around
+    for (const i of this.lamps) if (Math.hypot((i % W) + 0.5 - m.x, ((i / W) | 0) + 0.5 - m.y) < R + 0.35) this.breakLamp(i, m.by ?? m.owner);
   }
 
   /**
@@ -3471,6 +3522,8 @@ export class Game {
     // lost in a squall of snow (iteration 54): nobody sees far, unless a muzzle flash (or lightning) gives it away
     if (this.whiteout > 0 && o.reveal <= 0 && this.flash <= 0 && blizzardHides(this.whiteout, o.x, o.y, t.x, t.y, o.r)) return false;
     if (!this.night || o.reveal > 0 || this.flash > 0) return true;
+    // « Les réverbères » (iteration 62): under a lit street lamp, a tank is seen from the whole table
+    if (this.lamps.length && this.inLamplight(o.x, o.y)) return true;
     const d = NIGHT_SIGHT + o.r;
     return (o.x - t.x) ** 2 + (o.y - t.y) ** 2 < d * d;
   }

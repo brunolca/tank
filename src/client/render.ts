@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { PETARD_WARN } from '../shared/petard';
 import { SEED_BLAST, SEED_FLIGHT, SEED_RIPEN, BELT_SPEED, ICE, SAND, SNOW, PACKED, QUICK, QUICK_SINK, QUICK_RISE, RAMPART_ARC, BOLT_R, BONUS_INFO, DRILL_BLAST, FLAG_BURROW, BONUS_KINDS, ENEMY_COLORS, enemyColor, FLAG_ALERT, FLAG_CHARGING, FLAG_RAGE, FLAG_MAGNET, FLAG_FROZEN, FLAG_AIR, FLAG_SPOT, FLAG_REPAIR, FLAG_PATCHED, WATCH_HALF, WATCH_RANGE, HOP_HEIGHT, HOP_MAX, MAGNET_HELD_SHIFT, MAGNET_R, H, MINE_BLAST, MORTAR_BLAST, PORTAL_COLORS, TANK_R, Tile, W, isPit, isPortal, isTunnel, tankRadius, type BonusKind } from '../shared/constants';
 import { bridgeAxis, castRicochet, tunnelAxis } from '../shared/physics';
-import { GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isMirror, isSnowman, mirrorOf, reverseBelts } from '../shared/constants';
+import { LAMP_R, isLamp, GATE_COLORS, gateColor, gateUp, isDrawbridge, isGate, isMirror, isSnowman, mirrorOf, reverseBelts } from '../shared/constants';
 import { gustAt, windAngle } from '../shared/wind';
 import { FOG_BANKS, FOG_HIDE, FOG_SIGHT, fogBanks, fogDensity, type FogBank } from '../shared/fog';
 import { BLIZZARD_HIDE, BLIZZARD_SIGHT, whiteoutAt } from '../shared/blizzard';
@@ -650,6 +650,18 @@ const hopperGeo = {
   pupil: new THREE.SphereGeometry(0.032, 8, 6),
 };
 // « Les bonshommes de neige » (iteration 53): two balls of snow, coal eyes and buttons, a carrot, a top hat, a red scarf, twig arms
+// « Les réverbères » (iteration 62): the street lamp's parts, shared by every lamp
+const lampGeo = {
+  plinth: new RoundedBoxGeometry(0.72, 0.3, 0.72, 2, 0.05),
+  foot: new THREE.CylinderGeometry(0.13, 0.17, 0.16, 12),
+  post: new THREE.CylinderGeometry(0.045, 0.06, 1.05, 10),
+  ring: new THREE.TorusGeometry(0.07, 0.018, 6, 14),
+  globe: new THREE.SphereGeometry(0.17, 16, 12),
+  cap: new THREE.ConeGeometry(0.15, 0.12, 12),
+  knob: new THREE.SphereGeometry(0.03, 8, 6),
+};
+const lampStone = new THREE.MeshStandardMaterial({ color: 0x9a948a, roughness: 0.9 });
+const lampIron = new THREE.MeshStandardMaterial({ color: 0x2c2f38, roughness: 0.45, metalness: 0.6 });
 const snowmanGeo = {
   body: new THREE.SphereGeometry(0.36, 22, 16),
   head: new THREE.SphereGeometry(0.235, 20, 14),
@@ -1808,6 +1820,11 @@ export class Renderer {
   private snowmen = new Map<number, { root: THREE.Group; head?: THREE.Group; x: number; y: number; look: number; wobble: number }>();
   /** « Les miroirs » (iteration 57): the mirrors of the table, by cell; each turns toward its angle and flashes on a glint. */
   private mirrors = new Map<number, { root: THREE.Group; pane: THREE.Group; glass: THREE.MeshStandardMaterial; angle: number; flash: number }>();
+  /** « Les réverbères » (iteration 62): the street lamps of the table, by cell; state 1 lit, 0 broken, 2 flickering back on. */
+  private lamps = new Map<number, { root: THREE.Group; globe: THREE.MeshStandardMaterial; pool: THREE.Mesh; x: number; y: number; on: number; state: number; flick: number }>();
+  /** A fixed pool of lights for the first lamps of the table (shown at night only, so the shaders compile once per level). */
+  private lampLights: THREE.PointLight[] = [];
+  private lampPoolTex?: THREE.CanvasTexture;
   private plankGeo = new RoundedBoxGeometry(0.9, 0.05, 0.155, 2, 0.015);
   private railGeo = new THREE.BoxGeometry(0.06, 0.05, 1);
   private postGeo = new THREE.CylinderGeometry(0.035, 0.04, 0.26, 8);
@@ -1877,6 +1894,13 @@ export class Renderer {
       sp.visible = false;
       this.scene.add(sp, sp.target);
       this.beamLights.push(sp);
+    }
+    // « Les réverbères » (iteration 62): six warm lights for the street lamps
+    for (let i = 0; i < 6; i++) {
+      const pl = new THREE.PointLight(0xffc870, 0, LAMP_R * 2.1, 1.3);
+      pl.visible = false;
+      this.scene.add(pl);
+      this.lampLights.push(pl);
     }
     for (let i = 0; i < 3; i++) {
       const pl = new THREE.PointLight(0xffd9a0, 0, 3, 1.5);
@@ -2253,6 +2277,8 @@ export class Renderer {
     this.snowmen.clear();
     for (const mr of this.mirrors.values()) { this.levelGroup.remove(mr.root); mr.glass.dispose(); }
     this.mirrors.clear();
+    for (const lp of this.lamps.values()) { this.levelGroup.remove(lp.root); this.levelGroup.remove(lp.pool); lp.globe.dispose(); (lp.pool.material as THREE.Material).dispose(); }
+    this.lamps.clear();
     for (const r of this.repairs.values()) this.scene.remove(r.ring);
     this.repairs.clear();
     for (const t of this.tanks.values()) { this.scene.remove(t.root); if (t.ice) this.scene.remove(t.ice); if (t.leapRing) this.scene.remove(t.leapRing); if (t.lantern) this.scene.remove(t.lantern.beam); }
@@ -2309,6 +2335,7 @@ export class Renderer {
         else if (t === Tile.Switch) this.addSwitch(x, y);
         else if (isSnowman(t)) this.addSnowman(x, y, t === Tile.Snowman);
         else if (isMirror(t)) this.addMirror(x, y, t);
+        else if (isLamp(t)) this.addLamp(x, y, t === Tile.Lamp);
       }
     }
     // the switches show which gates stand (red at the start); a late arrival reads it off the map
@@ -3814,6 +3841,93 @@ export class Renderer {
     }
   }
 
+  // ---------------------------------------------------------------- « Les réverbères » (iteration 62)
+
+  private addLamp(x: number, y: number, lit: boolean) {
+    const root = new THREE.Group();
+    root.position.set(x + 0.5, 0, y + 0.5);
+    const add = (g: THREE.BufferGeometry, m: THREE.Material, py: number) => {
+      const o = new THREE.Mesh(g, m);
+      o.position.y = py;
+      o.castShadow = true;
+      root.add(o);
+      return o;
+    };
+    add(lampGeo.plinth, lampStone, 0.15).receiveShadow = true;
+    add(lampGeo.foot, lampIron, 0.38);
+    add(lampGeo.post, lampIron, 0.98);
+    add(lampGeo.ring, lampIron, 1.38).rotation.x = Math.PI / 2;
+    const globe = new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xffc060, emissiveIntensity: lit ? 1 : 0.05, roughness: 0.2, transparent: true, opacity: 0.92 });
+    add(lampGeo.globe, globe, 1.55).castShadow = false;
+    add(lampGeo.cap, lampIron, 1.75);
+    add(lampGeo.knob, lampIron, 1.83);
+    this.levelGroup.add(root);
+    // the pool of light on the floor (night only): a soft warm disc
+    if (!this.lampPoolTex) {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 128;
+      const c2 = cv.getContext('2d')!;
+      const gr = c2.createRadialGradient(64, 64, 4, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(255,214,140,1)'); gr.addColorStop(0.55, 'rgba(255,190,100,0.45)'); gr.addColorStop(1, 'rgba(255,170,80,0)');
+      c2.fillStyle = gr; c2.fillRect(0, 0, 128, 128);
+      this.lampPoolTex = new THREE.CanvasTexture(cv);
+      this.lampPoolTex.colorSpace = THREE.SRGBColorSpace;
+    }
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(LAMP_R * 2, LAMP_R * 2), new THREE.MeshBasicMaterial({ map: this.lampPoolTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x + 0.5, 0.03, y + 0.5);
+    pool.renderOrder = 2;
+    this.levelGroup.add(pool);
+    this.lamps.set(y * W + x, { root, globe, pool, x: x + 0.5, y: y + 0.5, on: lit ? 1 : 0, state: lit ? 1 : 0, flick: 0 });
+  }
+
+  /** A lamp's globe breaks (0, shards of glass), flickers before coming back (2) or lights up again (1). */
+  setLamp(cx: number, cy: number, state: number) {
+    const lp = this.lamps.get(cy * W + cx);
+    if (!lp) return;
+    lp.state = state;
+    if (state === 0) {
+      lp.on = 0;
+      for (let i = 0; i < 16; i++) {
+        const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.8;
+        this.debris.emit({ x: lp.x, y: 1.55, z: lp.y, vx: Math.cos(a) * sp, vy: 0.5 + Math.random() * 1.5, vz: Math.sin(a) * sp, life: 0.7 + Math.random() * 0.4, s0: 0.035 + Math.random() * 0.03, s1: 0.015, c0: 0xf4fbff, c1: 0xbfd6e6, grav: 9, drag: 0.6 });
+      }
+      this.glow.emit({ x: lp.x, y: 1.55, z: lp.y, life: 0.35, s0: 0.6, s1: 0.05, c0: 0xfff0c0, c1: 0xffa040 });
+    } else if (state === 1) lp.on = 1;
+  }
+
+  /** The lamps glow (and light the night), the broken ones stay dark, the flickering ones stutter; moths dance round the lit ones. */
+  private animateLamps(dt: number) {
+    let n = 0;
+    const night = this.night;
+    for (const lp of this.lamps.values()) {
+      if (lp.state === 2) {
+        lp.flick -= dt;
+        if (lp.flick <= 0) { lp.flick = 0.04 + Math.random() * 0.16; lp.on = lp.on > 0.5 ? Math.random() * 0.2 : 0.6 + Math.random() * 0.4; }
+      }
+      const k = lp.on;
+      lp.globe.emissiveIntensity = 0.05 + k * (0.8 + night * 1.8);
+      (lp.pool.material as THREE.MeshBasicMaterial).opacity = night * k * 0.3;
+      lp.pool.visible = night > 0.02 && k > 0.01;
+      if (n < this.lampLights.length) {
+        const pl = this.lampLights[n++];
+        pl.position.set(lp.x, 1.45, lp.y);
+        pl.intensity = night * k * 3.4;
+      }
+      if (night > 0.5 && k > 0.9 && Math.random() < 2.2 * dt) {
+        const a = Math.random() * Math.PI * 2;
+        this.glow.emit({ x: lp.x + Math.cos(a) * 0.25, y: 1.4 + Math.random() * 0.35, z: lp.y + Math.sin(a) * 0.25, vx: -Math.sin(a) * 0.5, vy: (Math.random() - 0.5) * 0.3, vz: Math.cos(a) * 0.5, life: 0.9 + Math.random() * 0.6, s0: 0.035, s1: 0.012, c0: 0xfff6d8, c1: 0xffc870, drag: 0.3 });
+      }
+    }
+    const show = this.nightTarget > 0;
+    for (let i = 0; i < this.lampLights.length; i++) {
+      const pl = this.lampLights[i];
+      const want = show && i < n;
+      if (pl.visible !== want) pl.visible = want;
+      if (!want) pl.intensity = 0;
+    }
+  }
+
   // ---------------------------------------------------------------- « Les bonshommes de neige » (iteration 53)
 
   private addSnowman(x: number, y: number, whole: boolean) {
@@ -3998,6 +4112,7 @@ export class Renderer {
     }
     if (this.snowmen.size) this.animateSnowmen(list, dt);
     if (this.mirrors.size) this.animateMirrors(dt);
+    this.animateLamps(dt);
     if (this.decoyViews.size || list.some((t) => t.decoy)) this.syncDecoys(list);
     for (const t of list) {
       const v = this.tanks.get(t.id);

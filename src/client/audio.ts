@@ -182,6 +182,27 @@ export const sfx = {
     tone(t + 0.04, 0.3, f * 2.01, f * 2.01, 0.025, 'sine');
     noise(t, 0.04, 7000, 2, 0.06, 'highpass');
   },
+  /** « Les réverbères » (iteration 62): a shell breaks a lamp's globe, a sharp tinkle of glass and the hiss of the light going out. */
+  lampBreak() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.05, 6500, 2, 0.22, 'highpass');
+    for (let i = 0; i < 5; i++) { const f = 2600 + Math.random() * 2200; tone(t + 0.02 + i * 0.035 + Math.random() * 0.02, 0.09, f, f * 0.96, 0.045, 'sine'); }
+    tone(t + 0.05, 0.35, 420, 90, 0.05, 'sawtooth');
+  },
+  /** A dark lamp is about to light again: the electric buzz of a flickering filament. */
+  lampBuzz() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 5; i++) tone(t + i * 0.22 + Math.random() * 0.05, 0.07 + Math.random() * 0.05, 118, 122, 0.05, 'sawtooth');
+  },
+  /** It lights up again: a soft « tic » and a warm hum that fades. */
+  lampOn() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.02, 3000, 2, 0.12, 'bandpass', 2000);
+    tone(t, 0.4, 240, 240, 0.04, 'triangle');
+  },
   /** « L’Illusionniste » (iteration 58) raises its wand: a rising sparkle of little bells. */
   abra() {
     if (!ctx) return;

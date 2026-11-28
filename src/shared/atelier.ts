@@ -90,6 +90,8 @@ export const BRUSHES: Brush[] = [
   { ch: 'I', label: 'Illusionniste', group: 'tank' },
   // iteration 59: « Les sables mouvants » (share code ~A: past z, the letters start again behind a tilde)
   { ch: '@', label: 'Sables mouvants', group: 'sol' },
+  // iteration 62: « Les réverbères » (share code ~B)
+  { ch: '!', label: 'Réverbère', group: 'sol' },
 ];
 /** The showcase mission of the videos (and a good first example). */
 export const ATELIER_SAMPLE: AtelierMap = {
@@ -165,7 +167,7 @@ export function checkAtelier(map: unknown): string | undefined {
   // the players must be able to drive somewhere: at least one open cell next to the first spot
   const [sx, sy] = lvl.spawns[0];
   const cx = Math.floor(sx), cy = Math.floor(sy);
-  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%{8/\\'.includes(map[y][x]); // mirrors (iteration 57) stop tanks too
+  const open = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && !'#Ho_%{8/\\!'.includes(map[y][x]); // mirrors (iteration 57) stop tanks too
   if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => open(cx + dx, cy + dy))) return 'Le départ 1 est emmuré : laisse-lui de la place.';
   return undefined;
 }

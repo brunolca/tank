@@ -7,10 +7,10 @@ import { launchBrowser, readMeta, sleep, startServer } from './lib.mjs';
 
 // ------------------------------------------------------------------ montage (à adapter à chaque itération)
 const MONTAGE = [
-  { petard: [0, [2, 2, 2, 2], 5, 1], seconds: 24, passes: [8.5, 15], caption: 'Itération 61 : le pétard', sub: 'Un nouveau mode : refile le pétard allumé avant qu’il t’éclate au nez' },
-  { rivals: 6, lobby: 'petard', seconds: 6, caption: 'Au salon : « Pétard »', sub: 'Seul contre des rivaux pilotés par l’ordinateur, ou jusqu’à quatre en ligne' },
-  { petard: [1, [2, 2, 2, 2], 5, 1], seconds: 26, passes: [3.5, 10], caption: 'Les obus ne font que sonner', sub: 'Un tir du porteur, même en bande, et le pétard change de main' },
-  { manual: [7, ['modes']], seconds: 7, caption: 'Au manuel', sub: 'Le pétard rejoint les modes de jeu' },
+  { mission: 56, night: true, arms: ['canon', 'ricochet'], hud: true, seconds: 22, lampShots: [3, 7.5, 12, 16.5], caption: 'Itération 62 : les réverbères', sub: 'La nuit, leur lumière trahit tous ceux qui s’y tiennent, toi comme eux' },
+  { mission: 59, night: true, storm: true, arms: ['fusee', 'canon'], hud: true, seconds: 20, lampShots: [3.5, 9, 14], caption: 'Le kiosque à musique', sub: 'Tchink ! Un obus casse le globe… il se rallume quatorze secondes plus tard' },
+  { manual: [8, ['terrain']], seconds: 8, caption: 'Nouveau sur la table', sub: 'Au manuel, et en pinceau dans l’atelier' },
+  { atelier: 8, atelierMission: 56, seconds: 8, caption: 'Dans l’atelier', sub: 'Allume tes propres rues, de nuit' },
 ];// ------------------------------------------------------------------
 
 const meta = readMeta();
@@ -121,6 +121,7 @@ try {
       for (const s of shot.ghostShots ?? []) setTimeout(() => d.ghostShot?.(), s * 1000); // « Passe-muraille » (iteration 52): a shell through a wall
       for (const s of shot.remoteTraps ?? []) setTimeout(() => d.remoteTrap?.(), s * 1000); // « Détonateur » (iteration 52): a remote mine on an enemy's way
       for (const s of shot.squalls ?? []) setTimeout(() => d.squall?.(), s * 1000); // « Le blizzard » (iteration 54): the next squall rises within two seconds
+      for (const s of shot.lampShots ?? []) setTimeout(() => d.lampShot?.(), s * 1000); // « Les réverbères » (iteration 62): a hero shoots a lamp's globe out
       for (const s of shot.snowShots ?? []) setTimeout(() => d.snowShot?.(), s * 1000); // « Les bonshommes de neige » (iteration 53): a shell into a snowman
       if (shot.friend) setTimeout(() => d.friendAim?.(shot.friend[1] * 1000), shot.friend[0] * 1000); // « Gare au tir ami » (iteration 53): the red reticle
       for (const [s, kinds] of shot.newcomers ?? []) setTimeout(() => d.newcomer?.(kinds), s * 1000); // « Nouveau au bestiaire ! » (iteration 38)

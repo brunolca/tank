@@ -1,7 +1,7 @@
 {
-  "iteration": 61,
+  "iteration": 62,
   "date": "2026-11-28",
-  "title": "Le pétard",
+  "title": "Les réverbères",
   "journal": [
     {
       "iteration": 1,
@@ -744,6 +744,18 @@
         "Ici, les obus ne détruisent personne : ils sonnent une seconde, avec des étoiles qui tournent au-dessus de la tourelle. Sonne le porteur pour lui échapper !",
         "Quand la mèche est consumée, BOUM : le porteur sort de la manche et un nouveau pétard s’allume. Le dernier debout gagne, premier à 3 manches.",
         "Le porteur file un peu plus vite que les autres, et sa mèche clignote et siffle dans les dernières secondes. Des rivaux pilotés par l’ordinateur complètent la table."
+      ]
+    },
+    {
+      "iteration": 62,
+      "date": "2026-11-28",
+      "title": "Les réverbères",
+      "notes": [
+        "Nouvelle case pour les nuits : le réverbère. Un lampadaire en fonte sur son socle de pierre, avec son globe qui brille et ses papillons de nuit.",
+        "Sous sa lumière, on est vu de toute la table : les ennemis te repèrent de loin… mais toi aussi, tu les vois venir quand ils passent dessous.",
+        "Un obus casse le globe, « Tchink ! », et le coin plonge dans le noir. Quatorze secondes plus tard, la lampe grésille et se rallume : file avant ! Le souffle d’une mine éteint aussi les réverbères d’alentour.",
+        "Deux nouvelles missions de nuit : « La rue des réverbères » (la 56ᵉ) et « Le kiosque à musique » (la 59ᵉ), sous l’orage. À partir de la 81ᵉ, des réverbères éclairent aussi une mission de nuit générée sur deux.",
+        "Le manuel présente la nouvelle case, et l’atelier gagne un pinceau « Réverbère » pour éclairer tes propres rues."
       ]
     }
   ]
